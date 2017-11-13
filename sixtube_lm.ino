@@ -39,10 +39,14 @@ const byte altAdjFn = 255; //if equipped
 
 const byte enableSoftAlarmSwitch = 1;
 // 1 = yes. Use if using the integrated beeper or another non-switched device (bell solenoid, etc).
-// 0 = no. Use if the connected alarm device has its own switch (e.g. clock radio function switch). Alarm will be permanently on in software.
+// 0 = no. Use if the connected alarm device has its own switch (e.g. clock radio function switch).
+//     Alarm will be permanently on in software.
 const byte alarmRadio = 0;
-// 0 = no. Alarm output is connected to the onboard piezoelectric beeper or similar signal device. When alarm and timer go off, it will output a beep pattern for alarmDur minutes.
-// 1 = yes. Alarm output is connected to a relay to switch other equipment (like a radio). When alarm goes off, output will stay on for alarmDur minutes (120 is common). When timer is running, output will stay on until timer runs down.
+// 0 = no. Alarm output is connected to the onboard piezoelectric beeper or similar signal device.
+//     When alarm and timer go off, it will output a beep pattern for alarmDur minutes.
+// 1 = yes. Alarm output is connected to a relay to switch other equipment (like a radio).
+//     When alarm goes off, output will stay on for alarmDur minutes (120 is common).
+//     When timer is running, output will stay on until timer runs down.
 const byte alarmDur = 3;
 
 // How long (in ms) are the button hold durations?
@@ -56,10 +60,6 @@ byte clockFn = 0; //currently displayed function: 0=time, 1=date, 2=alarm, 3=tim
 byte clockFnSet = 0; //whether this function is currently being set, and which option/page it's on
 byte setupOptsCt = 3; //1-index
 byte setupOpts[4] = {0,0,1,1}; //see ctrlEvt() switch(clockFnSet) for what these are/do
-//0 = nothing, just a pad to make this 1-index
-//1 = dim(1,0)
-//2 = doesn't do anything, choose a number from 1 to 7
-//3 = doesn't do anything, choose a number from 1 to 13
 
 byte displayNext[6] = {15,15,15,15,15,15}; //Blank tubes at start. When display should change, put it here
 int btnPresses = 0;
@@ -73,34 +73,34 @@ int btnPresses = 0;
 //RTC_DS1307 RTC;
 
 void setup(){
-	Serial.begin(57600);
-	//Wire.begin(); TODO
-	//RTC.begin(); TODO
-	initOutputs();
-	initInputs();
+  Serial.begin(57600);
+  //Wire.begin(); TODO
+  //RTC.begin(); TODO
+  initOutputs();
+  initInputs();
   updateDisplay(); //initial fill of data
 }
 
 void loop(){
-	//Things done every "clock cycle"
-	checkInputs(); //will do things if necessary and updateDisplay
-	cycleDisplay(); //keeps the multiplexing cycle going
+  //Things done every "clock cycle"
+  checkInputs(); //will do things if necessary and updateDisplay
+  cycleDisplay(); //keeps the multiplexing cycle going
 }
 
 
 ////////// Control inputs //////////
 unsigned long inputSampleLast = 0; //millis() of last time inputs were sampled
 int inputSampleDur = 50; //input sampling frequency (in ms) to avoid bounce
-//bool mainRotLast[2] = {0,0}; //last state of main rotary encoder inputs
+//bool mainRotLast[2] = {0,0}; //last state of main rotary encoder inputs TODO implement
 //bool altRotLast[2] = {0,0}; //and alt (if equipped)
 
 void initInputs(){
   //TODO are there no "loose" pins left floating after this? per https://electronics.stackexchange.com/q/37696/151805
   pinMode(A0, INPUT_PULLUP);
   pinMode(A1, INPUT_PULLUP);
-	pinMode(A2, INPUT_PULLUP);
+  pinMode(A2, INPUT_PULLUP);
   pinMode(A3, INPUT_PULLUP);
-	//4 and 5 used for I2C
+  //4 and 5 used for I2C
   pinMode(A6, INPUT); digitalWrite(A6, HIGH);
   pinMode(A7, INPUT); digitalWrite(A7, HIGH);
   //If using rotary encoders, capture their initial state
@@ -110,8 +110,8 @@ void initInputs(){
 
 void checkInputs(){
   // TODO can all this if/else business be defined at load instead of evaluated every sample?
-	if(millis() >= inputSampleLast+inputSampleDur) { //time for a sample
-		inputSampleLast = millis();
+  if(millis() >= inputSampleLast+inputSampleDur) { //time for a sample
+    inputSampleLast = millis();
     //potential issue: if user only means to rotate or push encoder but does both?
     checkBtn(mainSel); //main select
     //if(mainAdjType==2) checkRot(mainAdj,mainAdjRotLast,true); //main rotary encoder
@@ -122,7 +122,7 @@ void checkInputs(){
     //if(altAdjType==2) checkRot(altAdj,altAdjRotLast,true); //alt rotary encoder (if equipped)
     //else
     //if(altAdjType==1) { checkBtn(altAdj[0]); checkBtn(altAdj[1]); } //alt adj buttons
-	} //end if time for a sample
+  } //end if time for a sample
 }
 
 // void checkRot(rot[],last[],triggerEvent){
@@ -139,38 +139,39 @@ void checkInputs(){
 
 byte btnCur = 0; //momentary button currently in use - only one allowed at a time
 unsigned long btnCurStart = 0; //when the current button was pressed
-byte btnCurHeld = 0; //hold thresholds passed: 0=none, 1=reserved TODO, 2=short, 3=long, 4=mute further actions from this button until after it's released
+byte btnCurHeld = 0; //hold thresholds passed: 0=none, 1=reserved TODO, 2=short, 3=long,
+//4=mute further actions from this button until after it's released
 void checkBtn(byte btn){
-	//Changes in momentary buttons, LOW = pressed.
-	//When a button event has occurred, will call ctrlEvt(btn,evt)
-	//evt: 0=pressed, 1=released, 2=held past med point, 3=held past long point
+  //Changes in momentary buttons, LOW = pressed.
+  //When a button event has occurred, will call ctrlEvt(btn,evt)
+  //evt: 0=pressed, 1=released, 2=held past med point, 3=held past long point
   bool bnow = readInput(btn);
-	//If the button has just been pressed, and no other buttons are in use...
-	if(btnCur==0 && bnow==LOW) {
-		btnCur = btn; btnCurHeld = 0; btnCurStart = millis();
+  //If the button has just been pressed, and no other buttons are in use...
+  if(btnCur==0 && bnow==LOW) {
+    btnCur = btn; btnCurHeld = 0; btnCurStart = millis();
     log("Btn "); log(String(btn)); log(" has been pressed\n");
-		ctrlEvt(btn,1); //hey, the button has been pressed
-	}
-	//If the button is being held...
-	if(btnCur==btn && bnow==LOW) {
-		if(millis() >= btnCurStart+btnLongHold && btnCurHeld < 3) {
-			btnCurHeld = 3;
+    ctrlEvt(btn,1); //hey, the button has been pressed
+  }
+  //If the button is being held...
+  if(btnCur==btn && bnow==LOW) {
+    if(millis() >= btnCurStart+btnLongHold && btnCurHeld < 3) {
+      btnCurHeld = 3;
       log("Btn "); log(String(btn)); log(" has been long-held\n");
-			ctrlEvt(btn,3); //hey, the button has been held past the long point
-		}
-		else if(millis() >= btnCurStart+btnShortHold && btnCurHeld < 2) {
-			btnCurHeld = 2;
+      ctrlEvt(btn,3); //hey, the button has been held past the long point
+    }
+    else if(millis() >= btnCurStart+btnShortHold && btnCurHeld < 2) {
+      btnCurHeld = 2;
       log("Btn "); log(String(btn)); log(" has been short-held\n");
-			ctrlEvt(btn,2); //hey, the button has been held past the med point
-		}
-	}
-	//If the button has just been released...
-	if(btnCur==btn && bnow==HIGH) {
-		btnCur = 0;
+      ctrlEvt(btn,2); //hey, the button has been held past the med point
+    }
+  }
+  //If the button has just been released...
+  if(btnCur==btn && bnow==HIGH) {
+    btnCur = 0;
     log("Btn "); log(String(btn)); log(" has been released\n\n");
     if(btnCurHeld < 4) ctrlEvt(btn,0); //hey, the button was released
     btnCurHeld = 0;
-	}
+  }
 }
 bool readInput(byte pin){
   if(pin==A6 || pin==A7) return analogRead(pin)<100?0:1; //analog-only pins
@@ -179,7 +180,9 @@ bool readInput(byte pin){
 void btnStop(){ btnCurHeld = 4; }
 
 void ctrlEvt(byte ctrl, byte evt){  
-  //In some cases, when reacting to evt 1/2/3, we may want to call btnStop() so following events 2/3/0 don't cause unintended behavior.
+  //Handle button (for now) events.
+  //In some cases, when reacting to evt 1/2/3, we may want to call btnStop()
+  //so following events 2/3/0 don't cause unintended behavior.
   if(clockFn==255) { //SETUP menu
     if(ctrl==mainSel) {
       if(evt==1) { //mainSel press
@@ -222,7 +225,7 @@ void ctrlEvt(byte ctrl, byte evt){
       } else { //normal function running
         //short hold: enter clockFnSet
         //press: increment counter
-        if(ctrl==mainSel && evt==1) { btnPresses++; log("Incrementing counter to "); log(String(btnPresses)); log("\n"); updateDisplay(); return; }
+        if(ctrl==mainSel && evt==1) {btnPresses++; log("Incrementing counter to "); log(String(btnPresses)); log("\n"); updateDisplay(); return; }
       }
     }
   }
@@ -246,21 +249,21 @@ void updateDisplay(){
   //This function takes that data and uses it to edit displayNext[] for cycleDisplay() to pick up
   switch(clockFn){ //which function are we displaying?
     case 255: //SETUP menu
-      log("Per SETUP, updating display to key="); log(String(clockFnSet)); log(", val="); log(String(setupOpts[clockFnSet])); log("\n");
-      editDisplay(clockFnSet, 4, 5, false); //current option key, displayed on little tubes (4-5)
-      editDisplay(setupOpts[clockFnSet], 0, 3, false); //current option value, on big tubes (0-3)
+    log("Per SETUP, updating display to key="); log(String(clockFnSet)); log(", val="); log(String(setupOpts[clockFnSet])); log("\n");
+    editDisplay(clockFnSet, 4, 5, false); //current option key, displayed on little tubes (4-5)
+    editDisplay(setupOpts[clockFnSet], 0, 3, false); //current option value, on big tubes (0-3)
     case 1: //date
-      break;
+    break;
     case 2: //alarm
-      break;
+    break;
     case 3: //timer
-      break;
+    break;
     default: //clock
-      //TODO currently we are just displaying the btnPresses count
-      log("Per normal running mode, displaying btnPresses="); log(String(btnPresses)); log("\n");
-      editDisplay(btnPresses, 0, 3, true); //big tubes: counter – pad with leading zeros
-      blankDisplay(4,5); //small tubes blank
-      break;
+    //TODO currently we are just displaying the btnPresses count
+    log("Per normal running mode, displaying btnPresses="); log(String(btnPresses)); log("\n");
+    editDisplay(btnPresses, 0, 3, true); //big tubes: counter – pad with leading zeros
+    blankDisplay(4,5); //small tubes blank
+    break;
   } //end switch clockFn
 } //end updateDisplay()
 void editDisplay(int n, byte posStart, byte posEnd, bool leadingZeros){
@@ -321,10 +324,12 @@ void cycleDisplay(){
   if(clockFnSet>0) { //but if we're setting, dim for every other 500ms since we started setting
     if(setStartLast==0) setStartLast = millis();
     dim = 1-(((millis()-setStartLast)/500)%2);
-  } else if(setStartLast>0) setStartLast=0;
+  } else {
+    if(setStartLast>0) setStartLast=0;
+  }
   
   //Anode channel 0: tubes #2 (min x10) and #5 (sec x1)
-	setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
+  setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
   digitalWrite(anodes[0], HIGH); //Turn on tubes
   delay(displayLastFade[0]/(dim?4:1)); //Display for fade-out cycles
   setCathodes(displayNext[2],displayNext[5]); //Switch cathodes to new digits
@@ -343,7 +348,7 @@ void cycleDisplay(){
   
   if(dim) delay(fadeMax/1.5);
   
-	//Anode channel 2: tubes #0 (hour x10) and #3 (min x1)
+  //Anode channel 2: tubes #0 (hour x10) and #3 (min x1)
   setCathodes(displayLast[0],displayLast[3]);
   digitalWrite(anodes[2], HIGH);
   delay(displayLastFade[2]/(dim?4:1));
@@ -354,29 +359,26 @@ void cycleDisplay(){
   if(dim) delay(fadeMax*0.75);
   
   // Loop thru and update all the arrays, and fades.
-  for( int i = 0 ; i < 6 ; i ++ )
-  {
-    if( displayNext[i] != displayLast[i] )
-    {
+  for( int i = 0 ; i < 6 ; i ++ ) {
+    if( displayNext[i] != displayLast[i] ) {
       displayNextFade[i] += fadeStep;
       displayLastFade[i] -= fadeStep;
   
-      if( displayNextFade[i] >= fadeMax )
-      {
+      if( displayNextFade[i] >= fadeMax ){
         displayNextFade[i] = 0.0f;
         displayLastFade[i] = fadeMax;
         displayLast[i] = displayNext[i];
       }
     }
   }
-}
+} //end cycleDisplay()
 void setCathodes(int decValA, int decValB){
   bool binVal[4]; //4-bit binary number with values [1,2,4,8]
   decToBin(binVal,decValA); //have binary value of decVal set into binVal
-  for(byte i=0; i<4; i++) digitalWrite(binOutA[i],binVal[i]); //set bin inputs of SN74141 A, which in turn set tube cathodes
+  for(byte i=0; i<4; i++) digitalWrite(binOutA[i],binVal[i]); //set bin inputs of SN74141
   decToBin(binVal,decValB);
-  for(byte i=0; i<4; i++) digitalWrite(binOutB[i],binVal[i]); //set bin inputs of SN74141 B. Actual tubes powered depends on anode channel.
-}
+  for(byte i=0; i<4; i++) digitalWrite(binOutB[i],binVal[i]); //set bin inputs of SN74141
+} //end setCathodes()
 void decToBin(bool binVal[], int i){
   //binVal is a reference (modify in place) of a binary number bool[4] with values [1,2,4,8]
   if(i<0 || i>15) i=15; //default value, turns tubes off
@@ -384,7 +386,7 @@ void decToBin(bool binVal[], int i){
   binVal[2] = int(i/4)%2;
   binVal[1] = int(i/2)%2;
   binVal[0] = i%2;
-}
+} //end decToBin()
 
 
 ////////// Misc global utility functions //////////
