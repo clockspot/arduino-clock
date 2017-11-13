@@ -12,8 +12,9 @@ This is an alternate codebase that is very much in progress!
   * Press S5 to advance through the items; press S2/S3 to change the setting up and down.
   * Hold S5 to exit.
 
-### SETUP menu options
-No. | Menu Item | Possible Settings
-1 | Dimming | 0 = Normal running mode (the counter) will display at full brightness<br/>1 = Normal running mode will display dim (25% duty cycle)
-2 | Nothing | Any number from 1 to 7. Has no effect yet.
-3 | Nothing | Any number from 1 to 13. Has no effect yet.
+### SETUP menu items
+| No. | Name | Possible Settings |
+| --- | --- | --- |
+| 1 | Dimming | 0 = Normal running mode (the counter) will display at full brightness<br/>1 = Normal running mode will display dim (25% duty cycle) |
+| 2 | Nothing | Any number from 1 to 7. Has no effect yet. |
+| 3 | Nothing | Any number from 1 to 13. Has no effect yet. |
