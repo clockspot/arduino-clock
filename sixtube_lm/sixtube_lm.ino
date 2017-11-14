@@ -20,10 +20,10 @@
 // S7/PL14 = A7
 
 // What input is associated with each control?
-const byte mainSel = A6; //main select button - must be equipped //TODO test this with A6
+const byte mainSel = A2; //main select button - must be equipped //TODO test this with A6
 const byte mainAdj[2] = {A1,A0}; //main up/down buttons or rotary encoder - must be equipped
 const byte altSel = 0; //alt select button - if unequipped, set to 0
-const byte altAdj[2] = {A3,A2}; //alt up/down buttons or rotary encoder - if unequipped, need not define this
+const byte altAdj[2] = {A6,A3}; //alt up/down buttons or rotary encoder - if unequipped, need not define this
 
 // What type of adj controls are equipped?
 // 1 = momentary buttons. 2 = quadrature rotary encoder. 
@@ -55,36 +55,52 @@ const int btnLongHold = 3000; //for for entering SETUP menu
 
 
 ////////// Major global vars/consts //////////
-byte fnCt = 4;
+int rtcLast[6] = {0,0,0,0,0,-1}; //y,m,d,h,i,s. -1 to force initial set
+byte fnCt = 4; //number of functions in the clock
 byte fn = 0; //currently displayed function: 0=time, 1=date, 2=alarm, 3=timer, 255=SETUP menu
 byte fnSet = 0; //whether this function is currently being set, and which option/page it's on
-byte setupOptsCt = 3; //1-index
-byte setupOpts[4] = {0,0,1,1}; //see ctrlEvt() switch(fnSet) for what these are/do
+//parameters of value currently being set, if any
+int fnSetVal; //the value currently being set, if any
+int fnSetValMin; //min possible
+int fnSetValMax; //max possible
+bool fnSetValVel; //whether it supports velocity setting
+//Values we could be setting:
+//Time (mins): 0–1439, supports velocity
+//Year: 2000–32767, supports velocity
+//Month: 1-12, no velocity
+//Date: 1-[max for this month], no velocity
+//or some other number
+byte setupOptsCt = 5; //number of options in the Setup menu, 1-index
+byte setupOpts[6] = {0,2,1,0,0,42}; //values of options – see "setup opts details" for what these do
 
 byte displayNext[6] = {15,15,15,15,15,15}; //Blank tubes at start. When display should change, put it here
-int btnPresses = 0;
+//int btnPresses = 0;
 
 
 ////////// Includes and main code control //////////
 
 //#include <EEPROM.h>
-//#include <Wire.h>
-//#include "RTClib.h"
-//RTC_DS1307 RTC;
+#include <Wire.h>
+#include <RTClib.h>
+RTC_DS1307 rtc;
 
 void setup(){
-  Serial.begin(57600);
-  //Wire.begin(); TODO
-  //RTC.begin(); TODO
+  //Serial.begin(57600);
+  Wire.begin();
+  rtc.begin();
+  if(!rtc.isrunning()) rtc.adjust(DateTime(2017,1,1,0,0,0)); //TODO test
   initOutputs();
   initInputs();
+  checkRTC();
   updateDisplay(); //initial fill of data
 }
 
 void loop(){
   //Things done every "clock cycle"
-  checkInputs(); //will do things if necessary and updateDisplay
-  cycleDisplay(); //keeps the multiplexing cycle going
+  checkRTC(); //if clock has ticked, decrement timer if running, and updateDisplay
+  checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
+  fnSetHoldCheck(); //if inputs have been held, this will do more things + updateDisplay as needed
+  cycleDisplay(); //keeps the display hardware multiplexing cycle going
 }
 
 
@@ -177,13 +193,66 @@ bool readInput(byte pin){
   if(pin==A6 || pin==A7) return analogRead(pin)<100?0:1; //analog-only pins
   else return digitalRead(pin);
 }
-void btnStop(){ btnCurHeld = 4; }
+void btnStop(){
+  //In some cases, when handling btn evt 1/2/3, we may call this
+  //so following events 2/3/0 won't cause unintended behavior
+  //(e.g. after a fn change, or going in or out of set)
+  btnCurHeld = 4;
+}
 
 void ctrlEvt(byte ctrl, byte evt){  
-  //Handle button (for now) events.
-  //In some cases, when reacting to evt 1/2/3, we may want to call btnStop()
-  //so following events 2/3/0 don't cause unintended behavior.
-  if(fn==255) { //SETUP menu
+  //Handle button-like events, based on current fn and set state.
+  //Currently only main, not alt... TODO
+  bool mainSelPush = (ctrl==mainSel && evt==1?1:0);
+  bool mainSelHold = (ctrl==mainSel && evt==2?1:0);
+  bool mainAdjUpPush = (ctrl==mainAdj[0] && evt==1?1:0);
+  bool mainAdjDnPush = (ctrl==mainAdj[1] && evt==1?1:0);
+  
+  if(fn!=255 && ctrl==mainSel && evt==3) { //joker mainSel long hold: enter SETUP menu
+    btnStop(); fn=255; fnSet=1; updateDisplay(); return;
+  }
+  
+  if(fn!=255) { //normal fn running/setting
+    if(!fnSet) { //fn running
+      if(mainSelHold) { //enter fnSet
+        //btnStop(); prevents joker
+        switch(fn){
+          case 0: setSet((rtcLast[3]*60)+rtcLast[4],0,1439,1,1); break; //time: set mins
+          case 1: setSet(rtcLast[0],2000,32767,1,1); break; //date: set year
+          case 2: //alarm: set mins
+          case 3: //timer: set mins
+          default: break;
+        }
+        return;
+      }
+      if(mainSelPush) { //mainSel press: do nothing TODO
+        //btnPresses++; log("Incrementing counter to "); log(String(btnPresses)); log("\n"); updateDisplay(); return;
+        return;
+      }
+    } //end fn running
+    else { //fn setting
+      if(mainAdjUpPush) fnSetDo(1);
+      if(mainAdjDnPush) fnSetDo(-1);
+      //change (adj hold will be handled by fnSetHoldCheck(), but here we'll need press velocity to treat encoder changes like very rapid button presses
+      //no mainSelHold will happen here
+      if(mainSelPush) { //go to next option or save and exit fnSet
+        btnStop();
+        switch(fn){
+          case 0: setRTC(3,fnSetVal/60,fnSetVal%60,0); clearSet(); break; //time: save
+          case 1: switch(fnSet){
+            case 1: setRTC(0,fnSetVal,0,0); setSet(rtcLast[1],1,12,0,2); break; //date: save year, set month
+            case 2: setRTC(1,fnSetVal,0,0); setSet(rtcLast[2],1,getDaysInMonth(rtcLast[0],rtcLast[1]),0,3); break; //date: save month, set date
+            case 3: setRTC(2,fnSetVal,0,0); clearSet(); break;
+            default: break;  
+          } break;
+          case 2: //alarm
+          case 3: //timer
+          default: break;
+        }
+      }
+    } //end fn setting
+  } //end normal fn running/setting
+  else { //setup menu
     if(ctrl==mainSel) {
       if(evt==1) { //mainSel press
         if(fnSet==setupOptsCt) { //that was the last one – exit
@@ -206,38 +275,37 @@ void ctrlEvt(byte ctrl, byte evt){
       btnStop(); //no more events from this press
       int delta = (ctrl==mainAdj[0]?1:-1);
       switch(fnSet){ //This is where we set the ranges for each option
+        //setup opts details
         //setupOpts[0] exists but is just a pad to make it 1-index for programming convenience
-        case 1: changeInRangeAr(setupOpts, 1, delta, 0, 1); break; //dim no/yes. Default: 0
-        case 2: changeInRangeAr(setupOpts, 2, delta, 1, 7); break;
-        case 3: changeInRangeAr(setupOpts, 3, delta, 1, 13); break;
+        case 1: changeInRangeAr(setupOpts, 1, delta, 1, 2); break; //1=12hr, 2=24hr
+        case 2: changeInRangeAr(setupOpts, 2, delta, 1, 2); break; //1=m/d/w, 2=d/m/w
+        case 3: changeInRangeAr(setupOpts, 3, delta, 0, 2); break; //date during time: 0=no, 1=d->s, 2=date@:30
+        case 4: changeInRangeAr(setupOpts, 4, delta, 0, 1); break; //leading zero no/yes
+        case 5: changeInRangeAr(setupOpts, 5, delta, 1, 9999); break; //random number
         default: break;
       }
       updateDisplay(); return;
-    } //end mainAdj    
-  } else { //not SETUP menu
-    if(ctrl==mainSel && evt==3) { //mainSel long hold: enter SETUP
-      btnStop(); //silence, you
-      log("Entering SETUP per mainSel long hold\n");
-      fn=255; fnSet=1; updateDisplay(); return;
-    } else {
-      if(fnSet) { //function setting
-        //press: go to next option or save and exit fnSet
-        switch(fn){
-          case 0: //time
-          case 1: //date
-          case 2: //alarm
-          case 3: //timer
-          default: break;
-        }
-      } else { //normal function running
-        //short hold: enter fnSet
-        //press: increment counter
-        if(ctrl==mainSel && evt==1) {btnPresses++; log("Incrementing counter to "); log(String(btnPresses)); log("\n"); updateDisplay(); return; }
-      }
-    }
-  }
-
+    } //end mainAdj
+  }//end setup
 }
+void setSet(int n, int m, int x, bool v, byte p){
+  fnSetVal=n; fnSetValMin=m; fnSetValMax=x; fnSetValVel=v; fnSet=p;
+  updateDisplay();
+}
+void clearSet(){ setSet(0,0,0,0,0); }
+
+void setRTC(byte unit, int v1, int v2, int v3){
+  //Use rtcLast as a sort of rtcNext
+  if(unit==3) { //time
+    rtcLast[3]=v1; rtcLast[4]=v2; rtcLast[5]=v3;
+  } else { //date
+    rtcLast[unit] = v1; //Set in the new value. But in case current date doesn't exist in new yr/mo, change it
+    if(unit<2) { byte dIM = getDaysInMonth(rtcLast[0],rtcLast[1]); if(rtcLast[2]>dIM) rtcLast[2]==dIM; }
+  }
+  rtc.adjust(DateTime(rtcLast[0],rtcLast[1],rtcLast[2],rtcLast[3],rtcLast[4],rtcLast[5]));
+}
+
+//TODO replace these with the fnSet temporary value
 void changeInRangeAr(byte ar[], byte i, int delta, byte minVal, byte maxVal){
   ar[i] = changeInRange(ar[i], delta, minVal, maxVal);
 }
@@ -249,8 +317,52 @@ byte changeInRange(byte curVal, int delta, byte minVal, byte maxVal){
   if(delta<0) if(curVal-minVal<abs(delta)) return minVal; else return curVal+delta;
 }
 
+void fnSetDo(int delta){
+  //Does actual setting of fnSetVal, as told to by ctrlEvt or fnSetHoldCheck, within params of fnSetVal vars
+  if(delta>0) if(fnSetValMax-fnSetVal<delta) fnSetVal=fnSetValMax; else fnSetVal=fnSetVal+delta;
+  if(delta<0) if(fnSetVal-fnSetValMin<abs(delta)) fnSetVal=fnSetValMin; else fnSetVal=fnSetVal+delta;
+  updateDisplay();
+}
+
+unsigned long fnSetHoldLast;
+void fnSetHoldCheck(){
+  //When we're setting via an adj button that's passed a hold point, fire off fnSet commands at intervals
+  if(fnSetHoldLast+250<millis()) { //TODO is it a problem this won't sync up with the blinking?
+    fnSetHoldLast = millis();
+    if(fnSet!=0 && ((mainAdjType==1 && (btnCur==mainAdj[0] || btnCur==mainAdj[1])) || (altAdjType==1 && (btnCur==altAdj[0] || btnCur==altAdj[1]))) ){ //if we're setting, and this is an adj input for which the type is button
+      bool dir = (btnCur==mainAdj[0] || btnCur==altAdj[0] ? 1 : 0);
+      //If short hold, or long hold but high velocity isn't supported, use low velocity (delta=1)
+      if(btnCurHeld==2 || (btnCurHeld==3 && fnSetValVel==false)) fnSetDo(dir?1:-1);
+      //else if long hold, use high velocity (delta=10)
+      else if(btnCurHeld==3) fnSetDo(dir?10:-10);
+    }
+  }
+}
+
 
 ////////// Display data formatting //////////
+unsigned int rtcPollLast = 0; //maybe don't poll the RTC every loop? would that be good?
+void checkRTC(){
+  //TODO why are the digits flashing before changing? I've got some blocking code happening? is it here?
+  //If in fn time or timer, updates display when RTC time changes. Also decrements running timer.
+  if(rtcPollLast<millis()+50) { //check every 1/20th of a second
+    rtcPollLast=millis();
+    DateTime now = rtc.now();
+    if(rtcLast[5] != now.second()) {
+      rtcLast[0] = now.year();
+      rtcLast[1] = now.month();
+      rtcLast[2] = now.day();
+      rtcLast[3] = now.hour();
+      rtcLast[4] = now.minute();
+      rtcLast[5] = now.second();
+      //TODO decrement timer if appropriate
+      if(fn==0 || fn==3) { //clock or timer
+        updateDisplay();
+      }
+    } 
+  }
+}
+
 void updateDisplay(){
   //Only run as often as the data behind the display changes (clock tick, setting change, etc.)
   //This function takes that data and uses it to edit displayNext[] for cycleDisplay() to pick up
@@ -266,11 +378,19 @@ void updateDisplay(){
     case 3: //timer
     break;
     default: //clock
-    //TODO currently we are just displaying the btnPresses count
-    log("Per normal running mode, displaying btnPresses="); log(String(btnPresses)); log("\n");
-    editDisplay(btnPresses, 0, 3, true); //big tubes: counter – pad with leading zeros
-    blankDisplay(4,5); //small tubes blank
-    break;
+      if(!fnSet){
+        byte hr = rtcLast[3];
+        if(setupOpts[1]==1) hr = (hr==0?12:(hr>12?hr-12:hr));
+        editDisplay(hr, 0, 1, setupOpts[4]);
+        editDisplay(rtcLast[4], 2, 3, true);
+        editDisplay(rtcLast[5], 4, 5, true);
+      } else {
+        //display clock setting
+        editDisplay(fnSetVal/60, 0, 1, setupOpts[4]);
+        editDisplay(fnSetVal%60, 2, 3, true);
+        blankDisplay(4, 5);
+      }
+      break;
   } //end switch fn
 } //end updateDisplay()
 void editDisplay(int n, byte posStart, byte posEnd, bool leadingZeros){
@@ -327,7 +447,7 @@ float displayLastFade[6]={8.0f,8.0f,8.0f,8.0f,8.0f,8.0f}; //Fading out displayLa
 unsigned long setStartLast = 0; //to control flashing
 
 void cycleDisplay(){
-  bool dim = (setupOpts[1]>0?true:false); //Under normal circumstances, dim constantly if the time is right
+  bool dim = 0;//(setupOpts[2]>0?true:false); //Under normal circumstances, dim constantly if the time is right
   if(fnSet>0) { //but if we're setting, dim for every other 500ms since we started setting
     if(setStartLast==0) setStartLast = millis();
     dim = 1-(((millis()-setStartLast)/500)%2);
@@ -397,6 +517,10 @@ void decToBin(bool binVal[], int i){
 
 
 ////////// Misc global utility functions //////////
+const byte daysInMonth[13]={0,31,28,31,30,31,30,31,31,30,31,30,31};
+byte getDaysInMonth(int y, int m){
+  if(m==2) return (y%4==0 && (y%100!=0 || y%400==0) ? 29 : 28); else return daysInMonth[m];
+}
 void log(String s){
   // while (!Serial) ;
   // Serial.print(s);

@@ -6,30 +6,32 @@ This is an alternate codebase that is very much in progress!
 
 ## Current instructions (WIP)
 
-* Normal running mode simply shows a number (42 at startup).
-  * To set, hold S4 'til display flashes; push/hold S2/S3 to set the number up/down; push S4 to save.
+**As of this commit:**
 
-* To enter the *Setup* menu, hold for 3 seconds.
+* Normal running mode shows time of day.
+  * To set time, hold S6 'til display flashes; push/hold S2/S3 to set the time up/down (in 24h format), and push S6 save at top of minute (seconds will set to :00).
+
+* To enter the **Setup** menu, hold S6 for 3 seconds.
   * Shows option number on small tubes, and current setting on big tubes.
-  * Push to cycle through options (listed below); turn to set; hold to exit.
+  * Push S6 to cycle through options (listed below); push S2/S3 to set up/down; pass all options or hold S6 to exit.
 
 | Option | Possible Settings |
 | --- | --- |
-| 1. Dimming | 0 = Normal running mode will display at full brightness<br/>1 = Normal running mode will display dim (25% duty cycle) |
-| 2. Nothing | Any number from 1 to 7. Has no effect yet. |
-| 3. Nothing | Any number from 1 to 13. Has no effect yet. |
+| 1. Time format | 12- or 24-hour (time display only; setting is always done in 24h) |
+| 2. n/a | |
+| 3. n/a | |
+| 4. Leading zero in hour, date, and month? | 0 = no<br/>1 = yes |
+| 5. A number | (no effect) |
 
 ## Todos
 
-* Add hold-advance for adj buttons
 * Add support for rotary encoders
   * Add velocity
   * Configurable run controls
   * Test
 * Flesh out menu
   * Make settings save in eeprom(?)
-* Reintroduce Time
-  * Make settable - if setting is opened in latter half of minute, setting value should be min+1 to make sync easy
+  * Make it loop
 * Date
   * Make settable
 * Alarm
@@ -54,10 +56,10 @@ _These instructions are for a clock equipped with a single knob/button (rotary e
 
 * **Time**
   * Shows the current time of day. (Choose 12h or 24h format in Setup.)
-  * To set, hold 'til display flashes; turn to set (in 24h format), and push to save at top of minute (seconds will set to :00).
+  * To set time, hold 'til display flashes; turn to set (in 24h format), and push to save at top of minute (seconds will set to :00).
 * **Date**
   * Shows month, date, and weekday as 0=Sunday, 6=Saturday. (Choose month/date or date/month in Setup.)
-  * To set, hold 'til display flashes; then set year, then month, then date.
+  * To set date, hold 'til display flashes; then set year, then month, then date.
 * **Alarm**
   * Shows alarm time (in 24h format) and whether the alarm is on (1) or off (0).
   * To turn alarm on or off, push the knob.
@@ -65,7 +67,7 @@ _These instructions are for a clock equipped with a single knob/button (rotary e
   * When alarm goes off, push to snooze, or hold to silence until tomorrow.
 * **Timer**
   * Shows a countdown timer (or 0min 00sec when idle).
-  * To set, hold 'til display flashes; set time (in hrs, min, sec); and press to start. Hold to cancel.
+  * To set timer, hold 'til display flashes; set time (in hrs, min, sec); and press to start. Hold to cancel.
   * When timer goes off, push to silence.
 
 **Additional settings are available in the Setup menu.**
