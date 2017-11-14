@@ -20,7 +20,7 @@
 // S7/PL14 = A7
 
 // What input is associated with each control?
-const byte mainSel = A3; //main select button - must be equipped //TODO test this with A6
+const byte mainSel = A6; //main select button - must be equipped //TODO test this with A6
 const byte mainAdj[2] = {A1,A0}; //main up/down buttons or rotary encoder - must be equipped
 const byte altSel = 0; //alt select button - if unequipped, set to 0
 const byte altAdj[2] = {A3,A2}; //alt up/down buttons or rotary encoder - if unequipped, need not define this
@@ -28,10 +28,10 @@ const byte altAdj[2] = {A3,A2}; //alt up/down buttons or rotary encoder - if une
 // What type of adj controls are equipped?
 // 1 = momentary buttons. 2 = quadrature rotary encoder. 
 const byte mainAdjType = 1;
-const byte altAdjType = 0; //if unquipped, set to 0
+const byte altAdjType = 1; //if unquipped, set to 0
 
 // In normal running mode, what do the controls do?
-// 255 = nothing, 254 = cycle through functions, 0-3 = go to specific function (see clockFn)
+// 255 = nothing, 254 = cycle through functions, 0-3 = go to specific function (see fn)
 const byte mainSelFn = 255; //1; //date
 const byte mainAdjFn = 254;
 const byte altSelFn = 255; //3; //timer //if equipped
@@ -50,16 +50,16 @@ const byte alarmRadio = 0;
 const byte alarmDur = 3;
 
 // How long (in ms) are the button hold durations?
-const int btnShortHold = 2000; //for setting the displayed feataure
-const int btnLongHold = 5000; //for for entering SETUP menu
+const int btnShortHold = 1000; //for setting the displayed feataure
+const int btnLongHold = 3000; //for for entering SETUP menu
 
 
 ////////// Major global vars/consts //////////
-byte clockFnCt = 4;
-byte clockFn = 0; //currently displayed function: 0=time, 1=date, 2=alarm, 3=timer, 255=SETUP menu
-byte clockFnSet = 0; //whether this function is currently being set, and which option/page it's on
+byte fnCt = 4;
+byte fn = 0; //currently displayed function: 0=time, 1=date, 2=alarm, 3=timer, 255=SETUP menu
+byte fnSet = 0; //whether this function is currently being set, and which option/page it's on
 byte setupOptsCt = 3; //1-index
-byte setupOpts[4] = {0,0,1,1}; //see ctrlEvt() switch(clockFnSet) for what these are/do
+byte setupOpts[4] = {0,0,1,1}; //see ctrlEvt() switch(fnSet) for what these are/do
 
 byte displayNext[6] = {15,15,15,15,15,15}; //Blank tubes at start. When display should change, put it here
 int btnPresses = 0;
@@ -183,29 +183,29 @@ void ctrlEvt(byte ctrl, byte evt){
   //Handle button (for now) events.
   //In some cases, when reacting to evt 1/2/3, we may want to call btnStop()
   //so following events 2/3/0 don't cause unintended behavior.
-  if(clockFn==255) { //SETUP menu
+  if(fn==255) { //SETUP menu
     if(ctrl==mainSel) {
       if(evt==1) { //mainSel press
-        if(clockFnSet==setupOptsCt) { //that was the last one – exit
+        if(fnSet==setupOptsCt) { //that was the last one – exit
           log("SETUP: Exiting after last option\n");
           btnStop();
-          clockFn=0; clockFnSet=0; updateDisplay(); return; //exit setup
+          fn=0; fnSet=0; updateDisplay(); return; //exit setup
         } else {
           log("SETUP: Proceeding to next option\n");
-          clockFnSet++; updateDisplay(); return; //advance to next option
+          fnSet++; updateDisplay(); return; //advance to next option
         }
       }
       if(evt==2) { //mainSel short hold
         log("SETUP: Exiting per mainSel short hold\n");
         btnStop(); //no more events from this press
-        clockFn=0; clockFnSet=0; updateDisplay(); return; //exit setup
+        fn=0; fnSet=0; updateDisplay(); return; //exit setup
       }
     } //end mainSel
     if((ctrl==mainAdj[0] || ctrl==mainAdj[1]) && evt==1){ //mainAdj press
       log("SETUP: "); log(String(ctrl)); log(" pressed\n");
       btnStop(); //no more events from this press
       int delta = (ctrl==mainAdj[0]?1:-1);
-      switch(clockFnSet){ //This is where we set the ranges for each option
+      switch(fnSet){ //This is where we set the ranges for each option
         //setupOpts[0] exists but is just a pad to make it 1-index for programming convenience
         case 1: changeInRangeAr(setupOpts, 1, delta, 0, 1); break; //dim no/yes. Default: 0
         case 2: changeInRangeAr(setupOpts, 2, delta, 1, 7); break;
@@ -218,12 +218,19 @@ void ctrlEvt(byte ctrl, byte evt){
     if(ctrl==mainSel && evt==3) { //mainSel long hold: enter SETUP
       btnStop(); //silence, you
       log("Entering SETUP per mainSel long hold\n");
-      clockFn=255; clockFnSet=1; updateDisplay(); return;
+      fn=255; fnSet=1; updateDisplay(); return;
     } else {
-      if(clockFnSet) { //function setting
-        //press: go to next option or save and exit clockFnSet
+      if(fnSet) { //function setting
+        //press: go to next option or save and exit fnSet
+        switch(fn){
+          case 0: //time
+          case 1: //date
+          case 2: //alarm
+          case 3: //timer
+          default: break;
+        }
       } else { //normal function running
-        //short hold: enter clockFnSet
+        //short hold: enter fnSet
         //press: increment counter
         if(ctrl==mainSel && evt==1) {btnPresses++; log("Incrementing counter to "); log(String(btnPresses)); log("\n"); updateDisplay(); return; }
       }
@@ -247,11 +254,11 @@ byte changeInRange(byte curVal, int delta, byte minVal, byte maxVal){
 void updateDisplay(){
   //Only run as often as the data behind the display changes (clock tick, setting change, etc.)
   //This function takes that data and uses it to edit displayNext[] for cycleDisplay() to pick up
-  switch(clockFn){ //which function are we displaying?
+  switch(fn){ //which function are we displaying?
     case 255: //SETUP menu
-    log("Per SETUP, updating display to key="); log(String(clockFnSet)); log(", val="); log(String(setupOpts[clockFnSet])); log("\n");
-    editDisplay(clockFnSet, 4, 5, false); //current option key, displayed on little tubes (4-5)
-    editDisplay(setupOpts[clockFnSet], 0, 3, false); //current option value, on big tubes (0-3)
+    log("Per SETUP, updating display to key="); log(String(fnSet)); log(", val="); log(String(setupOpts[fnSet])); log("\n");
+    editDisplay(fnSet, 4, 5, false); //current option key, displayed on little tubes (4-5)
+    editDisplay(setupOpts[fnSet], 0, 3, false); //current option value, on big tubes (0-3)
     case 1: //date
     break;
     case 2: //alarm
@@ -264,7 +271,7 @@ void updateDisplay(){
     editDisplay(btnPresses, 0, 3, true); //big tubes: counter – pad with leading zeros
     blankDisplay(4,5); //small tubes blank
     break;
-  } //end switch clockFn
+  } //end switch fn
 } //end updateDisplay()
 void editDisplay(int n, byte posStart, byte posEnd, bool leadingZeros){
   //Splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
@@ -321,7 +328,7 @@ unsigned long setStartLast = 0; //to control flashing
 
 void cycleDisplay(){
   bool dim = (setupOpts[1]>0?true:false); //Under normal circumstances, dim constantly if the time is right
-  if(clockFnSet>0) { //but if we're setting, dim for every other 500ms since we started setting
+  if(fnSet>0) { //but if we're setting, dim for every other 500ms since we started setting
     if(setStartLast==0) setStartLast = millis();
     dim = 1-(((millis()-setStartLast)/500)%2);
   } else {
