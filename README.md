@@ -9,7 +9,7 @@ Featuring timekeeping by DS1307 real-time clock and six digits multiplexed 3x2 v
 
 _In these instructions, "Select" is the main pushbutton, and "Adjust" can be either a knob (rotary encoder) or a pair of up/down buttons (hold to set faster). Other variations may apply depending on the options selected in the code._
 
-**Use Adjust to see each of the clock's functions:** (~crossed out~ = not implemented)
+**Use Adjust to see each of the clock's functions:** *(Alarm and Timer not yet implemented)*
 
 * **Time**
   * Shows the current time of day. (Choose 12h or 24h format in Setup.)
@@ -17,15 +17,15 @@ _In these instructions, "Select" is the main pushbutton, and "Adjust" can be eit
 * **Date**
   * Shows month, date, and weekday as 0=Sunday, 6=Saturday. (Choose month/date or date/month in Setup.)
   * To set date, hold Select 'til display flashes; then set year, then month, then date, pushing Select to save each.
-* ~**Alarm**~
-  * ~Shows alarm time (in 24h format) and whether the alarm is on (1) or off (0).~
-  * ~To turn alarm on or off, press Select.~
-  * ~To set alarm, hold Select 'til display flashes; use Adjust to set (in 24h format), and push Select to save.~
-  * ~When alarm goes off, push Select to snooze, or hold to silence until tomorrow.~
-* ~**Timer**~
-  * ~Shows a countdown timer (or 0min 00sec when idle).~
-  * ~To set timer, hold Select 'til display flashes; set time (in hrs, min, sec); and push Select to start. Hold to cancel.~
-  * ~When timer goes off, push Select to silence.~
+* **Alarm**
+  * Shows alarm time (in 24h format) and whether the alarm is on (1) or off (0).
+  * To turn alarm on or off, press Select.
+  * To set alarm, hold Select 'til display flashes; use Adjust to set (in 24h format), and push Select to save.
+  * When alarm goes off, push Select to snooze, or hold to silence until tomorrow.
+* **Timer**
+  * Shows a countdown timer (or 0min 00sec when idle).
+  * To set timer, hold Select 'til display flashes; set time (in hrs, min, sec); and push Select to start. Hold to cancel.
+  * When timer goes off, push Select to silence.
 
 **Additional settings are available in the Setup menu.**
 
@@ -36,11 +36,13 @@ _In these instructions, "Select" is the main pushbutton, and "Adjust" can be eit
 | --- | --- |
 | 1. Time format | 1 = 12-hour<br/>2 = 24-hour<br/>(time-of-day display only; setting times is always done in 24h) |
 | 2. Date display | 1 = month/date/weekday<br/>2 = date/month/weekday |
-| 3. Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>~2 = full date (as above) every minute at :30 seconds~ |
+| 3. Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date (as above) every minute at :30 seconds *(not implemented)* |
 | 4. Leading zero in hour, date, and month? | 0 = no<br/>1 = yes |
 
 **Setup options not implemented yet**
 
+| Option | Possible Settings |
+| --- | --- |
 | 5. Transition fade | 0–50 (in hundredths of a second) |
 | 6. Digit cycle (prevents [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)) | 0 = before midnight and/or before day-off<br/>1 = every hour before :01 minute |
 | 7. Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ) |
