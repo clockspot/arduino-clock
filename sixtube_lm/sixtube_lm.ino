@@ -504,9 +504,6 @@ void updateDisplay(){
       break;
     }
   }
-  // if(tinkercad) {
-  //   for(int i=0; i<6; i++) { if(q[i]>9) Serial.print("-"); else Serial.print(q[i],DEC); if(i==1||i==3) Serial.print("."); } Serial.println();
-  // }
 } //end updateDisplay()
 
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros){
