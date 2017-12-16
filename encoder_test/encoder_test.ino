@@ -1,35 +1,13 @@
-////////// Configuration consts //////////
+// #include <EEPROM.h>
+// #include <Wire.h>
+// #include <RTClib.h>
+// RTC_DS1307 rtc;
+#include <Encoder.h> //https://www.pjrc.com/teensy/td_libs_Encoder.html
 
-// These are the RLB board connections to Arduino analog input pins.
-// S1/PL13 = Reset
-// S2/PL5 = A1
-// S3/PL6 = A0
-// S4/PL7 = A6
-// S5/PL8 = A3
-// S6/PL9 = A2
-// S7/PL14 = A7
-// A6-A7 are analog-only pins that aren't as responsive and require a physical pullup resistor (1K to +5V).
-
-// What input is associated with each control?
-const byte mainAdjA = A1; //main up/down buttons or rotary encoder - must be equipped
-const byte mainAdjB = A0;
-const byte mainAdjType = 2;
-
-////////// Function prototypes, global consts and vars //////////
-
-// Hardware inputs
-//unsigned long inputSampleLast = 0; //millis() of last time inputs (and RTC) were sampled
-//const byte inputSampleDur = 50; //input sampling frequency (in ms) to avoid bounce
-//unsigned long inputLast = 0; //When a button was last pressed / knob was last turned
-//unsigned long inputLast2 = 0; //Second-to-last of above
-//byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=set by btnStop()
-bool mainRotLast[2] = {0,0}; //last state of main rotary encoder inputs
-void initInputs(); //Set pinModes for inputs; capture initial state of knobs (rotary encoders, if equipped).
-void checkInputs(); //Run at sample rate. Calls checkBtn() for each eligible button and ctrlEvt() for each knob event.
-bool readInput(byte pin); //Does analog or digital read depending on which type of pin it is.
-//void checkBtn(byte btn); //Calls ctrlEvt() for each button event
-//void btnStop(); //Stops further events from a button until it's released, to prevent unintended behavior after an event is handled.
-void checkRot(byte rotA, byte rotB, bool last[], bool triggerEvent);
+Encoder mainRot(A1,A0);
+const byte rotCount = 4; //values per detent. We will set each encoder to a "resting" value of rotCount, and sense moves between detents when the rot value reaches 0 (left) or rotCount*2 (right).
+byte mainRotLast = -999;
+word val = 500;
 
 // Display formatting
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
@@ -55,11 +33,7 @@ void setCathodes(byte decValA, byte decValB);
 void decToBin(bool binVal[], byte i);
 
 
-////////// Includes and main code control //////////
-// #include <EEPROM.h>
-// #include <Wire.h>
-// #include <RTClib.h>
-// RTC_DS1307 rtc;
+////////// Main code control //////////
 
 void setup(){
   //Serial.begin(57600);
@@ -68,6 +42,11 @@ void setup(){
   //if(!rtc.isrunning()) rtc.adjust(DateTime(2017,1,1,0,0,0)); //TODO test
   initOutputs();
   initInputs();
+  
+  mainRot.write(rotCount);
+  
+  editDisplay(val,0,3,false);
+  
   //initEEPROM(readInput(mainSel)==LOW);
   //debugEEPROM();
   //setCaches();
@@ -76,7 +55,26 @@ void setup(){
 void loop(){
   //Things done every "clock cycle"
   //checkRTC(); //if clock has ticked, decrement timer if running, and updateDisplay
-  checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
+  //checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
+  
+  long mainRotNew = mainRot.read();
+  if(mainRotNew != mainRotLast){
+    if(mainRotNew <= 0) { //down one detent
+      val--;
+      editDisplay(val,0,3,false);
+      mainRotLast = rotCount;
+      mainRot.write(rotCount);
+    } else if(mainRotNew >= rotCount*2) {
+      val++;
+      editDisplay(val,0,3,false);
+      mainRotLast = rotCount;
+      mainRot.write(rotCount);
+    } else {
+      mainRotLast = mainRotNew;
+    }
+    editDisplay(mainRotLast,4,5,false);
+  }
+  
   //doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
 }
@@ -85,94 +83,19 @@ void loop(){
 ////////// Control inputs //////////
 void initInputs(){
   //TODO are there no "loose" pins left floating after this? per https://electronics.stackexchange.com/q/37696/151805
-  pinMode(A0, INPUT_PULLUP);
-  pinMode(A1, INPUT_PULLUP);
+  //Buttons
+  //pinMode(A0, INPUT_PULLUP);
+  //pinMode(A1, INPUT_PULLUP);
   pinMode(A2, INPUT_PULLUP);
   pinMode(A3, INPUT_PULLUP);
-  //4 and 5 used for I2C
   pinMode(A6, INPUT); digitalWrite(A6, HIGH);
   pinMode(A7, INPUT); digitalWrite(A7, HIGH);
+  
+  //Encoders
   //If using rotary encoders, capture their initial state
-  if(mainAdjType==2) checkRot(mainAdjA,mainAdjB,mainRotLast,false);
+  //if(mainAdjType==2) checkRot(mainAdjA,mainAdjB,mainRotLast,false);
   //if(altAdjType==2) checkRot(altAdjA,altAdjB,altRotLast,false);
 }
-
-void checkInputs(){
-  // TODO can all this if/else business be defined at load instead of evaluated every sample?
-  //if(millis() >= inputSampleLast+inputSampleDur) { //time for a sample
-    //inputSampleLast = millis();
-    //potential issue: if user only means to rotate or push encoder but does both?
-    //checkBtn(mainSel); //main select
-    //if(mainAdjType==2)
-      checkRot(mainAdjA,mainAdjB,mainRotLast,true); //main rotary encoder
-    //else {
-      //checkBtn(mainAdjA); checkBtn(mainAdjB);//main adj buttons
-    //}
-    //if(altSel!=0) checkBtn(altSel); //alt select (if equipped)
-    //if(altAdjType==2) checkRot(altAdj,altRotLast,true); //alt rotary encoder (if equipped)
-    //else
-    //if(altAdjType==1) { checkBtn(altAdjA); checkBtn(altAdjB); } //alt adj buttons
-  //} //end if time for a sample
-}
-bool readInput(byte pin){
-  if(pin==A6 || pin==A7) return analogRead(pin)<100?0:1; //analog-only pins
-  else return digitalRead(pin);
-}
-
-word numMoves = 0;
-void checkRot(byte rotA, byte rotB, bool last[], bool triggerEvent){
-  //Changes in rotary encoders.
-  //When an encoder has changed, will call ctrlEvt(ctrl,1)
-  //mimicking an up/down adj button press
-  //TODO do we need to watch the rotation direction w/ last2[] to accommodate for inputs changing faster than we sample?
-  //if(btnCur==0) { //only do if a button isn't pressed
-    bool newA = readInput(rotA);
-    bool newB = readInput(rotB);
-    //if(newA != last[0] && triggerEvent) ctrlEvt(newA==last[1] ? rotA : rotB, 1);
-    //If A changed, we'll pretend B didn't - see TODO above
-    //else if(newB != last[1] && triggerEvent) ctrlEvt(newB==last[0] ? rotB : rotA, 1);
-    
-    if(newA!=last[0] || newB!=last[1]) {
-      numMoves++;
-      //Big tubes: show the number of moves we've had
-      editDisplay(numMoves,0,3,false);
-      //Small tubes: show the state of each of the encoder's pins
-      editDisplay(newA,4,4,false);
-      editDisplay(newB,5,5,false);
-    }
-    
-    last[0] = newA;
-    last[1] = newB;
-  //}//end if button isn't pressed
-}//end checkRot
-
-
-
-////////// Display data formatting //////////
-// void updateDisplay(){
-//   //Run as needed to update display when the value being shown on it has changed
-//   //(Ticking time and date are an exception - see checkRTC() )
-//   //This formats the new value and puts it in displayNext[] for cycleDisplay() to pick up
-//   if(fnSet) { //setting
-//     //little tubes:
-//     if(fn==255) editDisplay(fnSet, 4, 5, false); //setup menu: current option key
-//     else blankDisplay(4, 5); //fn setting: blank
-//     //big tubes:
-//     if(fnSetValMax==1439) { //value is a time of day
-//       editDisplay(fnSetVal/60, 0, 1, EEPROM.read(optsLoc[4])); //hours with leading zero
-//       editDisplay(fnSetVal%60, 2, 3, true);
-//     } else editDisplay(fnSetVal, 0, 3, false); //some other type of value
-//   }
-//   else { //fn running
-//     switch(fn){
-//       //case 0: //time taken care of by checkRTC()
-//       //case 1: //date taken care of by checkRTC()
-//       case 2: //alarm
-//       case 3: //timer
-//       break;
-//     }
-//   }
-// } //end updateDisplay()
 
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros){
   //Splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
