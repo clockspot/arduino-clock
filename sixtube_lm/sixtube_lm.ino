@@ -9,6 +9,12 @@
 // TODO: Cathode anti-poisoning
 // TODO: implement other setup options
 
+#include <EEPROM.h>
+#include <Wire.h>
+#include <RTClib.h>
+RTC_DS1307 rtc;
+#include <ooPinChangeInt.h>
+#include <AdaEncoder.h>
 
 ////////// Configuration consts //////////
 
@@ -24,21 +30,24 @@
 
 // What input is associated with each control?
 const byte mainSel = A2; //main select button - must be equipped
-const byte mainAdjA = A1; //main up/down buttons or rotary encoder - must be equipped
-const byte mainAdjB = A0;
+const byte mainAdjUp = A1; //main up/down buttons or rotary encoder - must be equipped
+const byte mainAdjDn = A0;
 const byte altSel = 0; //alt select button - if unequipped, set to 0
-const byte altAdjA = A6; //alt up/down buttons or rotary encoder - if unequipped, set to 0
-const byte altAdjB = A3;
+const byte altAdjUp = 0; //A6; //alt up/down buttons or rotary encoder - if unequipped, set to 0
+const byte altAdjDn = 0; //A3;
 
 // What type of adj controls are equipped?
-// 1 = momentary buttons. 2 = quadrature rotary encoder. 
-const byte mainAdjType = 1;
+// 1 = momentary buttons. 2 = quadrature rotary encoder.
+// Currently using AdaEncoder library that uses pin change interrupts, not useful on A6/A7!
+const byte mainAdjType = 2;
+AdaEncoder mainRot = AdaEncoder('a',mainAdjUp,mainAdjDn);
 const byte altAdjType = 0; //if unquipped, set to 0
+//AdaEncoder altRot = AdaEncoder('b',altAdjUp,altAdjDn);
 
 // In normal running mode, what do the controls do?
 // 255 = nothing, 254 = cycle through functions TODO, 0-3 = go to specific function (see fn)
-// const byte mainSelFn = 255; //1; //date
-// const byte mainAdjFn = 254;
+const byte mainSelFn = 1;
+const byte mainAdjFn = 254;
 // const byte altSelFn = 255; //3; //timer //if equipped
 // const byte altAdjFn = 255; //if equipped
 
@@ -57,28 +66,18 @@ const byte alarmDur = 3;
 // How long (in ms) are the button hold durations?
 const word btnShortHold = 1000; //for setting the displayed feataure
 const word btnLongHold = 3000; //for for entering SETUP menu
-const byte velThreshold = 400; //ms
+const byte velThreshold = 100; //ms
 // When an adj up/down input (btn or rot) follows another in less than this time, value will change more (10 vs 1).
-// Recommend 150 for rotaries. If you want to use this feature with buttons, extend to ~400.
+// Recommend ~100 for rotaries. If you want to use this feature with buttons, extend to ~400.
 
 
-////////// Function prototypes, global consts and vars //////////
+////////// Global consts and vars used in multiple sections //////////
 
 // Hardware inputs
-unsigned long inputSampleLast = 0; //millis() of last time inputs (and RTC) were sampled
-const byte inputSampleDur = 50; //input sampling frequency (in ms) to avoid bounce
 byte btnCur = 0; //Momentary button currently in use - only one allowed at a time
+byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=set by btnStop()
 unsigned long inputLast = 0; //When a button was last pressed / knob was last turned
 unsigned long inputLast2 = 0; //Second-to-last of above
-byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=set by btnStop()
-bool mainRotLast[2] = {0,0}; //last state of main rotary encoder inputs
-bool altRotLast[2] = {0,0}; //and alt (if equipped)
-void initInputs(); //Set pinModes for inputs; capture initial state of knobs (rotary encoders, if equipped).
-void checkInputs(); //Run at sample rate. Calls checkBtn() for each eligible button and ctrlEvt() for each knob event.
-bool readInput(byte pin); //Does analog or digital read depending on which type of pin it is.
-void checkBtn(byte btn); //Calls ctrlEvt() for each button event
-void btnStop(); //Stops further events from a button until it's released, to prevent unintended behavior after an event is handled.
-void checkRot(byte rotA, byte rotB, bool last[], bool triggerEvent);
 
 // Input handling and value setting
 const byte fnCt = 2; //number of functions in the clock
@@ -103,54 +102,11 @@ const word optsDef[19] = {0, 2, 1, 0, 0, 0, 0, 0, 0, 0,500, 0,1320, 360, 0, 1, 5
 const word optsMin[19] = {0, 1, 1, 0, 0, 0, 0, 0, 0, 0,  1, 0,   0,   0, 0, 0, 0,   0,   0};
 const word optsMax[19] = {0, 2, 2, 2, 1,50, 1, 6, 4,60,999, 2,1439,1439, 2, 6, 6,1439,1439};
 
-void initEEPROM(bool force); //Sets EEPROM to defaults, either on first run or when forced - see setup()
-void ctrlEvt(byte ctrl, byte evt); //Handles an input control event, based on current fn and set state.
-void startSet(word n, word m, word x, byte p=1); //Enter set state (at optional page p), and start setting value n.
-void clearSet(); //Exit set state.
-void doSet(int delta); //Does the actual value setting. Ensures range isn't exceeded. Updates display.
-unsigned long doSetHoldLast;
-void doSetHold(); //Run at sample rate per doSetHoldLast. Fires doSet commands in response to held buttons.
-void startOpt(byte n); //Calls startSet for a given setup menu option.
-void finishOpt();
-void setCaches();
-word readEEPROM(int loc, bool isWord=false); //TODO need to split into EEPROMWord and EEPROMByte?
-void writeEEPROM(int loc, int val, bool isWord=false);
-byte daysInMonth(int y, int m);
-
-// Clock ticking and timed event triggering
-unsigned long rtcPollLast = 0; //maybe don't poll the RTC every loop? would that be good?
-byte rtcSecLast = 61;
-void checkRTC(); //Run at sample rate. When clock ticks, updates display, inc/decrements timers.
-
 // Display formatting
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
 
-// Hardware outputs
-//This clock is 2x3 multiplexed: two tubes powered at a time.
-//The anode channel determines which two tubes are powered,
-//and the two SN74141 cathode driver chips determine which digits are lit.
-//4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
-byte binOutA[4] = {2,3,4,5};
-byte binOutB[4] = {6,7,8,9};
-//3 pins out to anode channel switches
-byte anodes[3] = {11,12,13};
-void initOutputs();
-float fadeMax = 5.0f;
-float fadeStep = 1.0f;
-int displayLast[6]={11,11,11,11,11,11}; //What is currently being displayed. We slowly fade away from this.
-float displayNextFade[6]={0.0f,0.0f,0.0f,0.0f,0.0f,0.0f}; //Fading in displayNext values
-float displayLastFade[6]={8.0f,8.0f,8.0f,8.0f,8.0f,8.0f}; //Fading out displayLast values
-unsigned long setStartLast = 0; //to control flashing
-void cycleDisplay(); //Run on every "clock cycle" to keep multiplexing going.
-void setCathodes(byte decValA, byte decValB);
-void decToBin(bool binVal[], byte i);
 
-
-////////// Includes and main code control //////////
-#include <EEPROM.h>
-#include <Wire.h>
-#include <RTClib.h>
-RTC_DS1307 rtc;
+////////// Main code control //////////
 
 void setup(){
   Serial.begin(57600);
@@ -161,14 +117,19 @@ void setup(){
   initInputs();
   initEEPROM(readInput(mainSel)==LOW);
   //debugEEPROM();
-  setCaches();
+  //setCaches();
 }
 
+unsigned long pollLast = 0;
 void loop(){
-  //Things done every "clock cycle"
-  checkRTC(); //if clock has ticked, decrement timer if running, and updateDisplay
-  checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
-  doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
+  //Things done every 50ms - avoids overpolling(?) and switch bounce(?)
+  if(pollLast<millis()+50) {
+    pollLast=millis();
+    checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
+    checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
+    doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
+  }
+  //Things done every loop cycle
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
 }
 
@@ -183,36 +144,33 @@ void initInputs(){
   //4 and 5 used for I2C
   pinMode(A6, INPUT); digitalWrite(A6, HIGH);
   pinMode(A7, INPUT); digitalWrite(A7, HIGH);
-  //If using rotary encoders, capture their initial state
-  if(mainAdjType==2) checkRot(mainAdjA,mainAdjB,mainRotLast,false);
-  if(altAdjType==2) checkRot(altAdjA,altAdjB,altRotLast,false);
 }
 
 void checkInputs(){
-  // TODO can all this if/else business be defined at load instead of evaluated every sample?
-  if(millis() >= inputSampleLast+inputSampleDur) { //time for a sample
-    inputSampleLast = millis();
+  // TODO can all this if/else business be defined at load instead of evaluated every sample? OR is it compiled that way?
+  //if(millis() >= inputSampleLast+inputSampleDur) { //time for a sample
+    //inputSampleLast = millis();
     //potential issue: if user only means to rotate or push encoder but does both?
+  
+    //sample button states
     checkBtn(mainSel); //main select
-    if(mainAdjType==2) checkRot(mainAdjA,mainAdjB,mainRotLast,true); //main rotary encoder
-    else {
-      checkBtn(mainAdjA); checkBtn(mainAdjB);//main adj buttons
-    }
+    if(mainAdjType==1) { checkBtn(mainAdjUp); checkBtn(mainAdjDn); } //main adjust buttons (if equipped)
     //if(altSel!=0) checkBtn(altSel); //alt select (if equipped)
-    //if(altAdjType==2) checkRot(altAdj,altRotLast,true); //alt rotary encoder (if equipped)
-    //else
-    //if(altAdjType==1) { checkBtn(altAdjA); checkBtn(altAdjB); } //alt adj buttons
-  } //end if time for a sample
+    //if(altAdjType==1) { checkBtn(altAdjUp); checkBtn(altAdjDn); } //alt adjust buttons (if equipped)
+    
+    //check adaencoder library to see if rot(s) have moved
+    if(mainAdjType==2 || altAdjType==2) checkRot();
+    
+  //} //end if time for a sample
 }
+
 bool readInput(byte pin){
   if(pin==A6 || pin==A7) return analogRead(pin)<100?0:1; //analog-only pins
   else return digitalRead(pin);
 }
-
 void checkBtn(byte btn){
   //Changes in momentary buttons, LOW = pressed.
-  //When a button event has occurred, will call ctrlEvt(ctrl,evt)
-  //where event = 0=pressed, 1=released, 2=short hold, 3=long hold
+  //When a button event has occurred, will call ctrlEvt
   bool bnow = readInput(btn);
   //If the button has just been pressed, and no other buttons are in use...
   if(btnCur==0 && bnow==LOW) {
@@ -244,50 +202,45 @@ void btnStop(){
   btnCurHeld = 4;
 }
 
-void checkRot(byte rotA, byte rotB, bool last[], bool triggerEvent){
-  //Changes in rotary encoders.
-  //When an encoder has changed, will call ctrlEvt(ctrl,1)
-  //mimicking an up/down adj button press
-  //TODO do we need to watch the rotation direction w/ last2[] to accommodate for inputs changing faster than we sample?
-  if(btnCur==0) { //only do if a button isn't pressed
-    bool newA = readInput(rotA);
-    bool newB = readInput(rotB);
-    if(newA != last[0] && triggerEvent) ctrlEvt(newA==last[1] ? rotA : rotB, 1);
-    //If A changed, we'll pretend B didn't - see TODO above
-    else if(newB != last[1] && triggerEvent) ctrlEvt(newB==last[0] ? rotB : rotA, 1);
-    last[0] = newA;
-    last[1] = newB;
-  }//end if button isn't pressed
+void checkRot(){
+  //Changes in rotary encoders. When rotation(s) occur, will call ctrlEvt to simulate btn presses.
+  if(btnCur==0) {
+    //TODO does this work with more than one encoder? maybe on separate loops?
+    //https://github.com/GreyGnome/AdaEncoder/blob/master/Examples/MyEncoder/MyEncoder.ino
+    AdaEncoder *thisEncoder=NULL;
+    thisEncoder = AdaEncoder::genie();
+    if(thisEncoder!=NULL) {
+      inputLast2 = inputLast; inputLast = millis();
+      int8_t clicks = thisEncoder->query(); //signed number of clicks it has moved
+      byte dir = (clicks<0?0:1);
+      clicks = abs(clicks);
+      for(byte i=0; i<clicks; i++){ //in case of more than one click
+        ctrlEvt((thisEncoder->getID()=='a'?(dir?mainAdjUp:mainAdjDn):(dir?altAdjUp:altAdjDn)),1);
+      }
+    }
+  }
 }//end checkRot
 
 
 ////////// Input handling and value setting //////////
+
 void ctrlEvt(byte ctrl, byte evt){  
   //Handle control events (from checkBtn or checkRot), based on current fn and set state.
-  //Currently only main, not alt... TODO
-  bool mainSelPush = (ctrl==mainSel && evt==1?1:0);
-  bool mainSelHold = (ctrl==mainSel && evt==2?1:0);
-  bool mainAdjUp = (ctrl==mainAdjA && evt==1?1:0);
-  bool mainAdjDn = (ctrl==mainAdjB && evt==1?1:0);
+  //evt: 1=press, 2=short hold, 3=long hold, 0=release.
+  //We only handle press evts for adj ctrls, as that's the only evt encoders generate.
+  //But we can handle short and long holds and releases for the sel ctrls (always buttons).
+  //TODO needs alt handling
   
-  if(fn!=255 && ctrl==mainSel && evt==3) { //mainSel long hold to enter SETUP menu
-    btnStop(); fn = 255; startOpt(1); return;
-  }
-  
-  if(fn!=255) { //normal fn running/setting - not in setup menu
+  if(fn!=255) { //normal fn running/setting (not in setup menu)
+    
+    if(evt==3 && ctrl==mainSel) { //mainSel long hold: enter SETUP menu
+      btnStop(); fn = 255; startOpt(1); return;
+    }
+    
     DateTime now = rtc.now();
+
     if(!fnSet) { //fn running
-      if(mainAdjUp || mainAdjDn){ //TODO alternate function adjust
-        if(mainAdjUp) fn = (fn==fnCt-1 ? 0 : fn+1);
-        if(mainAdjDn) fn = (fn==0 ? fnCt-1 : fn-1);
-        switch(fn){
-          case 0: case 1: checkRTC(); break;
-          case 2: //alarm: show
-          case 3: //timer: show
-          default: break;
-        }
-      }
-      if(mainSelHold) { //enter fnSet
+      if(evt==2 && ctrl==mainSel) { //sel hold: enter fnSet
         switch(fn){
           case 0: startSet((now.hour()*60)+now.minute(),0,1439,1); break; //time: set mins
           case 1: fnSetValDate[1]=now.month(), fnSetValDate[2]=now.day(); startSet(now.year(),0,32767,1); break; //date: set year
@@ -297,60 +250,88 @@ void ctrlEvt(byte ctrl, byte evt){
         }
         return;
       }
-      if(mainSelPush) { //mainSel press: do nothing TODO alternate function adjust
-        return;
+      else if((ctrl==mainSel && evt==0) || ((ctrl==mainAdjUp || ctrl==mainAdjDn) && evt==1)) { //sel release or adj press - switch fn, depending on config
+        //255 = nothing, 254 = cycle through functions TODO, 0-3 = go to specific function (see fn)
+        //we can't handle sel press here because, if attempting to enter fnSet, it would switch the fn first
+        bool fnChgd = false;
+        if(ctrl==mainSel && mainSelFn!=255) {
+          fnChgd = true;
+          if(mainSelFn==254) fn = (fn==fnCt-1 ? 0 : fn+1);
+          else fn = mainSelFn;
+        }
+        else if((ctrl==mainAdjUp || ctrl==mainAdjDn) && mainAdjFn!=255) {
+          fnChgd = true;
+          if(mainAdjFn==254) fn = (ctrl==mainAdjUp?(fn==fnCt-1 ? 0 : fn+1):(fn==0 ? fnCt-1 : fn-1));
+          else fn = mainAdjFn;
+        }
+        if(fnChgd){
+          switch(fn){
+            case 0: case 1: checkRTC(true); break;
+            case 2: //alarm: show
+            case 3: //timer: show
+            default: break;
+          }
+        }
       }
     } //end fn running
+
     else { //fn setting
-      if(mainAdjUp) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
-      if(mainAdjDn) doSet(inputLast-inputLast2<velThreshold ? -10 : -1);
-      if(mainSelPush) { //go to next option or save and exit fnSet
-        btnStop(); //not waiting for mainSelHold, so can stop listening here
-        switch(fn){
-          case 0: //time of day: save in RTC
-            rtc.adjust(DateTime(now.year(),now.month(),now.day(),fnSetVal/60,fnSetVal%60,0));
-            clearSet(); break;
-          case 1: switch(fnSet){ //date: save in RTC - year can be 2-byte int
-            case 1: //date: save year, set month
-              fnSetValDate[0]=fnSetVal;
-              startSet(fnSetValDate[1],1,12,2); break; 
-            case 2: //date: save month, set date
-              fnSetValDate[1]=fnSetVal;
-              startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
-            case 3: //date: save in RTC
-              rtc.adjust(DateTime(fnSetValDate[0],fnSetValDate[1],fnSetVal,now.hour(),now.minute(),now.second()));
-              clearSet();
-              break;
+      if(evt==1) { //we respond only to press evts during fn setting
+        if(ctrl==mainSel) { //mainSel push: go to next option or save and exit fnSet
+          btnStop(); //not waiting for mainSelHold, so can stop listening here
+          switch(fn){
+            case 0: //time of day: save in RTC
+              rtc.adjust(DateTime(now.year(),now.month(),now.day(),fnSetVal/60,fnSetVal%60,0));
+              clearSet(); break;
+            case 1: switch(fnSet){ //date: save in RTC - year can be 2-byte int
+              case 1: //date: save year, set month
+                fnSetValDate[0]=fnSetVal;
+                startSet(fnSetValDate[1],1,12,2); break; 
+              case 2: //date: save month, set date
+                fnSetValDate[1]=fnSetVal;
+                startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
+              case 3: //date: save in RTC
+                rtc.adjust(DateTime(fnSetValDate[0],fnSetValDate[1],fnSetVal,now.hour(),now.minute(),now.second()));
+                //TODO this rounds down the seconds and loses synchronization! find a way to set the date only
+                clearSet(); break;
+              default: break;
+            } break;
+            case 2: //alarm
+              //EEPROM set TODO
+            case 3: //timer
+              //TODO
             default: break;
-          } break;
-          case 2: //alarm
-            //EEPROM set TODO
-          case 3: //timer
-            //TODO
-          default: break;
-        } //end switch fn
-      } //end mainSelPush
+          } //end switch fn
+        } //end mainSel push
+        if(ctrl==mainAdjUp) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
+        if(ctrl==mainAdjDn) doSet(inputLast-inputLast2<velThreshold ? -10 : -1);
+      } //end if evt==1
     } //end fn setting
+
   } //end normal fn running/setting
   else { //setup menu setting - to/from EEPROM
-    if(mainSelPush) { //TODO could consider making it a release, so it doesn't go to the next option before leaving
-      finishOpt();
-      if(fnSet==optsCt) { //that was the last one – rotate back around
-        startOpt(1); return;
-      } else {
-        startOpt(fnSet+1); return;
+    
+    if(ctrl==mainSel) {
+      if(evt==1) { //TODO could consider making it a release, so it doesn't go to the next option before leaving
+        finishOpt();
+        if(fnSet==optsCt) { //that was the last one – rotate back around
+          startOpt(1); return;
+        } else {
+          startOpt(fnSet+1); return;
+        }
+      }
+      if(evt==2) { //exit setup
+        btnStop(); fn = 0; clearSet(); /*debugEEPROM();*/ return; //exit setup
+        //setCaches();
       }
     }
-    if(mainSelHold) { //exit setup
-      btnStop(); fn = 0; clearSet(); /*debugEEPROM();*/ return; //exit setup
-      setCaches();
-    }
-    if(mainAdjUp) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
-    if(mainAdjDn) doSet(inputLast-inputLast2<velThreshold ? -10 : -1);
+    if(ctrl==mainAdjUp && evt==1) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
+    if(ctrl==mainAdjDn && evt==1) doSet(inputLast-inputLast2<velThreshold ? -10 : -1);
+    
   } //end setup menu setting
 } //end ctrlEvt
 
-void startSet(word n, word m, word x, byte p=1){ //Enter set state at page p, and start setting a value
+void startSet(word n, word m, word x, byte p){ //Enter set state at page p, and start setting a value
   fnSetVal=n; fnSetValMin=m; fnSetValMax=x; fnSetValVel=(x-m>30?1:0); fnSet=p;
   updateDisplay();
 }
@@ -360,13 +341,14 @@ void doSet(int delta){
   if(delta<0) if(fnSetVal-fnSetValMin<abs(delta)) fnSetVal=fnSetValMin; else fnSetVal=fnSetVal+delta;
   updateDisplay();
 }
+unsigned long doSetHoldLast;
 void doSetHold(){
   //When we're setting via an adj button that's passed a hold point, fire off doSet commands at intervals
   //TODO integrate this with checkInputs?
   if(doSetHoldLast+250<millis()) {
     doSetHoldLast = millis();
-    if(fnSet!=0 && ((mainAdjType==1 && (btnCur==mainAdjA || btnCur==mainAdjB)) || (altAdjType==1 && (btnCur==altAdjA || btnCur==altAdjB))) ){ //if we're setting, and this is an adj input for which the type is button
-      bool dir = (btnCur==mainAdjA || btnCur==altAdjA ? 1 : 0);
+    if(fnSet!=0 && ((mainAdjType==1 && (btnCur==mainAdjUp || btnCur==mainAdjDn)) || (altAdjType==1 && (btnCur==altAdjUp || btnCur==altAdjDn))) ){ //if we're setting, and this is an adj input for which the type is button
+      bool dir = (btnCur==mainAdjUp || btnCur==altAdjUp ? 1 : 0);
       //If short hold, or long hold but high velocity isn't supported, use low velocity (delta=1)
       if(btnCurHeld==2 || (btnCurHeld==3 && fnSetValVel==false)) doSet(dir?1:-1);
       //else if long hold, use high velocity (delta=10)
@@ -374,7 +356,10 @@ void doSetHold(){
     }
   }
 }
-void clearSet(){ startSet(0,0,0,0); } //Exit set state
+void clearSet(){ //Exit set state
+  startSet(0,0,0,0);
+  if(fn==0 || fn==1) checkRTC(true); //force a display update for time and date, as updateDisplay() won't
+}
 
 void startOpt(byte n){ //For a given setup menu option (1-index), reads from EEPROM and calls startSet
   startSet(readEEPROM(optsLoc[n],optsMax[n]-optsMin[n]>255?true:false),optsMin[n],optsMax[n],n);
@@ -383,9 +368,9 @@ void finishOpt(){ //Writes fnSet val to EEPROM if needed
   writeEEPROM(optsLoc[fnSet],fnSetVal,optsMax[fnSet]-optsMin[fnSet]>255?true:false);
 }
 
-void setCaches(){ //Sets a few of the EEPROM settings into global variables for faster access
-  //fadeMax = float(readEEPROM(optsLoc[5],false)); //fade duration - TODO doesn't work
-}
+// void setCaches(){ //Sets a few of the EEPROM settings into global variables for faster access
+//   //fadeMax = float(readEEPROM(optsLoc[5],false)); //fade duration - TODO doesn't work
+// }
 
 //EEPROM values are exclusively bytes (0-255) or words (unsigned ints, 0-65535)
 //If it's a word, high byte is in loc, low byte is in loc+1
@@ -394,7 +379,7 @@ void initEEPROM(bool force){
   //or if the first setup menu option has a value of 0 (e.g. first run)
   if(force) { // || EEPROM.read(optsLoc[0])==0
     writeEEPROM(alarmTimeLoc,420,true); //7am - word
-    writeEEPROM(alarmOnLoc,enableSoftAlarmSwitch==0?1:0); //off, or on if no software switch spec'd
+    writeEEPROM(alarmOnLoc,enableSoftAlarmSwitch==0?1:0,false); //off, or on if no software switch spec'd
     for(byte i=1; i<=optsCt; i++) writeEEPROM(optsLoc[i],optsDef[i],optsMax[i]-optsMin[i]>255?true:false); //setup menu
   }
 }
@@ -446,36 +431,35 @@ byte daysInMonth(word y, byte m){
 
 
 ////////// Clock ticking and timed event triggering //////////
-void checkRTC(){
+byte rtcSecLast = 61;
+void checkRTC(bool force){
   //Checks for new time-of-day second; decrements timer; checks for timed events;
   //updates display for running time or date.
-  if(rtcPollLast<millis()+50) { //check every 1/20th of a second
-    rtcPollLast=millis();
-    //Check for timeouts based on millis
-    if(fnSet && rtcPollLast-inputLast>120000) { fnSet = 0; fn = 0; } //abandon set
-    else if(!fnSet && fn!=0 && !(fn==3 && (timerTime>0 || alarmSoundStart!=0)) && rtcPollLast-inputLast>5000) { fnSet = 0; fn = 0; } //abandon fn
-    //Update things based on RTC
-    DateTime now = rtc.now();
-    if(rtcSecLast != now.second()) {
-      //trip alarm TODO
-      //decrement timer TODO
-      //trip minutely date at :30 TODO
-      //trip digit cycle TODO
-      //finally display live time of day / date
-      if(fnSet==0 && fn==0){ //time of day
-        byte hr = now.hour();
-        if(readEEPROM(optsLoc[1])==1) hr = (hr==0?12:(hr>12?hr-12:hr));
-        editDisplay(hr, 0, 1, readEEPROM(optsLoc[4]));
-        editDisplay(now.minute(), 2, 3, true);
-        if(EEPROM.read(optsLoc[3])==1) editDisplay(now.day(), 4, 5, EEPROM.read(optsLoc[4])); //date
-        else editDisplay(now.second(), 4, 5, true); //seconds
-      } else if(fnSet==0 && fn==1){ //date
-        editDisplay(EEPROM.read(optsLoc[2])==1?now.month():now.day(), 0, 1, EEPROM.read(optsLoc[4]));
-        editDisplay(EEPROM.read(optsLoc[2])==1?now.day():now.month(), 2, 3, EEPROM.read(optsLoc[4]));
-        blankDisplay(4, 4);
-        editDisplay(now.dayOfTheWeek(), 5, 5, false);
-      }
-    } 
+  //Check for timeouts based on millis
+  if(fnSet && pollLast-inputLast>120000) { fnSet = 0; fn = 0; force=true; } //abandon set
+  else if(!fnSet && fn!=0 && !(fn==3 && (timerTime>0 || alarmSoundStart!=0)) && pollLast>inputLast+5000) { fnSet = 0; fn = 0; force=true; } //abandon fn
+  //Update things based on RTC
+  DateTime now = rtc.now();
+  if(rtcSecLast != now.second() || force) {
+    rtcSecLast = now.second(); //this was missing! TODO reintroduce
+    //trip alarm TODO
+    //decrement timer TODO
+    //trip minutely date at :30 TODO
+    //trip digit cycle TODO
+    //finally display live time of day / date
+    if(fnSet==0 && fn==0){ //time of day
+      byte hr = now.hour();
+      if(readEEPROM(optsLoc[1],false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
+      editDisplay(hr, 0, 1, readEEPROM(optsLoc[4],false));
+      editDisplay(now.minute(), 2, 3, true);
+      if(EEPROM.read(optsLoc[3])==1) editDisplay(now.day(), 4, 5, EEPROM.read(optsLoc[4])); //date
+      else editDisplay(now.second(), 4, 5, true); //seconds
+    } else if(fnSet==0 && fn==1){ //date
+      editDisplay(EEPROM.read(optsLoc[2])==1?now.month():now.day(), 0, 1, EEPROM.read(optsLoc[4]));
+      editDisplay(EEPROM.read(optsLoc[2])==1?now.day():now.month(), 2, 3, EEPROM.read(optsLoc[4]));
+      blankDisplay(4, 4);
+      editDisplay(now.dayOfTheWeek(), 5, 5, false);
+    }
   }
 }
 
@@ -529,6 +513,22 @@ void blankDisplay(byte posStart, byte posEnd){
 
 
 ////////// Hardware outputs //////////
+//This clock is 2x3 multiplexed: two tubes powered at a time.
+//The anode channel determines which two tubes are powered,
+//and the two SN74141 cathode driver chips determine which digits are lit.
+//4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
+byte binOutA[4] = {2,3,4,5};
+byte binOutB[4] = {6,7,8,9};
+//3 pins out to anode channel switches
+byte anodes[3] = {11,12,13};
+
+float fadeMax = 5.0f;
+float fadeStep = 1.0f;
+int displayLast[6]={11,11,11,11,11,11}; //What is currently being displayed. We slowly fade away from this.
+float displayNextFade[6]={0.0f,0.0f,0.0f,0.0f,0.0f,0.0f}; //Fading in displayNext values
+float displayLastFade[6]={8.0f,8.0f,8.0f,8.0f,8.0f,8.0f}; //Fading out displayLast values
+unsigned long setStartLast = 0; //to control flashing
+
 void initOutputs() {
   for(byte i=0; i<4; i++) { pinMode(binOutA[i],OUTPUT); pinMode(binOutB[i],OUTPUT); }
   for(byte i=0; i<3; i++) { pinMode(anodes[i],OUTPUT); }

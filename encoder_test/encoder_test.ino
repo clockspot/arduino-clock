@@ -1,12 +1,12 @@
 // #include <EEPROM.h>
-// #include <Wire.h>
-// #include <RTClib.h>
-// RTC_DS1307 rtc;
-#include <Encoder.h> //https://www.pjrc.com/teensy/td_libs_Encoder.html
+#include <Wire.h>
+#include <RTClib.h>
+RTC_DS1307 rtc;
+#include <ooPinChangeInt.h>
+#include <AdaEncoder.h>
 
-Encoder mainRot(A1,A0);
-const byte rotCount = 4; //values per detent. We will set each encoder to a "resting" value of rotCount, and sense moves between detents when the rot value reaches 0 (left) or rotCount*2 (right).
-byte mainRotLast = -999;
+AdaEncoder mainRot = AdaEncoder('a',A1,A0);
+
 word val = 500;
 
 // Display formatting
@@ -36,14 +36,14 @@ void decToBin(bool binVal[], byte i);
 ////////// Main code control //////////
 
 void setup(){
-  //Serial.begin(57600);
-  //Wire.begin();
-  //rtc.begin();
-  //if(!rtc.isrunning()) rtc.adjust(DateTime(2017,1,1,0,0,0)); //TODO test
+  Serial.begin(57600);
+  Wire.begin();
+  rtc.begin();
+  if(!rtc.isrunning()) rtc.adjust(DateTime(2017,1,1,0,0,0)); //TODO test
   initOutputs();
   initInputs();
   
-  mainRot.write(rotCount);
+  //mainRot.write(rotCount);
   
   editDisplay(val,0,3,false);
   
@@ -54,26 +54,11 @@ void setup(){
 
 void loop(){
   //Things done every "clock cycle"
-  //checkRTC(); //if clock has ticked, decrement timer if running, and updateDisplay
-  //checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
+  checkRTC(); //if clock has ticked, decrement timer if running, and updateDisplay
+  checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
   
-  long mainRotNew = mainRot.read();
-  if(mainRotNew != mainRotLast){
-    if(mainRotNew <= 0) { //down one detent
-      val--;
-      editDisplay(val,0,3,false);
-      mainRotLast = rotCount;
-      mainRot.write(rotCount);
-    } else if(mainRotNew >= rotCount*2) {
-      val++;
-      editDisplay(val,0,3,false);
-      mainRotLast = rotCount;
-      mainRot.write(rotCount);
-    } else {
-      mainRotLast = mainRotNew;
-    }
-    editDisplay(mainRotLast,4,5,false);
-  }
+  //long mainRotNew = mainRot.read();
+  
   
   //doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
@@ -95,6 +80,36 @@ void initInputs(){
   //If using rotary encoders, capture their initial state
   //if(mainAdjType==2) checkRot(mainAdjA,mainAdjB,mainRotLast,false);
   //if(altAdjType==2) checkRot(altAdjA,altAdjB,altRotLast,false);
+}
+
+void checkInputs(){
+  AdaEncoder *thisEncoder=NULL;
+  thisEncoder = AdaEncoder::genie();
+  if(thisEncoder!=NULL) {
+    int8_t clicks = thisEncoder->query();
+    Serial.print(thisEncoder->getID()); Serial.print(':'); Serial.println(clicks);
+    //editDisplay(clicks,4,5,false);
+    //thisEncoder->getID();
+    val += clicks;
+    editDisplay(val,0,3,false);
+  }
+}
+
+////////// Clock ticking and timed event triggering //////////
+unsigned long rtcPollLast = 0; //maybe don't poll the RTC every loop? would that be good?
+byte rtcSecLast = 61;
+void checkRTC(){
+  //Checks for new time-of-day second; decrements timer; checks for timed events;
+  //updates display for running time or date.
+  if(rtcPollLast<millis()+50) { //check every 1/20th of a second
+    rtcPollLast=millis();
+    //Check for timeouts based on millis
+    //Update things based on RTC
+    DateTime now = rtc.now();
+    if(rtcSecLast != now.second()) {
+      editDisplay(now.second(), 4, 5, true); //seconds
+    } 
+  }
 }
 
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros){
