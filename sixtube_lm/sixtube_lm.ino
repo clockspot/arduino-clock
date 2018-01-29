@@ -3,7 +3,9 @@
 // Originally written by Robin Birtles and Chris Gerekos based on http://arduinix.com/Main/Code/ANX-6Tube-Clock-Crossfade.txt
 // Refactored and expanded by Luke McKenzie (luke@theclockspot.com)
 
-// TODO: Rotary encoders with velocity - test
+// Requires ooPinChangeInt.h
+// Requires AdaEncoder.h
+
 // TODO: Alarm - display, set, sound, snooze, 24h silence
 // TODO: Timer - display, set, run, sound, silence
 // TODO: Cathode anti-poisoning
@@ -26,7 +28,7 @@ RTC_DS1307 rtc;
 // S5/PL8 = A3
 // S6/PL9 = A2
 // S7/PL14 = A7
-// A6-A7 are analog-only pins that aren't as responsive and require a physical pullup resistor (1K to +5V).
+// A6-A7 are analog-only pins that aren't quite as responsive and require a physical pullup resistor (1K to +5V), and can't be used with rotary encoders because they don't support pin change interrupts.
 
 // What input is associated with each control?
 const byte mainSel = A2; //main select button - must be equipped
@@ -38,7 +40,6 @@ const byte altAdjDn = 0; //A3;
 
 // What type of adj controls are equipped?
 // 1 = momentary buttons. 2 = quadrature rotary encoder.
-// Currently using AdaEncoder library that uses pin change interrupts, not useful on A6/A7!
 const byte mainAdjType = 2;
 AdaEncoder mainRot = AdaEncoder('a',mainAdjUp,mainAdjDn);
 const byte altAdjType = 0; //if unquipped, set to 0
@@ -70,26 +71,25 @@ const byte velThreshold = 100; //ms
 // When an adj up/down input (btn or rot) follows another in less than this time, value will change more (10 vs 1).
 // Recommend ~100 for rotaries. If you want to use this feature with buttons, extend to ~400.
 
-
 ////////// Global consts and vars used in multiple sections //////////
 
 // Hardware inputs
 byte btnCur = 0; //Momentary button currently in use - only one allowed at a time
 byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=set by btnStop()
-unsigned long inputLast = 0; //When a button was last pressed / knob was last turned
+unsigned long inputLast = 0; //When a button was last pressed
 unsigned long inputLast2 = 0; //Second-to-last of above
 
 // Input handling and value setting
-const byte fnCt = 2; //number of functions in the clock
-byte fn = 0; //currently displayed function: 0=time, 1=date, 2=alarm, 3=timer, 255=SETUP menu
+const byte fnCt = 5; //number of functions in the clock
+byte fn = 0; //currently displayed fn: 0=time, 1=date, 2=alarm, 3=timer, 4=temp, 255=SETUP menu
 byte fnSet = 0; //whether this function is currently being set, and which option/page it's on
 word fnSetVal; //the value currently being set, if any - unsigned int 0-65535
 word fnSetValMin; //min possible - unsigned int
 word fnSetValMax; //max possible - unsigned int
 bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
 word fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
-const byte alarmTimeLoc = 0; //EEPROM locs 0-1 (2 bytes) in minutes past midnight.
-const byte alarmOnLoc = 2; //EEPROM loc 2
+//const byte alarmTimeLoc = 0; //EEPROM locs 0-1 (2 bytes) in minutes past midnight.
+//const byte alarmOnLoc = 2; //EEPROM loc 2
 unsigned long alarmSoundStart = 0; //also used for timer expiry TODO what happens if they are concurrent?
 word snoozeTime = 0; //seconds
 word timerTime = 0; //seconds - up to just under 18 hours
@@ -101,6 +101,9 @@ const byte optsLoc[19] = {0, 3, 4, 5, 6, 7, 8, 9,10,11, 12,14,  15,  17,19,20,21
 const word optsDef[19] = {0, 2, 1, 0, 0, 0, 0, 0, 0, 0,500, 0,1320, 360, 0, 1, 5, 480,1020};
 const word optsMin[19] = {0, 1, 1, 0, 0, 0, 0, 0, 0, 0,  1, 0,   0,   0, 0, 0, 0,   0,   0};
 const word optsMax[19] = {0, 2, 2, 2, 1,50, 1, 6, 4,60,999, 2,1439,1439, 2, 6, 6,1439,1439};
+//Buffer for reading extra data from ds3231
+#define BUFF_MAX 128
+char buff[BUFF_MAX];
 
 // Display formatting
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
@@ -111,8 +114,13 @@ byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display.
 void setup(){
   Serial.begin(57600);
   Wire.begin();
-  rtc.begin();
-  if(!rtc.isrunning()) rtc.adjust(DateTime(2017,1,1,0,0,0)); //TODO test
+  //rtc.begin();
+  //if(!rtc.isrunning()) rtc.adjust(DateTime(2017,1,1,0,0,0)); //TODO test TODO ds3231 version?
+  
+  //ds3231
+  DS3231_init(DS3231_INTCN);
+  memset(recv,0,BUFF_MAX); //TODO what does this do
+  
   initOutputs();
   initInputs();
   initEEPROM(readInput(mainSel)==LOW);
@@ -121,10 +129,12 @@ void setup(){
 }
 
 unsigned long pollLast = 0;
+struct ts t; //ds3231
 void loop(){
+  unsigned long now = millis();
   //Things done every 50ms - avoids overpolling(?) and switch bounce(?)
-  if(pollLast<millis()+50) {
-    pollLast=millis();
+  if(pollLast<now+50) {
+    pollLast=now;
     checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
     checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
     doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
@@ -237,15 +247,23 @@ void ctrlEvt(byte ctrl, byte evt){
       btnStop(); fn = 255; startOpt(1); return;
     }
     
-    DateTime now = rtc.now();
+    //DateTime now = rtc.now();
+    //ds3231 - checkRTC should already have run?? TODO
 
     if(!fnSet) { //fn running
       if(evt==2 && ctrl==mainSel) { //sel hold: enter fnSet
         switch(fn){
-          case 0: startSet((now.hour()*60)+now.minute(),0,1439,1); break; //time: set mins
-          case 1: fnSetValDate[1]=now.month(), fnSetValDate[2]=now.day(); startSet(now.year(),0,32767,1); break; //date: set year
-          case 2: //alarm: set mins
+          case 0: startSet((t.hour*60)+t.min,0,1439,1); break; //time: set mins
+          case 1: fnSetValDate[1]=t.mon, fnSetValDate[2]=t.mday; startSet(t.year,0,32767,1); break; //date: set year
+          case 2:
+            DS3231_get_a1(&buff[0], 59); //TODO write a wrapper function for this
+            startSet(buff,0,1439,1); //alarm: set mins
+            break;
           case 3: //timer: set mins
+            startSet(timerTime/60,0,719,1); //12 hours
+            break;
+          case 4: //temperature
+            //nothing - or is this where we do the calibration? TODO
           default: break;
         }
         return;
@@ -266,9 +284,8 @@ void ctrlEvt(byte ctrl, byte evt){
         }
         if(fnChgd){
           switch(fn){
-            case 0: case 1: checkRTC(true); break;
-            case 2: //alarm: show
-            case 3: //timer: show
+            case 0: case 1: checkRTC(true); break; //time or date
+            case 2: case 3: updateDisplay(); break; //alarm or timer
             default: break;
           }
         }
@@ -279,9 +296,12 @@ void ctrlEvt(byte ctrl, byte evt){
       if(evt==1) { //we respond only to press evts during fn setting
         if(ctrl==mainSel) { //mainSel push: go to next option or save and exit fnSet
           btnStop(); //not waiting for mainSelHold, so can stop listening here
+          //In case we are setting the time or date, in an effort to not lose synchronization too badly, should we update t here?
           switch(fn){
             case 0: //time of day: save in RTC
-              rtc.adjust(DateTime(now.year(),now.month(),now.day(),fnSetVal/60,fnSetVal%60,0));
+              //rtc.adjust(DateTime(t.year,t.mon,t.mday,fnSetVal/60,fnSetVal%60,0));
+              t.hour = fnSetVal/60; t.min = fnSetVal%60, t.sec = 0;
+              DS3231_set(t);
               clearSet(); break;
             case 1: switch(fnSet){ //date: save in RTC - year can be 2-byte int
               case 1: //date: save year, set month
@@ -291,15 +311,19 @@ void ctrlEvt(byte ctrl, byte evt){
                 fnSetValDate[1]=fnSetVal;
                 startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
               case 3: //date: save in RTC
-                rtc.adjust(DateTime(fnSetValDate[0],fnSetValDate[1],fnSetVal,now.hour(),now.minute(),now.second()));
-                //TODO this rounds down the seconds and loses synchronization! find a way to set the date only
+                //rtc.adjust(DateTime( fnSetValDate[0],fnSetValDate[1],fnSetVal,t.hour,t.min,t.sec));
+                //TODO this rounds down the seconds and loses synchronization! find a way to set the date only.
+                t.year = fnSetValDate[0]; t.mon = fnSetValDate[1]; t.mday = fnSetVal;
+                DS3231_set(t);
                 clearSet(); break;
               default: break;
             } break;
             case 2: //alarm
-              //EEPROM set TODO
+            do(
+              uint8_t flags[5] = {0,0,0,1,1}; //what calendar component triggers the alarm, see datasheet
+              DS3231_set_a1(0,fnSetVal%60,fnSetVal/60,0,flags);
             case 3: //timer
-              //TODO
+              timerTime = fnSetVal;
             default: break;
           } //end switch fn
         } //end mainSel push
@@ -439,26 +463,31 @@ void checkRTC(bool force){
   if(fnSet && pollLast-inputLast>120000) { fnSet = 0; fn = 0; force=true; } //abandon set
   else if(!fnSet && fn!=0 && !(fn==3 && (timerTime>0 || alarmSoundStart!=0)) && pollLast>inputLast+5000) { fnSet = 0; fn = 0; force=true; } //abandon fn
   //Update things based on RTC
-  DateTime now = rtc.now();
-  if(rtcSecLast != now.second() || force) {
-    rtcSecLast = now.second(); //this was missing! TODO reintroduce
+  DS3231_get(&t); //ds3231 //DateTime now = rtc.now();
+  //replace now.year(), month, day, dayOfTheWeek, hour, minute, second
+  //with t.year, mon, mday, wday, hour, min, sec
+  //hoping t.mon continues to be 1-index and wday 0-index starting with Sunday
+  //TODO what is inp2toi?
+  
+  if(rtcSecLast != t.sec || force) {
+    rtcSecLast = t.sec; //this was missing! TODO reintroduce
     //trip alarm TODO
     //decrement timer TODO
     //trip minutely date at :30 TODO
     //trip digit cycle TODO
     //finally display live time of day / date
     if(fnSet==0 && fn==0){ //time of day
-      byte hr = now.hour();
+      byte hr = t.hour;
       if(readEEPROM(optsLoc[1],false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
       editDisplay(hr, 0, 1, readEEPROM(optsLoc[4],false));
-      editDisplay(now.minute(), 2, 3, true);
-      if(EEPROM.read(optsLoc[3])==1) editDisplay(now.day(), 4, 5, EEPROM.read(optsLoc[4])); //date
-      else editDisplay(now.second(), 4, 5, true); //seconds
+      editDisplay(t.min, 2, 3, true);
+      if(EEPROM.read(optsLoc[3])==1) editDisplay(t.mday, 4, 5, EEPROM.read(optsLoc[4])); //date
+      else editDisplay(t.sec, 4, 5, true); //seconds
     } else if(fnSet==0 && fn==1){ //date
-      editDisplay(EEPROM.read(optsLoc[2])==1?now.month():now.day(), 0, 1, EEPROM.read(optsLoc[4]));
-      editDisplay(EEPROM.read(optsLoc[2])==1?now.day():now.month(), 2, 3, EEPROM.read(optsLoc[4]));
+      editDisplay(EEPROM.read(optsLoc[2])==1?t.mon:t.mday, 0, 1, EEPROM.read(optsLoc[4]));
+      editDisplay(EEPROM.read(optsLoc[2])==1?t.mday:t.mon, 2, 3, EEPROM.read(optsLoc[4]));
       blankDisplay(4, 4);
-      editDisplay(now.dayOfTheWeek(), 5, 5, false);
+      editDisplay(t.wday, 5, 5, false); //TODO is this 0=Sunday, 6=Saturday?
     }
   }
 }
@@ -481,11 +510,26 @@ void updateDisplay(){
   }
   else { //fn running
     switch(fn){
-      //case 0: //time taken care of by checkRTC()
-      //case 1: //date taken care of by checkRTC()
+      //case 0 and 1: time/date display taken care of by checkRTC()
       case 2: //alarm
-      case 3: //timer
-      break;
+        editDisplay(0,0,1,EEPROM.read(optsLoc[4])); //hrs
+        editDisplay(0,2,3,true); //mins
+        editDisplay(0,4,5,false); //status
+        break;
+      case 3: //timer - display time duration, not time of day with leading zeros
+        //todo does checkRTC need to do this one too?
+        if(false /*hrs > 0*/) editDisplay(1,0,1,false); else blankDisplay(0,1); //hrs if present
+        editDisplay(5,2,3,(false/*hrs>0*/?true:false)); //mins - leading zero only if hrs present
+        editDisplay(
+        break;
+      case 4: //thermometer
+        float temp = DS3231_get_treg(); //TODO signed? decimal? what?
+        if(temp>0) blankDisplay(0,0); else editDisplay(0,0,1,true); //0 in left tube if negative
+        editDisplay(temp,1,3,false); //whole degrees
+        editDisplay(temp%10,4,4,true); //tenths?
+        blankDisplay(5,5);
+        break;
+      default: break;
     }
   }
 } //end updateDisplay()
