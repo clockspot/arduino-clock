@@ -11,10 +11,19 @@
 // TODO: Cathode anti-poisoning
 // TODO: implement other setup options
 
+// notes on var sizes on atmega
+// char = int8_t, -128 to 127 (negatives stored via 2's complement).
+// byte = uint8_t, 0 to 255
+// int  = int16_t, -32768 to 32767. Watch out for bitshift right operator
+// word = uint16_t, 0 to 65535 (or unsigned int)
+// long = int32_t, -2147483648 to 2147483647.
+// float, but use integer math when you can
+// integer constant modifiers: use leading B for binary, 0 for octal, 0x for hex; trailing U for unsigned and/or L for long
+
 #include <EEPROM.h>
+#include <DS3231.h>
 #include <Wire.h>
-#include <RTClib.h>
-RTC_DS1307 rtc;
+// #include <RTClib.h>
 #include <ooPinChangeInt.h>
 #include <AdaEncoder.h>
 
@@ -46,9 +55,10 @@ const byte altAdjType = 0; //if unquipped, set to 0
 //AdaEncoder altRot = AdaEncoder('b',altAdjUp,altAdjDn);
 
 // In normal running mode, what do the controls do?
-// 255 = nothing, 254 = cycle through functions TODO, 0-3 = go to specific function (see fn)
-const byte mainSelFn = 1;
-const byte mainAdjFn = 254;
+// -1 = nothing, -2 = cycle through functions, 0+ = go to specific function (see fn)
+// TODO, one needs to do nothing for the alarm switch, right?
+const char mainSelFn = -2;
+const char mainAdjFn = -1;
 // const byte altSelFn = 255; //3; //timer //if equipped
 // const byte altAdjFn = 255; //if equipped
 
@@ -73,6 +83,11 @@ const byte velThreshold = 100; //ms
 
 ////////// Global consts and vars used in multiple sections //////////
 
+DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
+RTClib rtc; //an object to access a snapshot of the ds3231 rtc via now() TODO is this right
+DateTime tod;
+//also you can use unixtime but isn't that timezone independent? use this for calc? assuming UTC TODO
+
 // Hardware inputs
 byte btnCur = 0; //Momentary button currently in use - only one allowed at a time
 byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=set by btnStop()
@@ -80,30 +95,50 @@ unsigned long inputLast = 0; //When a button was last pressed
 unsigned long inputLast2 = 0; //Second-to-last of above
 
 // Input handling and value setting
-const byte fnCt = 5; //number of functions in the clock
-byte fn = 0; //currently displayed fn: 0=time, 1=date, 2=alarm, 3=timer, 4=temp, 255=SETUP menu
+const byte fnCt = 4; //number of functions in use
+// functions in use - contiguous 0 through x
+const byte fnIsTime = 0;
+const byte fnIsDate = 1;
+const byte fnIsDayCount = 2;
+const byte fnIsTemp = 3;
+// functions not in use - set to something out of range but below 255 and still unique
+const byte fnIsAlarm = 4;
+const byte fnIsTimer = 5;
+
+//leave these alone
+const byte fnSetup = 255;
+byte fn = 0; //currently displayed fn, as above
 byte fnSet = 0; //whether this function is currently being set, and which option/page it's on
 word fnSetVal; //the value currently being set, if any - unsigned int 0-65535
 word fnSetValMin; //min possible - unsigned int
 word fnSetValMax; //max possible - unsigned int
 bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
 word fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
-//const byte alarmTimeLoc = 0; //EEPROM locs 0-1 (2 bytes) in minutes past midnight.
-//const byte alarmOnLoc = 2; //EEPROM loc 2
-unsigned long alarmSoundStart = 0; //also used for timer expiry TODO what happens if they are concurrent?
-word snoozeTime = 0; //seconds
-word timerTime = 0; //seconds - up to just under 18 hours
+
+//EEPROM locations for set values - see also initEEPROM()
+//const byte alarmTimeLoc = 0; //and 1 (word) in minutes past midnight.
+//const byte alarmOnLoc = 2; //byte
+const byte dayCountYearLoc = 3; //and 4 (word)
+const byte dayCountMonthLoc = 5; //byte
+const byte dayCountDateLoc = 6; //byte
+
 const byte optsCt = 18; //number of setup menu options (see readme).
 //Option number/fnSet are 1-index, so arrays are padded to be 1-index too, for coding convenience.
 //Most vals (default, min, max) are 1-byte. In case of two-byte (max-min>255), high byte is loc, low byte is loc+1.
+//offset to loc 16, to reserve 16 bytes of space for other stuff stored in EEPROM above
 //         Option number: -  1  2  3  4  5  6  7  8  9  10 11   12   13 14 15 16   17   18
-const byte optsLoc[19] = {0, 3, 4, 5, 6, 7, 8, 9,10,11, 12,14,  15,  17,19,20,21,  22,  24}; //EEPROM locs 3-25
+const byte optsLoc[19] = {0,16,17,18,19,20,21,22,23,24, 25,27,  28,  30,32,33,34,  35,  37}; //EEPROM locs
 const word optsDef[19] = {0, 2, 1, 0, 0, 0, 0, 0, 0, 0,500, 0,1320, 360, 0, 1, 5, 480,1020};
 const word optsMin[19] = {0, 1, 1, 0, 0, 0, 0, 0, 0, 0,  1, 0,   0,   0, 0, 0, 0,   0,   0};
 const word optsMax[19] = {0, 2, 2, 2, 1,50, 1, 6, 4,60,999, 2,1439,1439, 2, 6, 6,1439,1439};
 //Buffer for reading extra data from ds3231
-#define BUFF_MAX 128
-char buff[BUFF_MAX];
+//#define BUFF_MAX 128
+//char buff[BUFF_MAX];
+
+// Volatile running values
+unsigned long alarmSoundStart = 0; //also used for timer expiry TODO what happens if they are concurrent?
+word snoozeTime = 0; //seconds
+word timerTime = 0; //seconds - up to just under 18 hours
 
 // Display formatting
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
@@ -114,22 +149,24 @@ byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display.
 void setup(){
   Serial.begin(57600);
   Wire.begin();
+  
   //rtc.begin();
   //if(!rtc.isrunning()) rtc.adjust(DateTime(2017,1,1,0,0,0)); //TODO test TODO ds3231 version?
-  
   //ds3231
-  DS3231_init(DS3231_INTCN);
-  memset(recv,0,BUFF_MAX); //TODO what does this do
+  //DS3231_init(DS3231_INTCN);
+  //memset(recv,0,BUFF_MAX); //TODO what does this do
+  //TODO random ds3231 items:
+  //TODO The century bit (bit 7 of the month register) is toggled when the years register overflows from 99 to 00.
   
   initOutputs();
   initInputs();
-  initEEPROM(readInput(mainSel)==LOW);
+  if(readInput(mainSel)==LOW) initEEPROM();
   //debugEEPROM();
   //setCaches();
 }
 
 unsigned long pollLast = 0;
-struct ts t; //ds3231
+//struct ts t; //ds3231
 void loop(){
   unsigned long now = millis();
   //Things done every 50ms - avoids overpolling(?) and switch bounce(?)
@@ -241,51 +278,58 @@ void ctrlEvt(byte ctrl, byte evt){
   //But we can handle short and long holds and releases for the sel ctrls (always buttons).
   //TODO needs alt handling
   
-  if(fn!=255) { //normal fn running/setting (not in setup menu)
+  if(fn != fnSetup) { //normal fn running/setting (not in setup menu)
     
     if(evt==3 && ctrl==mainSel) { //mainSel long hold: enter SETUP menu
-      btnStop(); fn = 255; startOpt(1); return;
+      btnStop(); fn = fnSetup; startOpt(1); return;
     }
     
-    //DateTime now = rtc.now();
+    //DateTime tod = rtc.now();
     //ds3231 - checkRTC should already have run?? TODO
 
     if(!fnSet) { //fn running
       if(evt==2 && ctrl==mainSel) { //sel hold: enter fnSet
         switch(fn){
-          case 0: startSet((t.hour*60)+t.min,0,1439,1); break; //time: set mins
-          case 1: fnSetValDate[1]=t.mon, fnSetValDate[2]=t.mday; startSet(t.year,0,32767,1); break; //date: set year
-          case 2:
-            DS3231_get_a1(&buff[0], 59); //TODO write a wrapper function for this
-            startSet(buff,0,1439,1); //alarm: set mins
+          case fnIsTime: //set mins
+            startSet((tod.hour()*60)+tod.minute(),0,1439,1); break;
+          case fnIsDate: //set year
+            fnSetValDate[1]=tod.month(), fnSetValDate[2]=tod.day(); startSet(tod.year(),0,9999,1); break;
+          case fnIsAlarm: //set mins
+            //DS3231_get_a1(&buff[0], 59); //TODO write a wrapper function for this
+            //startSet(buff,0,1439,1); //alarm: set mins
             break;
-          case 3: //timer: set mins
-            startSet(timerTime/60,0,719,1); //12 hours
-            break;
-          case 4: //temperature
-            //nothing - or is this where we do the calibration? TODO
+          case fnIsTimer: //set mins, up to 12 hours
+            startSet(timerTime/60,0,719,1); break;
+          case fnIsDayCount: //set year like date, but from eeprom like startOpt
+            startSet(readEEPROM(dayCountYearLoc,true),2000,9999,1); break;
+          case fnIsTemp:
+            break; //nothing - or is this where we do the calibration? TODO
           default: break;
         }
         return;
       }
       else if((ctrl==mainSel && evt==0) || ((ctrl==mainAdjUp || ctrl==mainAdjDn) && evt==1)) { //sel release or adj press - switch fn, depending on config
-        //255 = nothing, 254 = cycle through functions TODO, 0-3 = go to specific function (see fn)
+        //-1 (255) = nothing, -2 (254) = cycle through functions, 0+ = go to specific function (see fn)
         //we can't handle sel press here because, if attempting to enter fnSet, it would switch the fn first
         bool fnChgd = false;
-        if(ctrl==mainSel && mainSelFn!=255) {
+        if(ctrl==mainSel && mainSelFn!=-1) {
           fnChgd = true;
-          if(mainSelFn==254) fn = (fn==fnCt-1 ? 0 : fn+1);
+          if(mainSelFn==-2) fn = (fn==fnCt-1 ? 0 : fn+1);
           else fn = mainSelFn;
         }
-        else if((ctrl==mainAdjUp || ctrl==mainAdjDn) && mainAdjFn!=255) {
+        else if((ctrl==mainAdjUp || ctrl==mainAdjDn) && mainAdjFn!=-1) {
           fnChgd = true;
-          if(mainAdjFn==254) fn = (ctrl==mainAdjUp?(fn==fnCt-1 ? 0 : fn+1):(fn==0 ? fnCt-1 : fn-1));
+          if(mainAdjFn==-2) fn = (ctrl==mainAdjUp?(fn==fnCt-1 ? 0 : fn+1):(fn==0 ? fnCt-1 : fn-1));
           else fn = mainAdjFn;
         }
         if(fnChgd){
           switch(fn){
-            case 0: case 1: checkRTC(true); break; //time or date
-            case 2: case 3: updateDisplay(); break; //alarm or timer
+            //"ticking" ones
+            case fnIsTime: case fnIsDate: case fnIsTimer: case fnIsDayCount:
+              checkRTC(true); break;
+            //static ones
+            case fnIsAlarm: case fnIsTemp:
+              updateDisplay(); break;
             default: break;
           }
         }
@@ -296,34 +340,60 @@ void ctrlEvt(byte ctrl, byte evt){
       if(evt==1) { //we respond only to press evts during fn setting
         if(ctrl==mainSel) { //mainSel push: go to next option or save and exit fnSet
           btnStop(); //not waiting for mainSelHold, so can stop listening here
-          //In case we are setting the time or date, in an effort to not lose synchronization too badly, should we update t here?
+          //Set ds3231 parts directly - con: very rare rollover-while-setting issue; pro: can set date separate from time
           switch(fn){
-            case 0: //time of day: save in RTC
-              //rtc.adjust(DateTime(t.year,t.mon,t.mday,fnSetVal/60,fnSetVal%60,0));
-              t.hour = fnSetVal/60; t.min = fnSetVal%60, t.sec = 0;
-              DS3231_set(t);
+            case fnIsTime: //save in RTC
+              ds3231.setHour(fnSetVal/60);
+              ds3231.setMinute(fnSetVal%60);
+              ds3231.setSecond(0); //will reset to exactly 0? TODO confirm
               clearSet(); break;
-            case 1: switch(fnSet){ //date: save in RTC - year can be 2-byte int
-              case 1: //date: save year, set month
-                fnSetValDate[0]=fnSetVal;
-                startSet(fnSetValDate[1],1,12,2); break; 
-              case 2: //date: save month, set date
-                fnSetValDate[1]=fnSetVal;
-                startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
-              case 3: //date: save in RTC
-                //rtc.adjust(DateTime( fnSetValDate[0],fnSetValDate[1],fnSetVal,t.hour,t.min,t.sec));
-                //TODO this rounds down the seconds and loses synchronization! find a way to set the date only.
-                t.year = fnSetValDate[0]; t.mon = fnSetValDate[1]; t.mday = fnSetVal;
-                DS3231_set(t);
-                clearSet(); break;
-              default: break;
-            } break;
-            case 2: //alarm
-            do(
-              uint8_t flags[5] = {0,0,0,1,1}; //what calendar component triggers the alarm, see datasheet
-              DS3231_set_a1(0,fnSetVal%60,fnSetVal/60,0,flags);
-            case 3: //timer
+            case fnIsDate: //save in RTC
+              switch(fnSet){
+                case 1: //save year, set month
+                  fnSetValDate[0]=fnSetVal;
+                  startSet(fnSetValDate[1],1,12,2); break; 
+                case 2: //save month, set date
+                  fnSetValDate[1]=fnSetVal;
+                  startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
+                case 3: //write year/month/date to RTC
+                  //rtc.adjust(DateTime( fnSetValDate[0],fnSetValDate[1],fnSetVal,tod.hour(),tod.minute(),tod.second()));
+                  //tod.year() = fnSetValDate[0]; tod.month() = fnSetValDate[1]; tod.day() = fnSetVal;
+                  //DS3231_set(t);
+                  //setting individual date components should avoid rounding down seconds
+                  ds3231.setYear(fnSetValDate[0]%100); //TODO: century goes somewhere else, right?
+                  ds3231.setMonth(fnSetValDate[1]);
+                  ds3231.setDate(fnSetVal);
+                  clearSet(); break;
+                default: break;
+              } break;
+            case fnIsAlarm:
+              // do(
+              //   uint8_t flags[5] = {0,0,0,1,1}; //what calendar component triggers the alarm, see datasheet
+              //   DS3231_set_a1(0,fnSetVal%60,fnSetVal/60,0,flags);
+              break;
+            case fnIsTimer: //timer
               timerTime = fnSetVal;
+              break;
+            case fnIsDayCount: //set like date, save in eeprom like finishOpt
+              switch(fnSet){
+                case 1: //save year, set month
+                  writeEEPROM(dayCountYearLoc,fnSetVal,true);
+                  startSet(readEEPROM(dayCountMonthLoc,false),1,12,2); break;
+                case 2: //save month, set date
+                  writeEEPROM(dayCountMonthLoc,fnSetVal,false);
+                  startSet(readEEPROM(dayCountDateLoc,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
+                case 3: //save date
+                  writeEEPROM(dayCountDateLoc,fnSetVal,false);
+                  // Serial.print("dayCount is set to ");
+                  // Serial.print(readEEPROM(dayCountYearLoc,true),DEC); Serial.print("-");
+                  // Serial.print(readEEPROM(dayCountMonthLoc,false),DEC); Serial.print("-");
+                  // Serial.print(readEEPROM(dayCountDateLoc,false),DEC); Serial.println();
+                  clearSet(); break;
+                default: break;
+              } break;
+              break;
+            case fnIsTemp:
+              break;
             default: break;
           } //end switch fn
         } //end mainSel push
@@ -392,20 +462,21 @@ void finishOpt(){ //Writes fnSet val to EEPROM if needed
   writeEEPROM(optsLoc[fnSet],fnSetVal,optsMax[fnSet]-optsMin[fnSet]>255?true:false);
 }
 
-// void setCaches(){ //Sets a few of the EEPROM settings into global variables for faster access
-//   //fadeMax = float(readEEPROM(optsLoc[5],false)); //fade duration - TODO doesn't work
-// }
-
 //EEPROM values are exclusively bytes (0-255) or words (unsigned ints, 0-65535)
 //If it's a word, high byte is in loc, low byte is in loc+1
-void initEEPROM(bool force){
-  //Set EEPROM to defaults. Done if force==true
-  //or if the first setup menu option has a value of 0 (e.g. first run)
-  if(force) { // || EEPROM.read(optsLoc[0])==0
-    writeEEPROM(alarmTimeLoc,420,true); //7am - word
-    writeEEPROM(alarmOnLoc,enableSoftAlarmSwitch==0?1:0,false); //off, or on if no software switch spec'd
-    for(byte i=1; i<=optsCt; i++) writeEEPROM(optsLoc[i],optsDef[i],optsMax[i]-optsMin[i]>255?true:false); //setup menu
-  }
+void initEEPROM(){
+  //Set EEPROM to defaults.
+  //First prevent the held button from doing anything else
+  btnCur = mainSel; btnStop();
+  //Set the default values that aren't part of the SETUP menu
+  tod = rtc.now();
+  //writeEEPROM(alarmTimeLoc,420,true); //7am - word
+  //writeEEPROM(alarmOnLoc,enableSoftAlarmSwitch==0?1:0,false); //off, or on if no software switch spec'd
+  writeEEPROM(dayCountYearLoc,tod.year(),true);
+  writeEEPROM(dayCountMonthLoc,tod.month(),false);
+  writeEEPROM(dayCountDateLoc,tod.day(),false);
+  //then the SETUP menu defaults
+  for(byte i=1; i<=optsCt; i++) writeEEPROM(optsLoc[i],optsDef[i],optsMax[i]-optsMin[i]>255?true:false); //setup menu
 }
 // void debugEEPROM(){
 //   //Writes all the salient clock values from EEPROM to serial
@@ -452,6 +523,17 @@ byte daysInMonth(word y, byte m){
   //https://cmcenroe.me/2014/12/05/days-in-month-formula.html
   else return (28 + ((m + (m/8)) % 2) + (2 % m) + (2 * (1/m)));
 }
+//The following are for use with the Day Counter feature - find number of days between now and target date
+//I don't know how reliable the unixtime() is from RTClib past 2038, plus there might be timezone complications
+//so we'll just calculate the number of days since 2000-01-01
+long dateToDayCount(word y, byte m, byte d){
+  long dc = (y-2000)*365; //365 days for every full year since 2000
+  word i; for(i=0; i<y-2000; i++) if(i%4==0 && (i%100!=0 || i%400==0)) dc++; //+1 for every feb 29th in those years
+  for(i=1; i<m; i++) dc += daysInMonth(y,i); //add every full month since start of this year
+  dc += d-1; //every full day since start of this month
+  return dc;
+}
+
 
 
 ////////// Clock ticking and timed event triggering //////////
@@ -461,36 +543,27 @@ void checkRTC(bool force){
   //updates display for running time or date.
   //Check for timeouts based on millis
   if(fnSet && pollLast-inputLast>120000) { fnSet = 0; fn = 0; force=true; } //abandon set
-  else if(!fnSet && fn!=0 && !(fn==3 && (timerTime>0 || alarmSoundStart!=0)) && pollLast>inputLast+5000) { fnSet = 0; fn = 0; force=true; } //abandon fn
+  else if(!fnSet && fn!=fnIsTime && fn!=fnIsDayCount && !(fn==3 && (timerTime>0 || alarmSoundStart!=0)) && pollLast>inputLast+5000) { fnSet = 0; fn = 0; force=true; } //abandon fn
   //Update things based on RTC
-  DS3231_get(&t); //ds3231 //DateTime now = rtc.now();
+  //DS3231_get(&t); //ds3231 //DateTime now = rtc.now();
   //replace now.year(), month, day, dayOfTheWeek, hour, minute, second
-  //with t.year, mon, mday, wday, hour, min, sec
-  //hoping t.mon continues to be 1-index and wday 0-index starting with Sunday
+  //with now.year(), mon, mday, wday, hour, min, sec
+  //hoping now.month() continues to be 1-index and wday 0-index starting with Sunday
   //TODO what is inp2toi?
+  tod = rtc.now();
   
-  if(rtcSecLast != t.sec || force) {
-    rtcSecLast = t.sec; //this was missing! TODO reintroduce
-    //trip alarm TODO
+  if(rtcSecLast != tod.second() || force) {
+    rtcSecLast = tod.second();
+
+    //trip/check for alarm TODO
     //decrement timer TODO
     //trip minutely date at :30 TODO
     //trip digit cycle TODO
-    //finally display live time of day / date
-    if(fnSet==0 && fn==0){ //time of day
-      byte hr = t.hour;
-      if(readEEPROM(optsLoc[1],false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
-      editDisplay(hr, 0, 1, readEEPROM(optsLoc[4],false));
-      editDisplay(t.min, 2, 3, true);
-      if(EEPROM.read(optsLoc[3])==1) editDisplay(t.mday, 4, 5, EEPROM.read(optsLoc[4])); //date
-      else editDisplay(t.sec, 4, 5, true); //seconds
-    } else if(fnSet==0 && fn==1){ //date
-      editDisplay(EEPROM.read(optsLoc[2])==1?t.mon:t.mday, 0, 1, EEPROM.read(optsLoc[4]));
-      editDisplay(EEPROM.read(optsLoc[2])==1?t.mday:t.mon, 2, 3, EEPROM.read(optsLoc[4]));
-      blankDisplay(4, 4);
-      editDisplay(t.wday, 5, 5, false); //TODO is this 0=Sunday, 6=Saturday?
-    }
-  }
-}
+    
+    if(fnSet==0) updateDisplay();
+    
+  } //end if force or new second
+} //end checkRTC()
 
 
 ////////// Display data formatting //////////
@@ -509,28 +582,79 @@ void updateDisplay(){
     } else editDisplay(fnSetVal, 0, 3, false); //some other type of value
   }
   else { //fn running
+    // Serial.print("tod: ");
+    // Serial.print(tod.year(),DEC);
+    // Serial.print(tod.month(),DEC);
+    // Serial.print(tod.day(),DEC);
+    // Serial.print(" ");
+    // Serial.print(tod.hour(),DEC);
+    // Serial.print(tod.minute(),DEC);
+    // Serial.print(tod.second(),DEC);
+    // Serial.print(" ");
     switch(fn){
-      //case 0 and 1: time/date display taken care of by checkRTC()
-      case 2: //alarm
+      //time, date, timer, dayCount taken care of in checkRTC - TODO move that stuff here
+      case fnIsTime:
+        //Serial.println("display fnIsTime");
+        byte hr; hr = tod.hour();
+        if(readEEPROM(optsLoc[1],false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
+        editDisplay(hr, 0, 1, readEEPROM(optsLoc[4],false));
+        editDisplay(tod.minute(), 2, 3, true);
+        if(EEPROM.read(optsLoc[3])==1) editDisplay(tod.day(), 4, 5, EEPROM.read(optsLoc[4])); //date
+        else editDisplay(tod.second(), 4, 5, true); //seconds
+        break;
+      case fnIsDate:
+        //Serial.println("display fnIsDate");
+        editDisplay(EEPROM.read(optsLoc[2])==1?tod.month():tod.day(), 0, 1, EEPROM.read(optsLoc[4]));
+        editDisplay(EEPROM.read(optsLoc[2])==1?tod.day():tod.month(), 2, 3, EEPROM.read(optsLoc[4]));
+        blankDisplay(4, 4);
+        editDisplay(0/* tod.dayOfTheWeek() TODO what */, 5, 5, false); //TODO is this 0=Sunday, 6=Saturday?
+        break;
+      case fnIsDayCount:
+        //Serial.print("display fnIsDayCount ");
+        long targetDayCount; targetDayCount = dateToDayCount(
+            readEEPROM(dayCountYearLoc,true),
+            readEEPROM(dayCountMonthLoc,false),
+            readEEPROM(dayCountDateLoc,false)
+          );
+        long currentDayCount; currentDayCount = dateToDayCount(tod.year(),tod.month(),tod.day());
+        // Serial.print(readEEPROM(dayCountYearLoc,true),DEC); Serial.print("-");
+        // Serial.print(readEEPROM(dayCountMonthLoc,false),DEC); Serial.print("-");
+        // Serial.print(readEEPROM(dayCountDateLoc,false),DEC); Serial.print(" (");
+        // Serial.print(targetDayCount,DEC); Serial.print(") - ");
+        // Serial.print(tod.year(),DEC); Serial.print("-");
+        // Serial.print(tod.month(),DEC); Serial.print("-");
+        // Serial.print(tod.day(),DEC); Serial.print(" (");
+        // Serial.print(currentDayCount,DEC); Serial.print(") = ");
+        // Serial.print(targetDayCount-currentDayCount,DEC); Serial.println();
+        editDisplay(abs(targetDayCount-currentDayCount),0,3,false); //(targetDayCount<=currentDayCount?true:false)
+        //we'll have no indication of negativity here... TODO
+        blankDisplay(4,5);
+        break;
+      case fnIsAlarm: //alarm
+        Serial.println("display fnIsAlarm");
         editDisplay(0,0,1,EEPROM.read(optsLoc[4])); //hrs
         editDisplay(0,2,3,true); //mins
         editDisplay(0,4,5,false); //status
         break;
-      case 3: //timer - display time duration, not time of day with leading zeros
-        //todo does checkRTC need to do this one too?
-        if(false /*hrs > 0*/) editDisplay(1,0,1,false); else blankDisplay(0,1); //hrs if present
-        editDisplay(5,2,3,(false/*hrs>0*/?true:false)); //mins - leading zero only if hrs present
-        editDisplay(
+      case fnIsTimer: //timer - display time duration, not time of day with leading zeros
+        Serial.println("display fnIsTimer");
+        blankDisplay(0,5);
+        //nowo does checkRTC need to do this one too?
+        // if(false /*hrs > 0*/) editDisplay(1,0,1,false); else blankDisplay(0,1); //hrs if present
+        // editDisplay(5,2,3,(false/*hrs>0*/?true:false)); //mins - leading zero only if hrs present
+        // editDisplay(
+        //TODO
         break;
-      case 4: //thermometer
-        float temp = DS3231_get_treg(); //TODO signed? decimal? what?
-        if(temp>0) blankDisplay(0,0); else editDisplay(0,0,1,true); //0 in left tube if negative
-        editDisplay(temp,1,3,false); //whole degrees
-        editDisplay(temp%10,4,4,true); //tenths?
-        blankDisplay(5,5);
+      case fnIsTemp: //thermometer
+        int temp; temp = ds3231.getTemperature()*100;
+        //Serial.print("display fnIsTemp ");
+        //Serial.println(temp,DEC);
+        editDisplay(abs(temp)/100,1,3,(temp<0?true:false)); //leading zeros if negative
+        editDisplay(abs(temp)%100,4,5,true);
+        editDisplay((ds3231.oscillatorCheck()?1:0),0,0,0); //not sure what this one means
         break;
       default: break;
-    }
+    }//end switch
   }
 } //end updateDisplay()
 
