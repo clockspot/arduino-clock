@@ -262,7 +262,6 @@ void ctrlEvt(byte ctrl, byte evt){
   if(fn < fnOpts) { //normal fn running/setting (not in options menu)
 
     if(evt==3 && ctrl==mainSel) { //mainSel long hold: enter options menu
-      //Serial.println("running/setting: mainSel long hold: enter options menu"); Serial.println();
       btnStop();
       fn = fnOpts;
       clearSet(); //don't need updateDisplay() here because this calls updateRTC with force=true
@@ -270,11 +269,7 @@ void ctrlEvt(byte ctrl, byte evt){
     }
     
     if(!fnSetPg) { //fn running
-      //Serial.print("fn ");
-      //Serial.print(fn,DEC);
-      //Serial.println(" running");
-      if(evt==2 && ctrl==mainSel) { //sel hold: enter setting mode
-        //Serial.println("  mainSel hold: enter setting");
+      if(evt==2 && ctrl==mainSel) { //mainSel hold: enter setting mode
         switch(fn){
           case fnIsTime: //set mins
             startSet((tod.hour()*60)+tod.minute(),0,1439,1); break;
@@ -296,18 +291,15 @@ void ctrlEvt(byte ctrl, byte evt){
         return;
       }
       else if((ctrl==mainSel && evt==0) || ((ctrl==mainAdjUp || ctrl==mainAdjDn) && evt==1)) { //sel release or adj press - switch fn, depending on config
-        //Serial.println("    sel release or adj press: switch fn");
         //-1 = nothing, -2 = cycle through functions, other = go to specific function (see fn)
         //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
         bool fnChgd = false;
         if(ctrl==mainSel && mainSelFn!=-1) {
-          //Serial.println("  mainSel release: go to next fn in the cycle");
           fnChgd = true;
           if(mainSelFn==-2) fnScroll(1); //Go to next fn in the cycle
           else fn = mainSelFn;
         }
         else if((ctrl==mainAdjUp || ctrl==mainAdjDn) && mainAdjFn!=-1) {
-          //Serial.println("  mainAdj press: go to prev/next fn in the cycle");
           fnChgd = true;
           if(mainAdjFn==-2) fnScroll(ctrl==mainAdjUp?1:-1); //Go to next or previous fn in the cycle
           else fn = mainAdjFn;
@@ -325,12 +317,8 @@ void ctrlEvt(byte ctrl, byte evt){
     } //end fn running
 
     else { //fn setting
-      //Serial.print("fn ");
-      //Serial.print(fn,DEC);
-      //Serial.println(" setting");
       if(evt==1) { //we respond only to press evts during fn setting
         if(ctrl==mainSel) { //mainSel push: go to next option or save and exit setting mode
-          //Serial.println("  mainSel push: go to next option or save and exit setting mode");
           btnStop(); //not waiting for mainSelHold, so can stop listening here
           //We will set ds3231 time parts directly
           //con: potential for very rare clock rollover while setting; pro: can set date separate from time
@@ -338,7 +326,7 @@ void ctrlEvt(byte ctrl, byte evt){
             case fnIsTime: //save in RTC
               ds3231.setHour(fnSetVal/60);
               ds3231.setMinute(fnSetVal%60);
-              ds3231.setSecond(0); //will reset to exactly 0? TODO confirm
+              ds3231.setSecond(0);
               clearSet(); break;
             case fnIsDate: //save in RTC
               switch(fnSetPg){
@@ -388,34 +376,27 @@ void ctrlEvt(byte ctrl, byte evt){
   } //end normal fn running/setting
   
   else { //options menu setting - to/from EEPROM
-    //Serial.print("opt ");
-    //Serial.print(fn,DEC);
     
     if(evt==2 && ctrl==mainSel) { //mainSel short hold: exit options menu
-      //Serial.println("  mainSel short hold: exit options menu");
       btnStop();
-      //if we're setting a value, writes setting val to EEPROM if needed
+      //if we were setting a value, writes setting val to EEPROM if needed
       if(fnSetPg) writeEEPROM(optsLoc[fnSetPg],fnSetVal,optsMax[fnSetPg]-optsMin[fnSetPg]>255?true:false);
       fn = fnIsTime;
       clearSet();
       return;
-      //showSitch();
     }
     
     if(!fnSetPg){ //viewing option number
-      //Serial.println("  viewing option number");
       if(ctrl==mainSel && evt==0) { //mainSel release: enter option value setting
-        //Serial.println("    mainSel release: enter option value setting");
         byte n = fn-fnOpts+1; //For a given options menu option (1-index), read from EEPROM and call startSet
         startSet(readEEPROM(optsLoc[n],optsMax[n]-optsMin[n]>255?true:false),optsMin[n],optsMax[n],n);
       }
       if(ctrl==mainAdjUp && evt==1) fnOptScroll(1); //next one up or cycle to beginning
       if(ctrl==mainAdjDn && evt==1) fnOptScroll(-1); //next one down or cycle to end?
       updateDisplay();
-      //showSitch();
     } //end viewing option number
+
     else { //setting option value
-      //Serial.println("  setting option value");
       if(ctrl==mainSel && evt==0) { //mainSel release: save and exit option value setting
         //Writes setting val to EEPROM if needed
         writeEEPROM(optsLoc[fnSetPg],fnSetVal,optsMax[fnSetPg]-optsMin[fnSetPg]>255?true:false);
@@ -426,21 +407,8 @@ void ctrlEvt(byte ctrl, byte evt){
       updateDisplay();
     }  //end setting option value
   } //end options menu setting
-  //Serial.println("  ");
   
 } //end ctrlEvt
-
-void showSitch(){
-  Serial.print("--- fn=");
-  Serial.print(fn,DEC);
-  Serial.print(", fnSetPg=");
-  Serial.print(fnSetPg,DEC);
-  Serial.print(", fnSetVal=");
-  Serial.print(fnSetVal,DEC);
-  Serial.print(" ---");
-  Serial.println();
-  Serial.println();
-}
 
 void fnScroll(char dir){
   //Switch to the next (1) or previous (-1) fn in fnsEnabled
