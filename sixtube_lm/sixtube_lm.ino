@@ -26,15 +26,16 @@
 
 ////////// Configuration consts //////////
 
-// available clock functions, and unique IDs (between 0 and 199)
+// available clock functions, and unique IDs (between 0 and 200)
 const byte fnIsTime = 0;
 const byte fnIsDate = 1;
 const byte fnIsAlarm = 2;
 const byte fnIsTimer = 3;
 const byte fnIsDayCount = 4;
 const byte fnIsTemp = 5;
+const byte fnIsCleaner = 6;
 // functions enabled in this clock, in their display order. Only fnIsTime is required
-const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsDayCount, fnIsTemp};
+const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsDayCount, fnIsTemp, fnIsCleaner};
 
 // These are the RLB board connections to Arduino analog input pins.
 // S1/PL13 = Reset
@@ -79,9 +80,11 @@ const byte alarmRadio = 0;
 //     When timer is running, output will stay on until timer runs down.
 const byte alarmDur = 3;
 
+const byte displaySize = 4; //4 or 6 - causes small differences in display of timer, etc
+
 // How long (in ms) are the button hold durations?
 const word btnShortHold = 1000; //for setting the displayed feataure
-const word btnLongHold = 3000; //for for entering SETUP menu
+const word btnLongHold = 3000; //for for entering options menu
 const byte velThreshold = 100; //ms
 // When an adj up/down input (btn or rot) follows another in less than this time, value will change more (10 vs 1).
 // Recommend ~100 for rotaries. If you want to use this feature with buttons, extend to ~400.
@@ -93,10 +96,10 @@ const byte dayCountYearLoc = 3; //and 4 (word)
 const byte dayCountMonthLoc = 5; //byte
 const byte dayCountDateLoc = 6; //byte
 
-//EEPROM locations and default values for SETUP options menu
-//Option number/fnSet are 1-index, so arrays are padded to be 1-index too, for coding convenience. TODO change this
+//EEPROM locations and default values for options menu
+//Option numbers are 1-index, so arrays are padded to be 1-index too, for coding convenience. TODO change this
 //Most vals (default, min, max) are 1-byte. In case of two-byte (max-min>255), high byte is loc, low byte is loc+1.
-//SETUP options are offset to loc 16, to reserve 16 bytes of space for other set values per above
+//options are offset to loc 16, to reserve 16 bytes of space for other set values per above
 //       Option number: -  1  2  3  4  5  6  7  8  9  10 11   12   13 14 15 16   17   18
 const byte optsLoc[] = {0,16,17,18,19,20,21,22,23,24, 25,27,  28,  30,32,33,34,  35,  37}; //EEPROM locs
 const word optsDef[] = {0, 2, 1, 0, 0, 0, 0, 0, 0, 0,500, 0,1320, 360, 0, 1, 5, 480,1020};
@@ -119,9 +122,9 @@ byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long
 unsigned long inputLast = 0; //When a button was last pressed
 unsigned long inputLast2 = 0; //Second-to-last of above
 
-const byte fnSetup = 255; //function //TODO pagify menu by using fnSetup 200-255 for 56 options, and fnSet for the pages
+const byte fnOpts = 201; //fn values from here to 255 correspond to options in the options menu
 byte fn = fnIsTime; //currently displayed fn, as above
-byte fnSet = 0; //whether this function is currently being set, and which option/page it's on
+byte fnSetPg = 0; //whether this function is currently being set, and which option/page it's on
 word fnSetVal; //the value currently being set, if any - unsigned int 0-65535
 word fnSetValMin; //min possible - unsigned int
 word fnSetValMax; //max possible - unsigned int
@@ -138,7 +141,7 @@ byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display.
 ////////// Main code control //////////
 
 void setup(){
-  Serial.begin(57600);
+  Serial.begin(9600);
   Wire.begin();
   initOutputs();
   initInputs();
@@ -256,14 +259,22 @@ void ctrlEvt(byte ctrl, byte evt){
   //But we can handle short and long holds and releases for the sel ctrls (always buttons).
   //TODO needs alt handling
   
-  if(fn != fnSetup) { //normal fn running/setting (not in setup menu)
-    
-    if(evt==3 && ctrl==mainSel) { //mainSel long hold: enter SETUP menu
-      btnStop(); fn = fnSetup; startOpt(1); return;
+  if(fn < fnOpts) { //normal fn running/setting (not in options menu)
+
+    if(evt==3 && ctrl==mainSel) { //mainSel long hold: enter options menu
+      //Serial.println("running/setting: mainSel long hold: enter options menu"); Serial.println();
+      btnStop();
+      fn = fnOpts;
+      clearSet(); //don't need updateDisplay() here because this calls updateRTC with force=true
+      return;
     }
     
-    if(!fnSet) { //fn running
-      if(evt==2 && ctrl==mainSel) { //sel hold: enter fnSet
+    if(!fnSetPg) { //fn running
+      //Serial.print("fn ");
+      //Serial.print(fn,DEC);
+      //Serial.println(" running");
+      if(evt==2 && ctrl==mainSel) { //sel hold: enter setting mode
+        //Serial.println("  mainSel hold: enter setting");
         switch(fn){
           case fnIsTime: //set mins
             startSet((tod.hour()*60)+tod.minute(),0,1439,1); break;
@@ -281,39 +292,45 @@ void ctrlEvt(byte ctrl, byte evt){
             break; //nothing - or is this where we do the calibration? TODO
           default: break;
         }
+        //showSitch();
         return;
       }
       else if((ctrl==mainSel && evt==0) || ((ctrl==mainAdjUp || ctrl==mainAdjDn) && evt==1)) { //sel release or adj press - switch fn, depending on config
+        //Serial.println("    sel release or adj press: switch fn");
         //-1 = nothing, -2 = cycle through functions, other = go to specific function (see fn)
-        //we can't handle sel press here because, if attempting to enter fnSet, it would switch the fn first
+        //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
         bool fnChgd = false;
         if(ctrl==mainSel && mainSelFn!=-1) {
+          //Serial.println("  mainSel release: go to next fn in the cycle");
           fnChgd = true;
           if(mainSelFn==-2) fnScroll(1); //Go to next fn in the cycle
           else fn = mainSelFn;
         }
         else if((ctrl==mainAdjUp || ctrl==mainAdjDn) && mainAdjFn!=-1) {
+          //Serial.println("  mainAdj press: go to prev/next fn in the cycle");
           fnChgd = true;
           if(mainAdjFn==-2) fnScroll(ctrl==mainAdjUp?1:-1); //Go to next or previous fn in the cycle
           else fn = mainAdjFn;
         }
         if(fnChgd){
           switch(fn){
-            //"ticking" ones
-            case fnIsTime: case fnIsDate: case fnIsTimer: case fnIsDayCount:
-              checkRTC(true); break;
             //static ones
             case fnIsAlarm: case fnIsTemp:
               updateDisplay(); break;
-            default: break;
+            //"ticking" ones
+            default: checkRTC(true); break;
           }
         }
       }
     } //end fn running
 
     else { //fn setting
+      //Serial.print("fn ");
+      //Serial.print(fn,DEC);
+      //Serial.println(" setting");
       if(evt==1) { //we respond only to press evts during fn setting
-        if(ctrl==mainSel) { //mainSel push: go to next option or save and exit fnSet
+        if(ctrl==mainSel) { //mainSel push: go to next option or save and exit setting mode
+          //Serial.println("  mainSel push: go to next option or save and exit setting mode");
           btnStop(); //not waiting for mainSelHold, so can stop listening here
           //We will set ds3231 time parts directly
           //con: potential for very rare clock rollover while setting; pro: can set date separate from time
@@ -324,7 +341,7 @@ void ctrlEvt(byte ctrl, byte evt){
               ds3231.setSecond(0); //will reset to exactly 0? TODO confirm
               clearSet(); break;
             case fnIsDate: //save in RTC
-              switch(fnSet){
+              switch(fnSetPg){
                 case 1: //save year, set month
                   fnSetValDate[0]=fnSetVal;
                   startSet(fnSetValDate[1],1,12,2); break; 
@@ -344,7 +361,7 @@ void ctrlEvt(byte ctrl, byte evt){
               timerTime = fnSetVal;
               break;
             case fnIsDayCount: //set like date, save in eeprom like finishOpt
-              switch(fnSet){
+              switch(fnSetPg){
                 case 1: //save year, set month
                   writeEEPROM(dayCountYearLoc,fnSetVal,true);
                   startSet(readEEPROM(dayCountMonthLoc,false),1,12,2); break;
@@ -364,31 +381,66 @@ void ctrlEvt(byte ctrl, byte evt){
         } //end mainSel push
         if(ctrl==mainAdjUp) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
         if(ctrl==mainAdjDn) doSet(inputLast-inputLast2<velThreshold ? -10 : -1);
+        //showSitch();
       } //end if evt==1
     } //end fn setting
-
+    
   } //end normal fn running/setting
-  else { //setup menu setting - to/from EEPROM
+  
+  else { //options menu setting - to/from EEPROM
+    //Serial.print("opt ");
+    //Serial.print(fn,DEC);
     
-    if(ctrl==mainSel) {
-      if(evt==1) { //TODO could consider making it a release, so it doesn't go to the next option before leaving
-        finishOpt();
-        if(fnSet==sizeof(optsLoc)-1) { //that was the last one – rotate back around
-          startOpt(1); return;
-        } else {
-          startOpt(fnSet+1); return;
-        }
-      }
-      if(evt==2) { //exit setup
-        btnStop(); fn = fnIsTime; clearSet(); /*debugEEPROM();*/ return; //exit setup
-        //setCaches();
-      }
+    if(evt==2 && ctrl==mainSel) { //mainSel short hold: exit options menu
+      //Serial.println("  mainSel short hold: exit options menu");
+      btnStop();
+      //if we're setting a value, writes setting val to EEPROM if needed
+      if(fnSetPg) writeEEPROM(optsLoc[fnSetPg],fnSetVal,optsMax[fnSetPg]-optsMin[fnSetPg]>255?true:false);
+      fn = fnIsTime;
+      clearSet();
+      return;
+      //showSitch();
     }
-    if(ctrl==mainAdjUp && evt==1) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
-    if(ctrl==mainAdjDn && evt==1) doSet(inputLast-inputLast2<velThreshold ? -10 : -1);
     
-  } //end setup menu setting
+    if(!fnSetPg){ //viewing option number
+      //Serial.println("  viewing option number");
+      if(ctrl==mainSel && evt==0) { //mainSel release: enter option value setting
+        //Serial.println("    mainSel release: enter option value setting");
+        byte n = fn-fnOpts+1; //For a given options menu option (1-index), read from EEPROM and call startSet
+        startSet(readEEPROM(optsLoc[n],optsMax[n]-optsMin[n]>255?true:false),optsMin[n],optsMax[n],n);
+      }
+      if(ctrl==mainAdjUp && evt==1) fnOptScroll(1); //next one up or cycle to beginning
+      if(ctrl==mainAdjDn && evt==1) fnOptScroll(-1); //next one down or cycle to end?
+      updateDisplay();
+      //showSitch();
+    } //end viewing option number
+    else { //setting option value
+      //Serial.println("  setting option value");
+      if(ctrl==mainSel && evt==0) { //mainSel release: save and exit option value setting
+        //Writes setting val to EEPROM if needed
+        writeEEPROM(optsLoc[fnSetPg],fnSetVal,optsMax[fnSetPg]-optsMin[fnSetPg]>255?true:false);
+        clearSet();
+      }
+      if(ctrl==mainAdjUp && evt==1) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
+      if(ctrl==mainAdjDn && evt==1) doSet(inputLast-inputLast2<velThreshold ? -10 : -1);
+      updateDisplay();
+    }  //end setting option value
+  } //end options menu setting
+  //Serial.println("  ");
+  
 } //end ctrlEvt
+
+void showSitch(){
+  Serial.print("--- fn=");
+  Serial.print(fn,DEC);
+  Serial.print(", fnSetPg=");
+  Serial.print(fnSetPg,DEC);
+  Serial.print(", fnSetVal=");
+  Serial.print(fnSetVal,DEC);
+  Serial.print(" ---");
+  Serial.println();
+  Serial.println();
+}
 
 void fnScroll(char dir){
   //Switch to the next (1) or previous (-1) fn in fnsEnabled
@@ -397,9 +449,15 @@ void fnScroll(char dir){
   if(dir==1) for(pos=0; pos<=posLast; pos++) if(fnsEnabled[pos]==fn) { fn = (pos==posLast?0:fnsEnabled[pos+1]); break; }
   if(dir==-1) for(pos=posLast; pos>=0; pos--) if(fnsEnabled[pos]==fn) { fn = (pos==0?posLast:fnsEnabled[pos-1]); break; }
 }
+void fnOptScroll(char dir){
+  //Switch to the next options fn between min (fnOpts) and max (fnOpts+sizeof(optsLoc)-1) (inclusive)
+  byte posLast = fnOpts+sizeof(optsLoc)-1;
+  if(dir==1) fn = (fn==posLast? fnOpts: fn+1);
+  if(dir==-1) fn = (fn==fnOpts? posLast: fn-1);
+}
 
 void startSet(word n, word m, word x, byte p){ //Enter set state at page p, and start setting a value
-  fnSetVal=n; fnSetValMin=m; fnSetValMax=x; fnSetValVel=(x-m>30?1:0); fnSet=p;
+  fnSetVal=n; fnSetValMin=m; fnSetValMax=x; fnSetValVel=(x-m>30?1:0); fnSetPg=p;
   updateDisplay();
 }
 void doSet(int delta){
@@ -414,7 +472,7 @@ void doSetHold(){
   //TODO integrate this with checkInputs?
   if(doSetHoldLast+250<millis()) {
     doSetHoldLast = millis();
-    if(fnSet!=0 && ((mainAdjType==1 && (btnCur==mainAdjUp || btnCur==mainAdjDn)) || (altAdjType==1 && (btnCur==altAdjUp || btnCur==altAdjDn))) ){ //if we're setting, and this is an adj input for which the type is button
+    if(fnSetPg!=0 && ((mainAdjType==1 && (btnCur==mainAdjUp || btnCur==mainAdjDn)) || (altAdjType==1 && (btnCur==altAdjUp || btnCur==altAdjDn))) ){ //if we're setting, and this is an adj input for which the type is button
       bool dir = (btnCur==mainAdjUp || btnCur==altAdjUp ? 1 : 0);
       //If short hold, or long hold but high velocity isn't supported, use low velocity (delta=1)
       if(btnCurHeld==2 || (btnCurHeld==3 && fnSetValVel==false)) doSet(dir?1:-1);
@@ -425,14 +483,7 @@ void doSetHold(){
 }
 void clearSet(){ //Exit set state
   startSet(0,0,0,0);
-  checkRTC(true); //force an update to tod before updateDisplay()
-}
-
-void startOpt(byte n){ //For a given setup menu option (1-index), reads from EEPROM and calls startSet
-  startSet(readEEPROM(optsLoc[n],optsMax[n]-optsMin[n]>255?true:false),optsMin[n],optsMax[n],n);
-}
-void finishOpt(){ //Writes fnSet val to EEPROM if needed
-  writeEEPROM(optsLoc[fnSet],fnSetVal,optsMax[fnSet]-optsMin[fnSet]>255?true:false);
+  checkRTC(true); //force an update to tod and updateDisplay()
 }
 
 //EEPROM values are exclusively bytes (0-255) or words (unsigned ints, 0-65535)
@@ -448,14 +499,14 @@ void initEEPROM(){
   ds3231.setHour(0);
   ds3231.setMinute(0);
   ds3231.setSecond(0);
-  //Set the default values that aren't part of the SETUP menu
+  //Set the default values that aren't part of the options menu
   //writeEEPROM(alarmTimeLoc,420,true); //7am - word
   //writeEEPROM(alarmOnLoc,enableSoftAlarmSwitch==0?1:0,false); //off, or on if no software switch spec'd
   writeEEPROM(dayCountYearLoc,2018,true);
   writeEEPROM(dayCountMonthLoc,1,false);
   writeEEPROM(dayCountDateLoc,1,false);
-  //then the SETUP menu defaults
-  for(byte i=1; i<=sizeof(optsLoc)-1; i++) writeEEPROM(optsLoc[i],optsDef[i],optsMax[i]-optsMin[i]>255?true:false); //setup menu
+  //then the options menu defaults
+  for(byte i=1; i<=sizeof(optsLoc)-1; i++) writeEEPROM(optsLoc[i],optsDef[i],optsMax[i]-optsMin[i]>255?true:false); //options menu
 }
 word readEEPROM(int loc, bool isWord){
   if(isWord) {
@@ -510,8 +561,18 @@ void checkRTC(bool force){
   //Checks for new time-of-day second; decrements timer; checks for timed events;
   //updates display for running time or date.
   //Check for timeouts based on millis
-  if(fnSet && pollLast-inputLast>120000) { fnSet = 0; fn = fnIsTime; force=true; } //setting timeout
-  else if(!fnSet && fn!=fnIsTime && fn!=fnIsDayCount && !(fn==fnIsTimer && (timerTime>0 || alarmSoundStart!=0)) && pollLast>inputLast+5000) { fnSet = 0; fn = fnIsTime; force=true; } //temporarily-displayed fn timeout back to fnIsTime
+  
+  //Timeout to reset display
+  if(pollLast > inputLast){ //don't bother if the last input (which may have called checkRTC) was more recent than poll
+    //Option/setting timeout: if we're in the options menu, or we're setting a value
+    if(fnSetPg || fn>=fnOpts){
+      if(pollLast-inputLast>120000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
+    }
+    //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, or running timer)
+    else if(fn!=fnIsTime && fn!=fnIsCleaner && fn!=fnIsDayCount && !(fn==fnIsTimer && (timerTime>0 || alarmSoundStart!=0))){
+      if(pollLast>inputLast+5000) { fnSetPg = 0; fn = fnIsTime; force=true; }
+    }
+  }
   //Update things based on RTC
   tod = rtc.now();
   //toddow = ds3231.getDoW();
@@ -524,7 +585,7 @@ void checkRTC(bool force){
     //trip minutely date at :30 TODO
     //trip digit cycle TODO
     
-    if(fnSet==0) updateDisplay();
+    if(fnSetPg==0) updateDisplay();
     
   } //end if force or new second
 } //end checkRTC()
@@ -534,17 +595,21 @@ void checkRTC(bool force){
 void updateDisplay(){
   //Run as needed to update display when the value being shown on it has changed
   //This formats the new value and puts it in displayNext[] for cycleDisplay() to pick up
-  if(fnSet) { //setting
-    //little tubes:
-    if(fn==fnSetup) editDisplay(fnSet, 4, 5, false); //setup menu: current option key
-    else blankDisplay(4, 5); //fn setting: blank
+  if(fnSetPg) { //setting value
+    // //little tubes:
+    // if(fn==fnOpts) editDisplay(fnSetPg, 4, 5, false); //options menu: current option key
+    // else //fn setting: blank
+    blankDisplay(4, 5);
     //big tubes:
     if(fnSetValMax==1439) { //value is a time of day
       editDisplay(fnSetVal/60, 0, 1, EEPROM.read(optsLoc[4])); //hours with leading zero
       editDisplay(fnSetVal%60, 2, 3, true);
     } else editDisplay(fnSetVal, 0, 3, false); //some other type of value
   }
-  else { //fn running
+  else if(fn >= fnOpts){ //options menu, but not setting a value
+    editDisplay(fn-fnOpts+1,0,1,0); //display option number on hour tubes
+    blankDisplay(2,5);
+  } else { //fn running
     switch(fn){
       case fnIsTime:
       byte hr; hr = tod.hour();
@@ -587,6 +652,13 @@ void updateDisplay(){
         editDisplay(abs(temp)/100,1,3,(temp<0?true:false)); //leading zeros if negative
         editDisplay(abs(temp)%100,4,5,true);
         break;
+      case fnIsCleaner:
+        editDisplay(tod.second(),0,0,true);
+        editDisplay(tod.second(),1,1,true);
+        editDisplay(tod.second(),2,2,true);
+        editDisplay(tod.second(),3,3,true);
+        editDisplay(tod.second(),4,4,true);
+        editDisplay(tod.second(),5,5,true);
       default: break;
     }//end switch
   }
@@ -639,7 +711,7 @@ void initOutputs() {
 
 void cycleDisplay(){
   bool dim = 0;//(opts[2]>0?true:false); //Under normal circumstances, dim constantly if the time is right
-  if(fnSet>0) { //but if we're setting, dim for every other 500ms since we started setting
+  if(fnSetPg>0) { //but if we're setting, dim for every other 500ms since we started setting
     if(setStartLast==0) setStartLast = millis();
     dim = 1-(((millis()-setStartLast)/500)%2);
   } else {
