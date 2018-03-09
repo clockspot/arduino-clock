@@ -19,10 +19,11 @@ To set a function, hold **Select** 'til the display flashes; use **Adjust** to s
 | **Date** shows the month, date, and weekday. e.g. `_2 _4 _0` for Sunday, February 4th. | The weekday is 0=Sunday, 6=Saturday. You can choose month/date or date/month format in Options. Setting is done in three stages: first year, then month, then date. |
 | **Day counter** shows the number of days until/since a date you specify, e.g. `_1 23 __` for 123 days. | The target date is set the same way as **Date.** |
 | **Thermometer** shows the temperature of the onboard DS3231 chip, e.g. `__ 38 25` for 38.25°C (I think). | This may not be very useful as it tends to read higher than ambient temperature and its tolerance is low. |
+| **Cleaner** just cycles all the digits on all the tubes. | A quick and dirty anti-cathode-poisoning mode, until automatic digit cycling is implemented. |
 | **Alarm** | _Not yet implemented_ |
 | **Timer** | _Not yet implemented_ |
 
-Additional settings are available in the options menu. To access this, hold **Select** for 3 seconds until the display flashes something like `__ _0 _1`. The right tubes indicate you are viewing option 1, and the left tubes indicate its current setting. Use **Select** to cycle through options; **Adjust** to change the setting; and hold **Select** to exit.
+Additional settings are available in the options menu. To access this, hold **Select** for 3 seconds until you see a single `1` on the hour tubes, which indicates option number 1. To set an option, use **Adjust** to go to the option number (see table below); press **Select** to open it for setting (display will flash); use **Adjust** to set; and **Select** to save. When all done, hold **Select** to exit the options menu.
 
 | Option | Settings |
 | --- | --- |
@@ -30,6 +31,7 @@ Additional settings are available in the options menu. To access this, hold **Se
 | 2. Date display | 1 = month/date/weekday<br/>2 = date/month/weekday |
 | 3. Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date (as above) every minute at :30 seconds *(not implemented)* |
 | 4. Leading zero in hour, date, and month? | 0 = no<br/>1 = yes |
+| 7. Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ) |
 
 **Setup options not implemented yet**
 
@@ -37,7 +39,6 @@ Additional settings are available in the options menu. To access this, hold **Se
 | --- | --- |
 | 5. Transition fade | 0–50 (in hundredths of a second) |
 | 6. Digit cycle (prevents [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)) | 0 = before midnight and/or before day-off<br/>1 = every hour before :01 minute |
-| 7. Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ) |
 | 8. Hourly strike | 0 = off<br/>1 = double beep<br/>2 = pips<br/>3 = strike the hour<br/>4 = ship's bell<br/>(Clocks without radio/timer control only. Will not sound during day-off or night-off.) |
 | 9. Snooze duration | 0–60 minutes. 0 disables snooze. |
 | 10. Fine regulation | Adjusts clock's timekeeping in tenths of a second per week. 500 is "normal." (e.g.: 503 causes clock to run 0.3s faster per week.) |
