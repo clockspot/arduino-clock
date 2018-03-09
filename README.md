@@ -23,7 +23,7 @@ To set a function, hold **Select** 'til the display flashes; use **Adjust** to s
 | **Alarm** | _Not yet implemented_ |
 | **Timer** | _Not yet implemented_ |
 
-Additional settings are available in the options menu. To access this, hold **Select** for 3 seconds until you see a single `1` on the hour tubes, which indicates option number 1. To set an option, use **Adjust** to go to the option number (see table below); press **Select** to open it for setting (display will flash); use **Adjust** to set; and **Select** to save. When all done, hold **Select** to exit the options menu.
+Additional settings are available in the options menu. To access this, hold **Select** for 3 seconds until you see a single `1` on the hour tubes, which indicates option number 1. Use **Adjust** to go to the option number you want to set (see table below); press **Select** to open it for setting (display will flash); use **Adjust** to set; and **Select** to save. When all done, hold **Select** to exit the options menu.
 
 | Option | Settings |
 | --- | --- |
