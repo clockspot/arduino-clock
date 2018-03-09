@@ -112,7 +112,7 @@ const word optsMax[] = {0, 2, 2, 2, 1,50, 1, 6, 4,60,999, 2,1439,1439, 2, 6, 6,1
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
 RTClib rtc; //an object to access a snapshot of the ds3231 rtc via now()
 DateTime tod; //stores the now() snapshot for several functions to use
-//byte toddow; //stores the day of week snapshot as now() doesn't capture it (bug report? TODO)
+byte toddow; //stores the day of week as calculated from tod
 
 // Hardware inputs and value setting
 //AdaEncoder mainRot;
@@ -340,6 +340,7 @@ void ctrlEvt(byte ctrl, byte evt){
                   ds3231.setYear(fnSetValDate[0]%100); //TODO: do we store century on our end? Per ds3231 docs, "The century bit (bit 7 of the month register) is toggled when the years register overflows from 99 to 00."
                   ds3231.setMonth(fnSetValDate[1]);
                   ds3231.setDate(fnSetVal);
+                  ds3231.setDoW(dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal));
                   clearSet(); break;
                 default: break;
               } break;
@@ -464,6 +465,7 @@ void initEEPROM(){
   ds3231.setYear(18);
   ds3231.setMonth(1);
   ds3231.setDate(1);
+  ds3231.setDoW(1); //2018-01-01 is Monday. DS3231 will keep count from here
   ds3231.setHour(0);
   ds3231.setMinute(0);
   ds3231.setSecond(0);
@@ -520,7 +522,17 @@ long dateToDayCount(word y, byte m, byte d){
   dc += d-1; //every full day since start of this month
   return dc;
 }
-
+byte dayOfWeek(word y, byte m, byte d){
+  //DS3231 doesn't really calculate the day of the week, it just keeps a counter.
+  //When setting date, we'll calculate per https://en.wikipedia.org/wiki/Zeller%27s_congruence
+  byte yb = y%100; //2-digit year
+  byte ya = y/100; //century
+  //For this formula, Jan and Feb are considered months 11 and 12 of the previous year.
+  //So if it's Jan or Feb, add 10 to the month, and set back the year and century if applicable
+  if(m<3) { m+=10; if(yb==0) { yb=99; ya-=1; } else yb-=1; }
+  else m -= 2; //otherwise subtract 2 from the month
+  return (d + ((13*m-1)/5) + yb + (yb/4) + (ya/4) + 5*ya) %7;
+}
 
 
 ////////// Clock ticking and timed event triggering //////////
@@ -543,10 +555,17 @@ void checkRTC(bool force){
   }
   //Update things based on RTC
   tod = rtc.now();
-  //toddow = ds3231.getDoW();
+  toddow = ds3231.getDoW();
   
   if(rtcSecLast != tod.second() || force) {
     rtcSecLast = tod.second();
+    
+    //check for timed trips
+    if(!force && tod.second()==0) { //new minute, not forced
+      if(tod.minute()==0) { //new hour
+        if(tod.hour()==2) autoDST();
+      }
+    }
 
     //trip/check for alarm TODO
     //decrement timer TODO
@@ -558,6 +577,45 @@ void checkRTC(bool force){
   } //end if force or new second
 } //end checkRTC()
 
+bool fellBack = false;
+void autoDST(){
+  //Call daily when clock reaches 2am.
+  //If rule matches, will set to 3am in spring, 1am in fall (and set fellBack so it only happens once)
+  if(fellBack) { fellBack=false; return; } //If we fell back at last 2am, do nothing.
+  if(toddow==0) { //is it sunday? currently all these rules fire on Sundays only
+    switch(readEEPROM(optsLoc[7],false)){
+      case 1: //second Sunday in March to first Sunday in November (US/CA)
+        if(tod.month()==3 && tod.day()>=8 && tod.day()<=14) setDST(1);
+        if(tod.month()==11 && tod.day()<=7) setDST(-1);
+        break;
+      case 2: //last Sunday in March to last Sunday in October (UK/EU)
+        if(tod.month()==3 && tod.day()>=25) setDST(1);
+        if(tod.month()==10 && tod.day()>=25) setDST(-1);
+        break;
+      case 3: //first Sunday in April to last Sunday in October (MX)
+        if(tod.month()==4 && tod.day()<=7) setDST(1);
+        if(tod.month()==10 && tod.day()>=25) setDST(-1);
+        break;
+      case 4: //last Sunday in September to first Sunday in April (NZ)
+        if(tod.month()==9 && tod.day()>=24) setDST(1); //30 days hath September: last Sun will be 24-30
+        if(tod.month()==4 && tod.day()<=7) setDST(-1);
+        break;
+      case 5: //first Sunday in October to first Sunday in April (AU)
+        if(tod.month()==10 && tod.day()<=7) setDST(1);
+        if(tod.month()==4 && tod.day()<=7) setDST(-1);
+        break;
+      case 6: //third Sunday in October to third Sunday in February (BZ)
+        if(tod.month()==10 && tod.day()>=15 && tod.day()<=21) setDST(1);
+        if(tod.month()==2 && tod.day()>=15 && tod.day()<=21) setDST(-1);
+        break;
+      default: break;
+    } //end setting switch
+  } //end is it sunday
+}
+void setDST(char dir){
+  if(dir==1) ds3231.setHour(3); //could set relatively if we move away from 2am-only sets
+  if(dir==-1 && !fellBack) { ds3231.setHour(1); fellBack=true; }
+}
 
 ////////// Display data formatting //////////
 void updateDisplay(){
@@ -590,8 +648,8 @@ void updateDisplay(){
       case fnIsDate:
       editDisplay(EEPROM.read(optsLoc[2])==1?tod.month():tod.day(), 0, 1, EEPROM.read(optsLoc[4]));
         editDisplay(EEPROM.read(optsLoc[2])==1?tod.day():tod.month(), 2, 3, EEPROM.read(optsLoc[4]));
-        blankDisplay(4, 5);
-        //editDisplay(toddow, 4, 4, false); //TODO is this 0=Sunday, 6=Saturday?
+        blankDisplay(4, 4);
+        editDisplay(toddow, 5, 5, false); //TODO is this 0=Sunday, 6=Saturday?
         break;
       case fnIsDayCount:
         long targetDayCount; targetDayCount = dateToDayCount(
