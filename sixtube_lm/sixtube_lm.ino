@@ -340,7 +340,7 @@ void ctrlEvt(byte ctrl, byte evt){
                   ds3231.setYear(fnSetValDate[0]%100); //TODO: do we store century on our end? Per ds3231 docs, "The century bit (bit 7 of the month register) is toggled when the years register overflows from 99 to 00."
                   ds3231.setMonth(fnSetValDate[1]);
                   ds3231.setDate(fnSetVal);
-                  ds3231.setDoW(dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal));
+                  ds3231.setDoW(dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal)+1); //ds3231 weekday is 1-index
                   clearSet(); break;
                 default: break;
               } break;
@@ -555,7 +555,7 @@ void checkRTC(bool force){
   }
   //Update things based on RTC
   tod = rtc.now();
-  toddow = ds3231.getDoW();
+  toddow = ds3231.getDoW()-1; //ds3231 weekday is 1-index
   
   if(rtcSecLast != tod.second() || force) {
     rtcSecLast = tod.second();
