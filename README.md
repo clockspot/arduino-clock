@@ -15,15 +15,15 @@ _In these instructions, **Select** is the main pushbutton, and **Adjust** can be
 * Some functions return to Time after a few seconds.
 * To set a function, hold **Select** 'til the display flashes; use **Adjust** to set, and **Select** to save.
 
-| Function | Notes |
-| --- | --- |
-| **Time** shows the time of day. | You can choose 12h or 24h format in Options. When setting, it's in 24h format (so you can tell AM from PM) and the seconds will reset to :00 when you save. |
-| **Date** shows the month, date, and weekday. e.g. `_2 _4 _0` for Sunday, February 4th. | You can choose month/date or date/month format in the options menu (2). Setting is done in three stages: first year, then month, then date.<br/>Weekdays are: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat |
-| **Timer** shows a countdown timer, or a single `0` when not running. | Can be set to the minute, up to 18 hours. Begins running as soon as you set it, and will continue to run in the background if you change to a different function. To cancel a running timer, hold **Select**. When it runs out, press **Select** to silence the beeper. |
-| **Day counter** shows the number of days until/since a date you specify, e.g. `_1 23 __` for 123 days. | The target date is set the same way as **Date.** |
-| **Thermometer** shows the temperature of the onboard DS3231 chip, e.g. `__ 38 25` for 38.25°C (I think). | This may not be very useful as it tends to read higher than ambient temperature and its tolerance is low. |
-| **Cleaner** just cycles all the digits on all the tubes. | A quick and dirty anti-cathode-poisoning mode, until automatic digit cycling is implemented. |
-| **Alarm** will show alarm time and status, e.g. `_7 00 1_` for a 7am alarm that is switched on. | _Not yet implemented. Intended to work like this:_<br/>Use **Adjust** to switch alarm on and off; this is indicated by `1` or `0` on the 5th tube, and a bright (on) or dim (off) display. Hold **Select** to set the time the same way as **Time**. When alarm sounds, press **Select** to snooze, or hold for 1sec (followed by a short beep) to silence the alarm for the day. Options menu lets you restrict the alarm to your workweek or weekend only. |
+| Function | Looks like | Notes |
+| --- | --- | --- |
+| **Time** | `12 34 56` | The time of day. You can choose 12h or 24h format in Options. When setting, it's in 24h format (so you can tell AM from PM) and the seconds will reset to :00 when you save. |
+| **Date** | `_2 _4 _0`<br/>(for&nbsp;Sun&nbsp;2/4) | You can choose month/date or date/month format in the options menu (2). Setting is done in three stages: first year, then month, then date.<br/>Weekdays are: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat |
+| **Timer** | `__ _1 23`&nbsp;(running)<br/>`__ __ _0`&nbsp;(stopped) | A countdown timer, in hours, minutes, and seconds. Can be set to the minute, up to 18 hours. Begins running as soon as you set it, and will continue to run in the background if you change to a different function. To cancel a running timer, hold **Select**. When it runs out, press **Select** to silence the beeper. |
+| **Day counter** | `_1 23 __` | Shows the number of days until/since a date you specify The target date is set the same way as **Date.** |
+| **Thermometer** | `__ 38 25`<br/>(for 38.25°C) | Shows the temperature of the onboard DS3231 chip. May not be very useful as it tends to read higher than ambient temperature and its tolerance is low. |
+| **Cleaner** | `88 88 88` | Cycles all the digits on all the tubes. A quick and dirty anti-cathode-poisoning mode, until automatic digit cycling is implemented. |
+| **Alarm** | `_7 00 1_` | _Not yet implemented. Intended to work like this:_<br/>Shows alarm time and status. Use **Adjust** to switch on/off; status is shown on 5th tube (1=on, 0=off) and by display brightness (bright=on, dim=off). Hold **Select** to set the time the same way as **Time**. When alarm sounds, press **Select** to snooze, or hold for 1sec (followed by a short beep) to silence the alarm for the day. Options menu lets you restrict the alarm to your workweek or weekend only. |
 
 ### Options Menu
 
