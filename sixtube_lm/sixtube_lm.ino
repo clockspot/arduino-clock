@@ -35,7 +35,7 @@ const byte fnIsDayCount = 4;
 const byte fnIsTemp = 5;
 const byte fnIsCleaner = 6;
 // functions enabled in this clock, in their display order. Only fnIsTime is required
-const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsDayCount, fnIsTemp, fnIsCleaner};
+const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsTimer, fnIsDayCount, fnIsTemp, fnIsCleaner};
 
 // These are the RLB board connections to Arduino analog input pins.
 // S1/PL13 = Reset
@@ -78,9 +78,9 @@ const byte alarmRadio = 0;
 // 1 = yes. Alarm output is connected to a relay to switch other equipment (like a radio).
 //     When alarm goes off, output will stay on for alarmDur minutes (120 is common).
 //     When timer is running, output will stay on until timer runs down.
-const byte alarmDur = 3;
+const byte alarmDur = 1;
 
-const byte displaySize = 4; //4 or 6 - causes small differences in display of timer, etc
+const byte displaySize = 6; //number of tubes
 
 // How long (in ms) are the button hold durations?
 const word btnShortHold = 1000; //for setting the displayed feataure
@@ -132,9 +132,12 @@ bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
 word fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
 
 // Volatile running values
-unsigned long alarmSoundStart = 0; //also used for timer expiry TODO what happens if they are concurrent?
-word snoozeTime = 0; //seconds
-word timerTime = 0; //seconds - up to just under 18 hours
+word alarmTime = 0; //alarm time of day TODO move these to alarmTimeLoc and alarmOnLoc
+bool alarmOn = 0; //alarm switch
+word soundRemain = 0; //alarm/timer sound timeout counter, seconds
+word snoozeRemain = 0; //snooze timeout counter, seconds
+word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,800 seconds - fits just inside a word)
+word timerRemain = 0; //timer actual counter
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
 
 
@@ -145,6 +148,7 @@ void setup(){
   Wire.begin();
   initOutputs();
   initInputs();
+  if(!enableSoftAlarmSwitch) alarmOn=1; //TODO test and get rid of
   if(readInput(mainSel)==LOW) initEEPROM();
 }
 
@@ -252,12 +256,33 @@ void checkRot(){
 
 ////////// Input handling and value setting //////////
 
-void ctrlEvt(byte ctrl, byte evt){  
+bool stoppingSound = false; //Special stuff (snooze canceling) happens right after a press that silences the sound
+void ctrlEvt(byte ctrl, byte evt){
   //Handle control events (from checkBtn or checkRot), based on current fn and set state.
   //evt: 1=press, 2=short hold, 3=long hold, 0=release.
   //We only handle press evts for adj ctrls, as that's the only evt encoders generate.
   //But we can handle short and long holds and releases for the sel ctrls (always buttons).
   //TODO needs alt handling
+  
+  //Before all else, is it a press while the beeper is sounding? Silence it
+  if(soundRemain>0 && evt==1){
+    stoppingSound = true;
+    soundRemain = 0;
+    noTone(10);
+    //If we're displaying the clock (as alarm trigger does), start snooze. 0 will have no effect
+    if(fn==fnIsTime) snoozeRemain = readEEPROM(optsLoc[9],false)*60;
+    return;
+  }
+  //After pressing to silence, short hold cancels a snooze; ignore other btn evts
+  if(stoppingSound){
+    stoppingSound = false;
+    if(evt==2 && snoozeRemain>0) {
+      snoozeRemain = 0;
+      tone(10, 3136, 100); //G7
+    }
+    btnStop();
+    return;
+  }
   
   if(fn < fnOpts) { //normal fn running/setting (not in options menu)
 
@@ -279,8 +304,9 @@ void ctrlEvt(byte ctrl, byte evt){
             //DS3231_get_a1(&buff[0], 59); //TODO write a wrapper function for this
             //startSet(buff,0,1439,1); //alarm: set mins
             break;
-          case fnIsTimer: //set mins, up to 12 hours
-            startSet(timerTime/60,0,719,1); break;
+          case fnIsTimer: //set mins, up to 18 hours (64,800 seconds - fits just inside a word)
+            if(timerRemain>0) { timerRemain = 0; btnStop(); updateDisplay(); break; } //If the timer is running, zero it out.
+            startSet(timerInitial/60,0,1080,1); break;
           case fnIsDayCount: //set year like date, but from eeprom like startOpt
             startSet(readEEPROM(dayCountYearLoc,true),2000,9999,1); break;
           case fnIsTemp:
@@ -294,15 +320,19 @@ void ctrlEvt(byte ctrl, byte evt){
         //-1 = nothing, -2 = cycle through functions, other = go to specific function (see fn)
         //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
         bool fnChgd = false;
-        if(ctrl==mainSel && mainSelFn!=-1) {
-          fnChgd = true;
-          if(mainSelFn==-2) fnScroll(1); //Go to next fn in the cycle
-          else fn = mainSelFn;
+        if(ctrl==mainSel){
+          if(mainSelFn!=-1) { //do a function switch
+            fnChgd = true;
+            if(mainSelFn==-2) fnScroll(1); //Go to next fn in the cycle
+            else fn = mainSelFn;
+          } else if(fn==fnIsAlarm) switchAlarm(0); //switch alarm
         }
-        else if((ctrl==mainAdjUp || ctrl==mainAdjDn) && mainAdjFn!=-1) {
-          fnChgd = true;
-          if(mainAdjFn==-2) fnScroll(ctrl==mainAdjUp?1:-1); //Go to next or previous fn in the cycle
-          else fn = mainAdjFn;
+        else if(ctrl==mainAdjUp || ctrl==mainAdjDn) {
+          if(mainAdjFn!=-1) { //do a function switch
+            fnChgd = true;
+            if(mainAdjFn==-2) fnScroll(ctrl==mainAdjUp?1:-1); //Go to next or previous fn in the cycle
+            else fn = mainAdjFn;
+          } else if(fn==fnIsAlarm) switchAlarm(ctrl==mainAdjUp?1:-1); //switch alarm
         }
         if(fnChgd){
           switch(fn){
@@ -318,6 +348,7 @@ void ctrlEvt(byte ctrl, byte evt){
 
     else { //fn setting
       if(evt==1) { //we respond only to press evts during fn setting
+        //TODO could we do release/shorthold on mainSel so we can exit without making changes?
         if(ctrl==mainSel) { //mainSel push: go to next option or save and exit setting mode
           btnStop(); //not waiting for mainSelHold, so can stop listening here
           //We will set ds3231 time parts directly
@@ -347,7 +378,9 @@ void ctrlEvt(byte ctrl, byte evt){
             case fnIsAlarm:
               break;
             case fnIsTimer: //timer
-              timerTime = fnSetVal;
+              timerInitial = fnSetVal*60; //timerRemain is seconds, but timer is set by minute
+              timerRemain = timerInitial; //set actual timer going
+              clearSet();
               break;
             case fnIsDayCount: //set like date, save in eeprom like finishOpt
               switch(fnSetPg){
@@ -487,22 +520,22 @@ word readEEPROM(int loc, bool isWord){
 }
 void writeEEPROM(int loc, int val, bool isWord){
   if(isWord) {
-    Serial.print("EEPROM write word:");
+    Serial.print(F("EEPROM write word:"));
     if(EEPROM.read(loc)!=highByte(val)) {
       EEPROM.write(loc,highByte(val));
-      Serial.print(" loc "); Serial.print(loc,DEC);
-      Serial.print(" val "); Serial.print(highByte(val),DEC);
-    } else Serial.print(" loc "); Serial.print(loc,DEC); Serial.print(" unchanged (no write).");
+      Serial.print(F(" loc ")); Serial.print(loc,DEC);
+      Serial.print(F(" val ")); Serial.print(highByte(val),DEC);
+    } else Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" unchanged (no write)."));
     if(EEPROM.read(loc+1)!=lowByte(val)) {
       EEPROM.write(loc+1,lowByte(val));
-      Serial.print(" loc "); Serial.print(loc+1,DEC);
-      Serial.print(" val "); Serial.print(lowByte(val),DEC);
-    } else Serial.print(" loc "); Serial.print(loc+1,DEC); Serial.print(" unchanged (no write).");
+      Serial.print(F(" loc ")); Serial.print(loc+1,DEC);
+      Serial.print(F(" val ")); Serial.print(lowByte(val),DEC);
+    } else Serial.print(F(" loc ")); Serial.print(loc+1,DEC); Serial.print(F(" unchanged (no write)."));
   } else {
-    Serial.print("EEPROM write byte:"); Serial.print(" loc "); Serial.print(loc,DEC);
+    Serial.print(F("EEPROM write byte:")); Serial.print(F(" loc ")); Serial.print(loc,DEC);
     if(EEPROM.read(loc)!=val) { EEPROM.write(loc,val);
-      Serial.print(" val "); Serial.print(val,DEC);
-    } else Serial.print(" unchanged (no write).");
+      Serial.print(F(" val ")); Serial.print(val,DEC);
+    } else Serial.print(F(" unchanged (no write)."));
   }
   Serial.println();
 }
@@ -538,40 +571,67 @@ byte dayOfWeek(word y, byte m, byte d){
 ////////// Clock ticking and timed event triggering //////////
 byte rtcSecLast = 61;
 void checkRTC(bool force){
-  //Checks for new time-of-day second; decrements timer; checks for timed events;
-  //updates display for running time or date.
-  //Check for timeouts based on millis
+  //Checks display timeouts;
+  //checks for new time-of-day second -> decrements timers and checks for timed events;
+  //updates display for "running" functions.
   
-  //Timeout to reset display
+  //Things to do every time this is called: timeouts to reset display. These may force a tick.
   if(pollLast > inputLast){ //don't bother if the last input (which may have called checkRTC) was more recent than poll
     //Option/setting timeout: if we're in the options menu, or we're setting a value
     if(fnSetPg || fn>=fnOpts){
       if(pollLast-inputLast>120000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
     }
     //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, or running timer)
-    else if(fn!=fnIsTime && fn!=fnIsCleaner && fn!=fnIsDayCount && !(fn==fnIsTimer && (timerTime>0 || alarmSoundStart!=0))){
+    else if(fn!=fnIsTime && fn!=fnIsCleaner && fn!=fnIsDayCount && !(fn==fnIsTimer && (timerRemain>0 || soundRemain>0))){
       if(pollLast>inputLast+5000) { fnSetPg = 0; fn = fnIsTime; force=true; }
     }
   }
+  
   //Update things based on RTC
   tod = rtc.now();
   toddow = ds3231.getDoW()-1; //ds3231 weekday is 1-index
   
-  if(rtcSecLast != tod.second() || force) {
+  if(rtcSecLast != tod.second() || force) { //If it's a new RTC second, or we are forcing it
+    
+    if(force && rtcSecLast != tod.second()) force=false; //in the odd case it's BOTH, recognize the natural second
     rtcSecLast = tod.second();
     
-    //check for timed trips
-    if(!force && tod.second()==0) { //new minute, not forced
-      if(tod.minute()==0) { //new hour
-        if(tod.hour()==2) autoDST();
+    if(tod.second()==0) { //at top of minute
+      //at 2am, check for DST change
+      if(tod.minute()==0 && tod.hour()==2) autoDST();
+      //check if we should trigger the alarm - TODO weekday limiter
+      if(tod.hour()*60+tod.minute()==alarmTime && alarmOn && false) {
+        fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60;
       }
+      //checkDigitCycle();
     }
-
-    //trip/check for alarm TODO
-    //decrement timer TODO
-    //trip minutely date at :30 TODO
-    //trip digit cycle TODO
+    if(tod.second()==30 && fn==fnIsTime && fnSetPg==0) { //At bottom of minute, on fn time (not setting), maybe show date
+      if(readEEPROM(optsLoc[3],false)==2) { fn = fnIsDate; inputLast = pollLast; }
+    }
     
+    //Things to do every natural second (decrementing real-time counters)
+    if(!force) {
+      //If timer has time on it, decrement and trigger beeper if we reach zero
+      if(timerRemain>0) {
+        timerRemain--;
+        if(timerRemain<=0) { fnSetPg = 0; fn = fnIsTimer; inputLast = pollLast; soundRemain = alarmDur*60; } //TODO radio mode
+      }
+      //If beeper has time on it, decrement and sound the beeper for 1/2 second
+      if(soundRemain>0) {
+        soundRemain--;
+        //tone(10, 1568, 500); //G6
+        tone(10, 1760, 500); //A6
+        //tone(10, 1976, 500); //B6
+        //tone(10, 2093, 500); //C7
+      }
+      //If alarm snooze has time on it, decrement and trigger beeper if we reach zero (and alarm is still on)
+      if(snoozeRemain>0) {
+        snoozeRemain--;
+        if(snoozeRemain<=0 && alarmOn) { fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60; }
+      }
+    } //end natural second
+    
+    //Finally, whether natural tick or not, if we're not setting anything, update the display
     if(fnSetPg==0) updateDisplay();
     
   } //end if force or new second
@@ -617,6 +677,14 @@ void setDST(char dir){
   if(dir==-1 && !fellBack) { ds3231.setHour(1); fellBack=true; }
 }
 
+void switchAlarm(char dir){
+  if(enableSoftAlarmSwitch){
+    if(dir==1) alarmOn=1;
+    if(dir==-1) alarmOn=0;
+    if(dir==0) alarmOn = !alarmOn;
+  }
+}
+
 ////////// Display data formatting //////////
 void updateDisplay(){
   //Run as needed to update display when the value being shown on it has changed
@@ -627,9 +695,13 @@ void updateDisplay(){
     // else //fn setting: blank
     blankDisplay(4, 5);
     //big tubes:
-    if(fnSetValMax==1439) { //value is a time of day
+    if(fnSetValMax==1439) { //Time of day (0-1439 mins, 0:00–23:59): show hrs/mins
       editDisplay(fnSetVal/60, 0, 1, EEPROM.read(optsLoc[4])); //hours with leading zero
       editDisplay(fnSetVal%60, 2, 3, true);
+    } else if(fnSetValMax==1080) { //Timer duration (0-1080 mins, up to 18:00): show hrs/mins w/minimal leading
+      if(fnSetVal>=60) editDisplay(fnSetVal/60, 0, 1, false); else blankDisplay(0,1); //hour only if present, else blank
+      editDisplay(fnSetVal%60, 2, 3, (fnSetVal>=60?true:false)); //leading zero only if hour present
+      editDisplay(0,4,5,true); //placeholder seconds
     } else editDisplay(fnSetVal, 0, 3, false); //some other type of value
   }
   else if(fn >= fnOpts){ //options menu, but not setting a value
@@ -668,10 +740,17 @@ void updateDisplay(){
         editDisplay(0,2,3,true); //mins
         editDisplay(0,4,5,false); //status
         break;
-      case fnIsTimer: //timer - display time duration, not time of day with leading zeros
-        blankDisplay(0,5); //TODO complete this
-        // if(false /*hrs > 0*/) editDisplay(1,0,1,false); else blankDisplay(0,1); //hrs if present
-        // editDisplay(5,2,3,(false/*hrs>0*/?true:false)); //mins - leading zero only if hrs present
+      case fnIsTimer: //timer - display time left.
+        //Relative unit positioning: when t <1h, display min/sec in place of hr/min on 4-tube displays
+        byte mspos; mspos = (displaySize<6 && timerRemain<3600? 0 : 2);
+        if(timerRemain >= 3600) { //t >=1h: display hr on first two tubes
+          editDisplay(timerRemain/3600,0,1,false);
+        } else blankDisplay(0,1);
+        if(timerRemain >= 60) { //t >=1m: display minute (in relative position). Leading zero if t >=1h.
+          editDisplay((timerRemain%3600)/60,mspos,mspos+1,(timerRemain>=3600?true:false));
+        } else blankDisplay(mspos,mspos+1);
+        //display second (in relative position). Leading zero if t>=1m.
+        editDisplay(timerRemain%60,mspos+2,mspos+3,(timerRemain>=60?true:false));
         break;
       case fnIsTemp: //thermometer
         int temp; temp = ds3231.getTemperature()*100;
