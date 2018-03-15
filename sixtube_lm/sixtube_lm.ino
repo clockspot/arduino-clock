@@ -89,12 +89,28 @@ const byte velThreshold = 100; //ms
 // When an adj up/down input (btn or rot) follows another in less than this time, value will change more (10 vs 1).
 // Recommend ~100 for rotaries. If you want to use this feature with buttons, extend to ~400.
 
+
+////////// Other global consts and vars used in multiple sections //////////
+
+DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
+RTClib rtc; //an object to access a snapshot of the ds3231 rtc via now()
+DateTime tod; //stores the now() snapshot for several functions to use
+byte toddow; //stores the day of week as calculated from tod
+
+//Software version
+const byte vMaj = 1;
+const byte vMin = 3;
+
 //EEPROM locations for set values - default values are in initEEPROM()
-//const byte alarmTimeLoc = 0; //and 1 (word) in minutes past midnight.
-//const byte alarmOnLoc = 2; //byte
+const byte alarmTimeLoc = 0; //and 1 (word) in minutes past midnight.
+const byte alarmOnLoc = 2; //byte
 const byte dayCountYearLoc = 3; //and 4 (word)
 const byte dayCountMonthLoc = 5; //byte
 const byte dayCountDateLoc = 6; //byte
+
+//EEPROM locations for software version as of last run - to detect software upgrades that need EEPROM initializations
+const byte vMajLoc = 14;
+const byte vMinLoc = 15;
 
 //EEPROM locations and default values for options menu
 //Option numbers are 1-index, so arrays are padded to be 1-index too, for coding convenience. TODO change this
@@ -107,12 +123,7 @@ const word optsMin[] = {0, 1, 1, 0, 0, 0, 0, 0, 0, 0,  1, 0,   0,   0, 0, 0, 0, 
 const word optsMax[] = {0, 2, 2, 2, 1,50, 1, 6, 4,60,999, 2,1439,1439, 2, 6, 6,1439,1439};
 
 
-////////// Other global consts and vars used in multiple sections //////////
 
-DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
-RTClib rtc; //an object to access a snapshot of the ds3231 rtc via now()
-DateTime tod; //stores the now() snapshot for several functions to use
-byte toddow; //stores the day of week as calculated from tod
 
 // Hardware inputs and value setting
 //AdaEncoder mainRot;
@@ -132,8 +143,6 @@ bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
 word fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
 
 // Volatile running values
-word alarmTime = 0; //alarm time of day TODO move these to alarmTimeLoc and alarmOnLoc
-bool alarmOn = 0; //alarm switch
 word soundRemain = 0; //alarm/timer sound timeout counter, seconds
 word snoozeRemain = 0; //snooze timeout counter, seconds
 word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,800 seconds - fits just inside a word)
@@ -148,7 +157,7 @@ void setup(){
   Wire.begin();
   initOutputs();
   initInputs();
-  if(!enableSoftAlarmSwitch) alarmOn=1; //TODO test and get rid of
+  if(!enableSoftAlarmSwitch) writeEEPROM(alarmOnLoc,1,false); //TODO test and get rid of
   if(readInput(mainSel)==LOW) initEEPROM();
 }
 
@@ -503,8 +512,8 @@ void initEEPROM(){
   ds3231.setMinute(0);
   ds3231.setSecond(0);
   //Set the default values that aren't part of the options menu
-  //writeEEPROM(alarmTimeLoc,420,true); //7am - word
-  //writeEEPROM(alarmOnLoc,enableSoftAlarmSwitch==0?1:0,false); //off, or on if no software switch spec'd
+  writeEEPROM(alarmTimeLoc,420,true); //7am - word
+  writeEEPROM(alarmOnLoc,enableSoftAlarmSwitch==0?1:0,false); //off, or on if no software switch spec'd
   writeEEPROM(dayCountYearLoc,2018,true);
   writeEEPROM(dayCountMonthLoc,1,false);
   writeEEPROM(dayCountDateLoc,1,false);
@@ -600,7 +609,7 @@ void checkRTC(bool force){
       //at 2am, check for DST change
       if(tod.minute()==0 && tod.hour()==2) autoDST();
       //check if we should trigger the alarm - TODO weekday limiter
-      if(tod.hour()*60+tod.minute()==alarmTime && alarmOn && false) {
+      if(tod.hour()*60+tod.minute()==readEEPROM(alarmTimeLoc,true) && readEEPROM(alarmOnLoc,false) && false) {
         fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60;
       }
       //checkDigitCycle();
@@ -627,7 +636,7 @@ void checkRTC(bool force){
       //If alarm snooze has time on it, decrement and trigger beeper if we reach zero (and alarm is still on)
       if(snoozeRemain>0) {
         snoozeRemain--;
-        if(snoozeRemain<=0 && alarmOn) { fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60; }
+        if(snoozeRemain<=0 && readEEPROM(alarmOnLoc,false)) { fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60; }
       }
     } //end natural second
     
@@ -679,9 +688,9 @@ void setDST(char dir){
 
 void switchAlarm(char dir){
   if(enableSoftAlarmSwitch){
-    if(dir==1) alarmOn=1;
-    if(dir==-1) alarmOn=0;
-    if(dir==0) alarmOn = !alarmOn;
+    if(dir==1) writeEEPROM(alarmOnLoc,1,false);
+    if(dir==-1) writeEEPROM(alarmOnLoc,0,false);
+    if(dir==0) writeEEPROM(alarmOnLoc,!readEEPROM(alarmOnLoc,false),false);
   }
 }
 
