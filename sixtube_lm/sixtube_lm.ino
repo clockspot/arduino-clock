@@ -189,6 +189,7 @@ void loop(){
     checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
     checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
     doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
+    //cycleBellTone(); //if beeper is making a bell tone noise, continue to "animate" its decay TODO
   }
   //Things done every loop cycle
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
@@ -745,6 +746,21 @@ void getHz(byte note){
   //56 = 659.2 E5
   //61 = 880 A5
 }
+//Sometimes we activate the beeper directly (e.g. pips) but most of the time we make a bell tone TODO
+// char curBellToneLevel; //support negative just in case
+// word curBellTonePitch;
+// void cycleBellTone(){
+//   //Called by loop() 50ms polling – make bell tone decay
+//   //An Arduino pin directly to a piezo element/buzzer is not very good. The piezo is like a capacitor and you need a resistor of 100 ohm to reduce the peak currents.
+//   if(curBellToneLevel > 0) {
+//     curBellToneLevel *= 0.9; //decay by 1/10 each time
+//     if(curBellToneLevel<=0) {
+//       currBelToneLevel = 0; //TODO stop tone fully
+//     } else {
+//       //TODO make the bell this level - whatever it was doing before
+//     }
+//   }
+// }
 
 ////////// Display data formatting //////////
 void updateDisplay(){
