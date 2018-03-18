@@ -80,6 +80,8 @@ const byte alarmRadio = 0;
 //     When timer is running, output will stay on until timer runs down.
 const byte alarmDur = 1;
 
+const byte unoffDur = 10; //when display is dim/off, a press will light the tubes for this many seconds
+
 const byte displaySize = 6; //number of tubes
 
 // How long (in ms) are the button hold durations?
@@ -163,7 +165,9 @@ word soundRemain = 0; //alarm/timer sound timeout counter, seconds
 word snoozeRemain = 0; //snooze timeout counter, seconds
 word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,800 seconds - fits just inside a word)
 word timerRemain = 0; //timer actual counter
+word unoffRemain = 0; //un-off (briefly turn on tubes during full night-off or day-off) timeout counter, seconds
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
+byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 
 
 ////////// Main code control //////////
@@ -304,6 +308,14 @@ void ctrlEvt(byte ctrl, byte evt){
       snoozeRemain = 0;
       tone(10, 3136, 100); //G7
     }
+    btnStop();
+    return;
+  }
+  
+  //Is it a press for an un-off?
+  if(displayDim==0 && evt==1) {
+    unoffRemain = unoffDur;
+    updateDisplay();
     btnStop();
     return;
   }
@@ -643,7 +655,14 @@ void checkRTC(bool force){
       //If timer has time on it, decrement and trigger beeper if we reach zero
       if(timerRemain>0) {
         timerRemain--;
-        if(timerRemain<=0) { fnSetPg = 0; fn = fnIsTimer; inputLast = pollLast; soundRemain = alarmDur*60; } //TODO radio mode
+        if(timerRemain<=0) { //timer has elasped
+          if(readEEPROM(25,false)) { //interval timer: sound for 1sec and restart; don't change to timer fn
+            soundRemain = 1; timerRemain = timerInitial;
+          } else {
+            fnSetPg = 0; fn = fnIsTimer; inputLast = pollLast; soundRemain = alarmDur*60;
+          }
+          //TODO radio mode
+        } //end timer elapsed
       }
       //If beeper has time on it, decrement and sound the beeper for 1/2 second
       if(soundRemain>0) {
@@ -657,6 +676,9 @@ void checkRTC(bool force){
       if(snoozeRemain>0) {
         snoozeRemain--;
         if(snoozeRemain<=0 && readEEPROM(2,false)) { fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60; }
+      }
+      if(unoffRemain>0) {
+        unoffRemain--; //updateDisplay will naturally put it back to off state if applicable
       }
     } //end natural second
     
@@ -729,6 +751,7 @@ void updateDisplay(){
   //Run as needed to update display when the value being shown on it has changed
   //This formats the new value and puts it in displayNext[] for cycleDisplay() to pick up
   if(fnSetPg) { //setting value, for either fn or option
+    displayDim = 2;
     blankDisplay(4, 5);
     if(fnSetValMax==1439) { //Time of day (0-1439 mins, 0:00–23:59): show hrs/mins
       editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false)); //hours with leading zero
@@ -740,12 +763,24 @@ void updateDisplay(){
     } else editDisplay(fnSetVal, 0, 3, false); //some other type of value
   }
   else if(fn >= fnOpts){ //options menu, but not setting a value
+    displayDim = 2;
     editDisplay(fn-fnOpts+1,0,1,0); //display option number (1-index) on hour tubes
     blankDisplay(2,5);
   } else { //fn running
+    //Set displayDim per night-off and day-off settings - fnIsAlarm may override this
+    word todmins = tod.hour()*60+tod.minute();
+    if(unoffDur > 0) {
+      displayDim = 2;
+    } else if(readEEPROM(27,false) && (todmins>=readEEPROM(28,true) || todmins<(readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)))) { //night-off
+      displayDim = (readEEPROM(27,false)==1?1:0); //dim or off
+    } else if(readEEPROM(32,false)==1 && toddow<readEEPROM(33,false) && toddow>readEEPROM(34,false)) { //day-off all day on weekends
+      displayDim = 0;
+    } else if(readEEPROM(32,false)==2 && toddow>=readEEPROM(33,false) && toddow<=readEEPROM(34,false) && todmins>=readEEPROM(35,true) && todmins<readEEPROM(37,true)) { //day-off during office hours
+      displayDim = 0;
+    } else displayDim = 2;
     switch(fn){
       case fnIsTime:
-      byte hr; hr = tod.hour();
+        byte hr; hr = tod.hour();
         if(readEEPROM(16,false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
         editDisplay(hr, 0, 1, readEEPROM(19,false));
         editDisplay(tod.minute(), 2, 3, true);
@@ -770,10 +805,12 @@ void updateDisplay(){
         blankDisplay(4,5);
         break;
       case fnIsAlarm: //alarm
-        //TODO this isn't a real display
-        editDisplay(0,0,1,readEEPROM(19,false)); //hrs
-        editDisplay(0,2,3,true); //mins
-        editDisplay(0,4,5,false); //status
+        word almTime; almTime = readEEPROM(0,true);
+        editDisplay(almTime/60, 0, 1, readEEPROM(19,false)); //hours with leading zero
+        editDisplay(almTime%60, 2, 3, true);
+        editDisplay(readEEPROM(2,false),4,4,false); //status 1/0
+        displayDim = (readEEPROM(2,false)?2:1); //status bright/dim
+        blankDisplay(5,5);
         break;
       case fnIsTimer: //timer - display time left.
         //Relative unit positioning: when t <1h, display min/sec in place of hr/min on 4-tube displays
@@ -850,43 +887,47 @@ void initOutputs() {
 }
 
 void cycleDisplay(){
-  bool dim = 0;//(opts[2]>0?true:false); //Under normal circumstances, dim constantly if the time is right
-  if(fnSetPg>0) { //but if we're setting, dim for every other 500ms since we started setting
+  //Other display code decides whether we should dim per function or time of day
+  bool dim = (displayDim==1?1:0);
+  //But if we're setting, decide here to dim for every other 500ms since we started setting
+  if(fnSetPg>0) {
     if(setStartLast==0) setStartLast = millis();
     dim = 1-(((millis()-setStartLast)/500)%2);
   } else {
     if(setStartLast>0) setStartLast=0;
   }
   
-  //Anode channel 0: tubes #2 (min x10) and #5 (sec x1)
-  setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
-  digitalWrite(anodes[0], HIGH); //Turn on tubes
-  delay(displayLastFade[0]/(dim?4:1)); //Display for fade-out cycles
-  setCathodes(displayNext[2],displayNext[5]); //Switch cathodes to new digits
-  delay(displayNextFade[0]/(dim?4:1)); //Display for fade-in cycles
-  digitalWrite(anodes[0], LOW); //Turn off tubes
+  if(displayDim !== 0) { //if other display code says to shut off entirely, skip this part
+    //Anode channel 0: tubes #2 (min x10) and #5 (sec x1)
+    setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
+    digitalWrite(anodes[0], HIGH); //Turn on tubes
+    delay(displayLastFade[0]/(dim?4:1)); //Display for fade-out cycles
+    setCathodes(displayNext[2],displayNext[5]); //Switch cathodes to new digits
+    delay(displayNextFade[0]/(dim?4:1)); //Display for fade-in cycles
+    digitalWrite(anodes[0], LOW); //Turn off tubes
   
-  if(dim) delay(fadeMax/1.5);
+    if(dim) delay(fadeMax/1.5);
   
-  //Anode channel 1: tubes #4 (sec x10) and #1 (hour x1)
-  setCathodes(displayLast[4],displayLast[1]);
-  digitalWrite(anodes[1], HIGH);
-  delay(displayLastFade[1]/(dim?4:1));
-  setCathodes(displayNext[4],displayNext[1]);
-  delay(displayNextFade[1]/(dim?4:1));
-  digitalWrite(anodes[1], LOW);
+    //Anode channel 1: tubes #4 (sec x10) and #1 (hour x1)
+    setCathodes(displayLast[4],displayLast[1]);
+    digitalWrite(anodes[1], HIGH);
+    delay(displayLastFade[1]/(dim?4:1));
+    setCathodes(displayNext[4],displayNext[1]);
+    delay(displayNextFade[1]/(dim?4:1));
+    digitalWrite(anodes[1], LOW);
   
-  if(dim) delay(fadeMax/1.5);
+    if(dim) delay(fadeMax/1.5);
   
-  //Anode channel 2: tubes #0 (hour x10) and #3 (min x1)
-  setCathodes(displayLast[0],displayLast[3]);
-  digitalWrite(anodes[2], HIGH);
-  delay(displayLastFade[2]/(dim?4:1));
-  setCathodes(displayNext[0],displayNext[3]);
-  delay(displayNextFade[2]/(dim?4:1));
-  digitalWrite(anodes[2], LOW);
+    //Anode channel 2: tubes #0 (hour x10) and #3 (min x1)
+    setCathodes(displayLast[0],displayLast[3]);
+    digitalWrite(anodes[2], HIGH);
+    delay(displayLastFade[2]/(dim?4:1));
+    setCathodes(displayNext[0],displayNext[3]);
+    delay(displayNextFade[2]/(dim?4:1));
+    digitalWrite(anodes[2], LOW);
   
-  if(dim) delay(fadeMax*0.75);
+    if(dim) delay(fadeMax*0.75);
+  } //end if displayDim !== 0
   
   // Loop thru and update all the arrays, and fades.
   for( byte i = 0 ; i < 6 ; i ++ ) {
