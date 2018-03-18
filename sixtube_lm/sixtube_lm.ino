@@ -35,7 +35,7 @@ const byte fnIsDayCount = 4;
 const byte fnIsTemp = 5;
 const byte fnIsCleaner = 6;
 // functions enabled in this clock, in their display order. Only fnIsTime is required
-const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsTimer, fnIsDayCount, fnIsTemp, fnIsCleaner};
+const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCount, fnIsTemp, fnIsCleaner};
 
 // These are the RLB board connections to Arduino analog input pins.
 // S1/PL13 = Reset
@@ -90,32 +90,31 @@ const byte velThreshold = 100; //ms
 // Recommend ~100 for rotaries. If you want to use this feature with buttons, extend to ~400.
 
 
-////////// Other global consts and vars used in multiple sections //////////
+////////// EEPROM stuff //////////
 
-DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
-RTClib rtc; //an object to access a snapshot of the ds3231 rtc via now()
-DateTime tod; //stores the now() snapshot for several functions to use
-byte toddow; //stores the day of week as calculated from tod
-
-//Software version
+//Current software version
 const byte vMaj = 1;
 const byte vMin = 3;
+//Earliest software version to use the current EEPROM allocation
+//Change this when changing EEPROM allocation, to trigger an intialization
+const byte vMajLastEEPROMChange = 1;
+const byte vMinLastEEPROMChange = 3;
 
-//EEPROM locations for set values - default values are in initEEPROM()
+//EEPROM locations for software version as of last run 
+//If setup() finds these to be earlier than the above, it triggers an initialization
+const byte vMajLoc = 14;
+const byte vMinLoc = 15;
+
+//EEPROM locations for values set outside of the options menu - default values in initEEPROM()
 const byte alarmTimeLoc = 0; //and 1 (word) in minutes past midnight.
 const byte alarmOnLoc = 2; //byte
 const byte dayCountYearLoc = 3; //and 4 (word)
 const byte dayCountMonthLoc = 5; //byte
 const byte dayCountDateLoc = 6; //byte
 
-//EEPROM locations for software version as of last run - to detect software upgrades that need EEPROM initializations
-const byte vMajLoc = 14;
-const byte vMinLoc = 15;
-
 //EEPROM locations and default values for options menu
 //Option numbers are 1-index, so arrays are padded to be 1-index too, for coding convenience. TODO change this
 //Most vals (default, min, max) are 1-byte. In case of two-byte (max-min>255), high byte is loc, low byte is loc+1.
-//options are offset to loc 16, to reserve 16 bytes of space for other set values per above
 //       Option number: -  1  2  3  4  5  6  7  8  9  10 11   12   13 14 15 16   17   18
 const byte optsLoc[] = {0,16,17,18,19,20,21,22,23,24, 25,27,  28,  30,32,33,34,  35,  37}; //EEPROM locs
 const word optsDef[] = {0, 2, 1, 0, 0, 0, 0, 0, 0, 0,500, 0,1320, 360, 0, 1, 5, 480,1020};
@@ -123,7 +122,12 @@ const word optsMin[] = {0, 1, 1, 0, 0, 0, 0, 0, 0, 0,  1, 0,   0,   0, 0, 0, 0, 
 const word optsMax[] = {0, 2, 2, 2, 1,50, 1, 6, 4,60,999, 2,1439,1439, 2, 6, 6,1439,1439};
 
 
+////////// Other global consts and vars used in multiple sections //////////
 
+DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
+RTClib rtc; //an object to access a snapshot of the ds3231 rtc via now()
+DateTime tod; //stores the now() snapshot for several functions to use
+byte toddow; //stores the day of week as calculated from tod
 
 // Hardware inputs and value setting
 //AdaEncoder mainRot;
@@ -157,8 +161,15 @@ void setup(){
   Wire.begin();
   initOutputs();
   initInputs();
-  if(!enableSoftAlarmSwitch) writeEEPROM(alarmOnLoc,1,false); //TODO test and get rid of
+  //EEPROM initialization on demand or if necessary due to upgrades
   if(readInput(mainSel)==LOW) initEEPROM();
+  else if(readEEPROM(vMajLoc,false)<vMajLastEEPROMChange) initEEPROM(); //at least 1 major version behind
+  else if(readEEPROM(vMinLoc,false)<vMinLastEEPROMChange) initEEPROM(); //at least 1 minor version behind TODO test this
+  //Record the current version as the latest version in EEPROM
+  writeEEPROM(vMajLoc,vMaj,false);
+  writeEEPROM(vMinLoc,vMin,false);
+  //If no soft alarm switch, set alarm on
+  if(!enableSoftAlarmSwitch) writeEEPROM(alarmOnLoc,1,false); //TODO test and get rid of
 }
 
 unsigned long pollLast = 0;
@@ -310,9 +321,7 @@ void ctrlEvt(byte ctrl, byte evt){
           case fnIsDate: //set year
             fnSetValDate[1]=tod.month(), fnSetValDate[2]=tod.day(); startSet(tod.year(),0,9999,1); break;
           case fnIsAlarm: //set mins
-            //DS3231_get_a1(&buff[0], 59); //TODO write a wrapper function for this
-            //startSet(buff,0,1439,1); //alarm: set mins
-            break;
+            startSet(readEEPROM(alarmTimeLoc,true),0,1439,1); break;
           case fnIsTimer: //set mins, up to 18 hours (64,800 seconds - fits just inside a word)
             if(timerRemain>0) { timerRemain = 0; btnStop(); updateDisplay(); break; } //If the timer is running, zero it out.
             startSet(timerInitial/60,0,1080,1); break;
@@ -385,12 +394,12 @@ void ctrlEvt(byte ctrl, byte evt){
                 default: break;
               } break;
             case fnIsAlarm:
-              break;
+              writeEEPROM(alarmTimeLoc,fnSetVal,true);
+              clearSet(); break;
             case fnIsTimer: //timer
               timerInitial = fnSetVal*60; //timerRemain is seconds, but timer is set by minute
               timerRemain = timerInitial; //set actual timer going
-              clearSet();
-              break;
+              clearSet(); break;
             case fnIsDayCount: //set like date, save in eeprom like finishOpt
               switch(fnSetPg){
                 case 1: //save year, set month
@@ -609,7 +618,7 @@ void checkRTC(bool force){
       //at 2am, check for DST change
       if(tod.minute()==0 && tod.hour()==2) autoDST();
       //check if we should trigger the alarm - TODO weekday limiter
-      if(tod.hour()*60+tod.minute()==readEEPROM(alarmTimeLoc,true) && readEEPROM(alarmOnLoc,false) && false) {
+      if(tod.hour()*60+tod.minute()==readEEPROM(alarmTimeLoc,true) && readEEPROM(alarmOnLoc,false)) {
         fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60;
       }
       //checkDigitCycle();
