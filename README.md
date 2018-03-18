@@ -39,7 +39,7 @@ _In these instructions, **Select** is the main pushbutton, and **Adjust** can be
 | 5. Digit fade | _Not yet implemented._<br/>0–50 (in hundredths of a second) |
 | 6. Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ) |
 | **Alarms and sounds** | |
-| 7. Alarm days | _Not yet implemented._<br/>0 = every day<br/>1 = workweek only (per workdays setting below)<br/>2 = weekend only |
+| 7. Alarm days | 0 = every day<br/>1 = workweek only (per workdays setting below)<br/>2 = weekend only |
 | 8. Alarm snooze | 0–60 minutes. 0 disables snooze. |
 | 9. Alarm tone pitch | _Not yet implemented._<br/>[Note number on a piano keyboard](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8). Some are louder than others. |
 | 10. Timer interval mode | _Not yet implemented._<br/>What happens when the timer reaches 0.<br/>0 = stop and sound continuously<br/>1 = restart and sound a single tone (interval timer) |
@@ -51,8 +51,8 @@ _In these instructions, **Select** is the main pushbutton, and **Adjust** can be
 | 15. Night starts at | _Not yet implemented._<br/>Time of day. |
 | 16. Night ends at | _Not yet implemented._<br/>Time of day. Set to 0:00 to use the alarm time. At this time (whether night-off/alarm is enabled or not), all tubes will briefly cycle through all digits at full brightness to help prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm). |
 | 17. Day-off | _Not yet implemented._<br/>To further save tube life, shut off tubes during the day when you're not around.<br/>0 = none (tubes fully on during the day)<br/>1 = clock at work (shut off all day on weekends)<br/>2 = clock at home (shut off during work hours)<br/>When off, you can press **Select** to light the tubes briefly. |
-| 18. First day of work week | _Not yet implemented._<br/>0–6 (Sunday–Saturday) |
-| 19. Last day of work week | _Not yet implemented._<br/>0–6 (Sunday–Saturday) |
+| 18. First day of work week | 0–6 (Sunday–Saturday) |
+| 19. Last day of work week | 0–6 (Sunday–Saturday) |
 | 20. Work starts at | _Not yet implemented._<br/>Time of day. |
 | 21. Work ends at | _Not yet implemented._<br/>Time of day. |
 

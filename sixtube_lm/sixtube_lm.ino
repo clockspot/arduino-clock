@@ -4,7 +4,7 @@
 // Refactored and expanded by Luke McKenzie (luke@theclockspot.com)
 
 // TODO: Alarm - display, set, sound, snooze, 24h silence
-// TODO: Timer - display, set, run, sound, silence
+// TODO: Timer - display, set, run, sound, silence - make non-volatile?
 // TODO: Cathode anti-poisoning
 // TODO: implement other setup options
 
@@ -90,48 +90,60 @@ const byte velThreshold = 100; //ms
 // Recommend ~100 for rotaries. If you want to use this feature with buttons, extend to ~400.
 
 
-////////// EEPROM stuff //////////
+////////// Other global consts and vars //////////
 
-//Current software version
-const byte vMaj = 1;
-const byte vMin = 3;
-//Earliest software version to use the current EEPROM allocation
-//Change this when changing EEPROM allocation, to trigger an intialization
-const byte vMajLastEEPROMChange = 1;
-const byte vMinLastEEPROMChange = 3;
+/*EEPROM locations
+These should be permanently associated with a value (unless deprecated and reused).
+We could name them all with consts for coding convenience, but for now just using directly in code.
+Most values in the clock are 1-byte; if 2-byte, high byte is loc, low byte is loc+1.
+These ones are set outside the options menu - defaults defined in initEEPROM()
+  0-1 Alarm time, mins
+  2 Alarm on
+  3-4 Day count year
+  5 Day count month
+  6 Day count date
+( 7-15 are available )
+These ones are set inside the options menu - defaults defined in arrays below
+  16 Time format
+  17 Date format 
+  18 Display date during time
+  19 Leading zero in hour, date, and month
+  20 Digit fade duration TODO
+  21 Hourly strike TODO
+  22 Auto DST
+  23 Alarm days
+  24 Alarm snooze
+  25 Timer interval mode TODO
+( 26 is available )
+  27 Night-off TODO
+  28-29 Night start, mins TODO
+  30-31 Night end, mins TODO
+  32 Day-off TODO
+  33 First day of workweek
+  34 Last day of workweek
+  35-36 Work starts at, mins TODO
+  37-38 Work ends at, mins TODO
+  39 Alarm tone pitch TODO
+  40 Timer tone pitch TODO
+  41 Hourly strike pitch TODO
+*/
 
-//EEPROM locations for software version as of last run 
-//If setup() finds these to be earlier than the above, it triggers an initialization
-const byte vMajLoc = 14;
-const byte vMinLoc = 15;
+//Options menu options' EEPROM locations and default/min/max values. Numbers (and pos in these arrays) 
+//Although these arrays are 0-index, the option number displayed (and listed in readme) is 1-index. (see "fn-fnOpts+1")
+//Options' numbers may be changed by reordering these arrays (and changing readme accordingly).
+//        Option number: 1  2  3  4  5  6  7  8  9 10 11 12 13 14   15   16 17 18 19   20   21
+const byte optsLoc[] = {16,17,18,19,20,22,23,24,39,25,40,21,41,27,  28,  30,32,33,34,  35,  37};
+const word optsDef[] = { 2, 1, 0, 0, 0, 0, 0, 0,61, 0,61, 0,61, 0,1320, 360, 0, 1, 5, 480,1020};
+const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0,49, 0,49, 0,49, 0,   0,   0, 0, 0, 0,   0,   0};
+const word optsMax[] = { 2, 2, 2, 1,50, 6, 2,60,88, 1,88, 4,88, 2,1439,1439, 2, 6, 6,1439,1439};
 
-//EEPROM locations for values set outside of the options menu - default values in initEEPROM()
-const byte alarmTimeLoc = 0; //and 1 (word) in minutes past midnight.
-const byte alarmOnLoc = 2; //byte
-const byte dayCountYearLoc = 3; //and 4 (word)
-const byte dayCountMonthLoc = 5; //byte
-const byte dayCountDateLoc = 6; //byte
-
-//EEPROM locations and default values for options menu
-//Option numbers are 1-index, so arrays are padded to be 1-index too, for coding convenience. TODO change this
-//Most vals (default, min, max) are 1-byte. In case of two-byte (max-min>255), high byte is loc, low byte is loc+1.
-//       Option number: -  1  2  3  4  5  6  7  8  9  10 11   12   13 14 15 16   17   18
-const byte optsLoc[] = {0,16,17,18,19,20,21,22,23,24, 25,27,  28,  30,32,33,34,  35,  37}; //EEPROM locs
-const word optsDef[] = {0, 2, 1, 0, 0, 0, 0, 0, 0, 0,500, 0,1320, 360, 0, 1, 5, 480,1020};
-const word optsMin[] = {0, 1, 1, 0, 0, 0, 0, 0, 0, 0,  1, 0,   0,   0, 0, 0, 0,   0,   0};
-const word optsMax[] = {0, 2, 2, 2, 1,50, 1, 6, 4,60,999, 2,1439,1439, 2, 6, 6,1439,1439};
-
-
-////////// Other global consts and vars used in multiple sections //////////
-
+//RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
 RTClib rtc; //an object to access a snapshot of the ds3231 rtc via now()
 DateTime tod; //stores the now() snapshot for several functions to use
 byte toddow; //stores the day of week as calculated from tod
 
 // Hardware inputs and value setting
-//AdaEncoder mainRot;
-//AdaEncoder altRot;
 byte btnCur = 0; //Momentary button currently in use - only one allowed at a time
 byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=set by btnStop()
 unsigned long inputLast = 0; //When a button was last pressed
@@ -161,15 +173,7 @@ void setup(){
   Wire.begin();
   initOutputs();
   initInputs();
-  //EEPROM initialization on demand or if necessary due to upgrades
   if(readInput(mainSel)==LOW) initEEPROM();
-  else if(readEEPROM(vMajLoc,false)<vMajLastEEPROMChange) initEEPROM(); //at least 1 major version behind
-  else if(readEEPROM(vMinLoc,false)<vMinLastEEPROMChange) initEEPROM(); //at least 1 minor version behind TODO test this
-  //Record the current version as the latest version in EEPROM
-  writeEEPROM(vMajLoc,vMaj,false);
-  writeEEPROM(vMinLoc,vMin,false);
-  //If no soft alarm switch, set alarm on
-  if(!enableSoftAlarmSwitch) writeEEPROM(alarmOnLoc,1,false); //TODO test and get rid of
 }
 
 unsigned long pollLast = 0;
@@ -290,7 +294,7 @@ void ctrlEvt(byte ctrl, byte evt){
     soundRemain = 0;
     noTone(10);
     //If we're displaying the clock (as alarm trigger does), start snooze. 0 will have no effect
-    if(fn==fnIsTime) snoozeRemain = readEEPROM(optsLoc[9],false)*60;
+    if(fn==fnIsTime) snoozeRemain = readEEPROM(24,false)*60;
     return;
   }
   //After pressing to silence, short hold cancels a snooze; ignore other btn evts
@@ -321,12 +325,12 @@ void ctrlEvt(byte ctrl, byte evt){
           case fnIsDate: //set year
             fnSetValDate[1]=tod.month(), fnSetValDate[2]=tod.day(); startSet(tod.year(),0,9999,1); break;
           case fnIsAlarm: //set mins
-            startSet(readEEPROM(alarmTimeLoc,true),0,1439,1); break;
+            startSet(readEEPROM(0,true),0,1439,1); break;
           case fnIsTimer: //set mins, up to 18 hours (64,800 seconds - fits just inside a word)
             if(timerRemain>0) { timerRemain = 0; btnStop(); updateDisplay(); break; } //If the timer is running, zero it out.
             startSet(timerInitial/60,0,1080,1); break;
           case fnIsDayCount: //set year like date, but from eeprom like startOpt
-            startSet(readEEPROM(dayCountYearLoc,true),2000,9999,1); break;
+            startSet(readEEPROM(3,true),2000,9999,1); break;
           case fnIsTemp:
             break; //nothing - or is this where we do the calibration? TODO
           default: break;
@@ -394,7 +398,7 @@ void ctrlEvt(byte ctrl, byte evt){
                 default: break;
               } break;
             case fnIsAlarm:
-              writeEEPROM(alarmTimeLoc,fnSetVal,true);
+              writeEEPROM(0,fnSetVal,true);
               clearSet(); break;
             case fnIsTimer: //timer
               timerInitial = fnSetVal*60; //timerRemain is seconds, but timer is set by minute
@@ -403,13 +407,13 @@ void ctrlEvt(byte ctrl, byte evt){
             case fnIsDayCount: //set like date, save in eeprom like finishOpt
               switch(fnSetPg){
                 case 1: //save year, set month
-                  writeEEPROM(dayCountYearLoc,fnSetVal,true);
-                  startSet(readEEPROM(dayCountMonthLoc,false),1,12,2); break;
+                  writeEEPROM(3,fnSetVal,true);
+                  startSet(readEEPROM(5,false),1,12,2); break;
                 case 2: //save month, set date
-                  writeEEPROM(dayCountMonthLoc,fnSetVal,false);
-                  startSet(readEEPROM(dayCountDateLoc,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
+                  writeEEPROM(5,fnSetVal,false);
+                  startSet(readEEPROM(6,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
                 case 3: //save date
-                  writeEEPROM(dayCountDateLoc,fnSetVal,false);
+                  writeEEPROM(6,fnSetVal,false);
                   clearSet(); break;
                 default: break;
               } break;
@@ -421,7 +425,6 @@ void ctrlEvt(byte ctrl, byte evt){
         } //end mainSel push
         if(ctrl==mainAdjUp) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
         if(ctrl==mainAdjDn) doSet(inputLast-inputLast2<velThreshold ? -10 : -1);
-        //showSitch();
       } //end if evt==1
     } //end fn setting
     
@@ -429,10 +432,12 @@ void ctrlEvt(byte ctrl, byte evt){
   
   else { //options menu setting - to/from EEPROM
     
+    byte opt = fn-fnOpts; //current option number, 0-index (for opts[] arrays)
+    
     if(evt==2 && ctrl==mainSel) { //mainSel short hold: exit options menu
       btnStop();
       //if we were setting a value, writes setting val to EEPROM if needed
-      if(fnSetPg) writeEEPROM(optsLoc[fnSetPg],fnSetVal,optsMax[fnSetPg]-optsMin[fnSetPg]>255?true:false);
+      if(fnSetPg) writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]-optsMin[opt]>255?true:false);
       fn = fnIsTime;
       clearSet();
       return;
@@ -440,8 +445,7 @@ void ctrlEvt(byte ctrl, byte evt){
     
     if(!fnSetPg){ //viewing option number
       if(ctrl==mainSel && evt==0) { //mainSel release: enter option value setting
-        byte n = fn-fnOpts+1; //For a given options menu option (1-index), read from EEPROM and call startSet
-        startSet(readEEPROM(optsLoc[n],optsMax[n]-optsMin[n]>255?true:false),optsMin[n],optsMax[n],n);
+        startSet(readEEPROM(optsLoc[opt],optsMax[opt]-optsMin[opt]>255?true:false),optsMin[opt],optsMax[opt],1);
       }
       if(ctrl==mainAdjUp && evt==1) fnOptScroll(1); //next one up or cycle to beginning
       if(ctrl==mainAdjDn && evt==1) fnOptScroll(-1); //next one down or cycle to end?
@@ -451,7 +455,7 @@ void ctrlEvt(byte ctrl, byte evt){
     else { //setting option value
       if(ctrl==mainSel && evt==0) { //mainSel release: save and exit option value setting
         //Writes setting val to EEPROM if needed
-        writeEEPROM(optsLoc[fnSetPg],fnSetVal,optsMax[fnSetPg]-optsMin[fnSetPg]>255?true:false);
+        writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]-optsMin[opt]>255?true:false);
         clearSet();
       }
       if(ctrl==mainAdjUp && evt==1) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
@@ -470,7 +474,7 @@ void fnScroll(char dir){
   if(dir==-1) for(pos=posLast; pos>=0; pos--) if(fnsEnabled[pos]==fn) { fn = (pos==0?posLast:fnsEnabled[pos-1]); break; }
 }
 void fnOptScroll(char dir){
-  //Switch to the next options fn between min (fnOpts) and max (fnOpts+sizeof(optsLoc)-1) (inclusive)
+  //Switch to the next options fn between min and max (inclusive), looping around at range ends
   byte posLast = fnOpts+sizeof(optsLoc)-1;
   if(dir==1) fn = (fn==posLast? fnOpts: fn+1);
   if(dir==-1) fn = (fn==fnOpts? posLast: fn-1);
@@ -521,19 +525,22 @@ void initEEPROM(){
   ds3231.setMinute(0);
   ds3231.setSecond(0);
   //Set the default values that aren't part of the options menu
-  writeEEPROM(alarmTimeLoc,420,true); //7am - word
-  writeEEPROM(alarmOnLoc,enableSoftAlarmSwitch==0?1:0,false); //off, or on if no software switch spec'd
-  writeEEPROM(dayCountYearLoc,2018,true);
-  writeEEPROM(dayCountMonthLoc,1,false);
-  writeEEPROM(dayCountDateLoc,1,false);
+  writeEEPROM(0,420,true); //7am - word
+  writeEEPROM(2,enableSoftAlarmSwitch==0?1:0,false); //off, or on if no software switch spec'd
+  writeEEPROM(3,2018,true);
+  writeEEPROM(5,1,false);
+  writeEEPROM(6,1,false);
   //then the options menu defaults
-  for(byte i=1; i<=sizeof(optsLoc)-1; i++) writeEEPROM(optsLoc[i],optsDef[i],optsMax[i]-optsMin[i]>255?true:false); //options menu
+  for(byte opt=0; opt<sizeof(optsLoc); opt++) writeEEPROM(optsLoc[opt],optsDef[opt],optsMax[opt]-optsMin[opt]>255?true:false);
 }
 word readEEPROM(int loc, bool isWord){
   if(isWord) {
-    word w = (EEPROM.read(loc)<<8)+EEPROM.read(loc+1); return w; //word / unsigned int, 0-65535
+    //TODO why was it done this way
+    //word w = (EEPROM.read(loc)<<8)+EEPROM.read(loc+1); return w; //word / unsigned int, 0-65535
+    return (EEPROM.read(loc)<<8)+EEPROM.read(loc+1);
   } else {
-    byte b = EEPROM.read(loc); return b; //byte, 0-255
+    //byte b = EEPROM.read(loc); return b; //byte, 0-255
+    return EEPROM.read(loc);
   }
 }
 void writeEEPROM(int loc, int val, bool isWord){
@@ -617,14 +624,18 @@ void checkRTC(bool force){
     if(tod.second()==0) { //at top of minute
       //at 2am, check for DST change
       if(tod.minute()==0 && tod.hour()==2) autoDST();
-      //check if we should trigger the alarm - TODO weekday limiter
-      if(tod.hour()*60+tod.minute()==readEEPROM(alarmTimeLoc,true) && readEEPROM(alarmOnLoc,false)) {
-        fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60;
-      }
+      //check if we should trigger the alarm - if the time is right and the alarm is on...
+      if(tod.hour()*60+tod.minute()==readEEPROM(0,true) && readEEPROM(2,false)) {
+        if(readEEPROM(23,false)==0 || //any day of the week
+          (readEEPROM(23,false)==1 && toddow>=readEEPROM(33,false) && toddow<=readEEPROM(34,false)) || //weekday only
+          (readEEPROM(23,false)==2 && toddow<readEEPROM(33,false) && toddow>readEEPROM(34,false))) { //weekend only
+            fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60;
+        } //end toddow check
+      } //end alarm trigger
       //checkDigitCycle();
     }
     if(tod.second()==30 && fn==fnIsTime && fnSetPg==0) { //At bottom of minute, on fn time (not setting), maybe show date
-      if(readEEPROM(optsLoc[3],false)==2) { fn = fnIsDate; inputLast = pollLast; }
+      if(readEEPROM(18,false)==2) { fn = fnIsDate; inputLast = pollLast; }
     }
     
     //Things to do every natural second (decrementing real-time counters)
@@ -645,7 +656,7 @@ void checkRTC(bool force){
       //If alarm snooze has time on it, decrement and trigger beeper if we reach zero (and alarm is still on)
       if(snoozeRemain>0) {
         snoozeRemain--;
-        if(snoozeRemain<=0 && readEEPROM(alarmOnLoc,false)) { fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60; }
+        if(snoozeRemain<=0 && readEEPROM(2,false)) { fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60; }
       }
     } //end natural second
     
@@ -661,7 +672,7 @@ void autoDST(){
   //If rule matches, will set to 3am in spring, 1am in fall (and set fellBack so it only happens once)
   if(fellBack) { fellBack=false; return; } //If we fell back at last 2am, do nothing.
   if(toddow==0) { //is it sunday? currently all these rules fire on Sundays only
-    switch(readEEPROM(optsLoc[7],false)){
+    switch(readEEPROM(22,false)){
       case 1: //second Sunday in March to first Sunday in November (US/CA)
         if(tod.month()==3 && tod.day()>=8 && tod.day()<=14) setDST(1);
         if(tod.month()==11 && tod.day()<=7) setDST(-1);
@@ -697,24 +708,30 @@ void setDST(char dir){
 
 void switchAlarm(char dir){
   if(enableSoftAlarmSwitch){
-    if(dir==1) writeEEPROM(alarmOnLoc,1,false);
-    if(dir==-1) writeEEPROM(alarmOnLoc,0,false);
-    if(dir==0) writeEEPROM(alarmOnLoc,!readEEPROM(alarmOnLoc,false),false);
+    if(dir==1) writeEEPROM(2,1,false);
+    if(dir==-1) writeEEPROM(2,0,false);
+    if(dir==0) writeEEPROM(2,!readEEPROM(2,false),false);
   }
+}
+
+void getHz(byte note){
+  //Given a piano key note, return frequency
+  //TODO (note-basenote)/12 resolves to a float...
+  return 440*(2^((note-49)/12));
+  //37 = 220 A3
+  //49 = 440 A4
+  //56 = 659.2 E5
+  //61 = 880 A5
 }
 
 ////////// Display data formatting //////////
 void updateDisplay(){
   //Run as needed to update display when the value being shown on it has changed
   //This formats the new value and puts it in displayNext[] for cycleDisplay() to pick up
-  if(fnSetPg) { //setting value
-    // //little tubes:
-    // if(fn==fnOpts) editDisplay(fnSetPg, 4, 5, false); //options menu: current option key
-    // else //fn setting: blank
+  if(fnSetPg) { //setting value, for either fn or option
     blankDisplay(4, 5);
-    //big tubes:
     if(fnSetValMax==1439) { //Time of day (0-1439 mins, 0:00–23:59): show hrs/mins
-      editDisplay(fnSetVal/60, 0, 1, EEPROM.read(optsLoc[4])); //hours with leading zero
+      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false)); //hours with leading zero
       editDisplay(fnSetVal%60, 2, 3, true);
     } else if(fnSetValMax==1080) { //Timer duration (0-1080 mins, up to 18:00): show hrs/mins w/minimal leading
       if(fnSetVal>=60) editDisplay(fnSetVal/60, 0, 1, false); else blankDisplay(0,1); //hour only if present, else blank
@@ -723,29 +740,29 @@ void updateDisplay(){
     } else editDisplay(fnSetVal, 0, 3, false); //some other type of value
   }
   else if(fn >= fnOpts){ //options menu, but not setting a value
-    editDisplay(fn-fnOpts+1,0,1,0); //display option number on hour tubes
+    editDisplay(fn-fnOpts+1,0,1,0); //display option number (1-index) on hour tubes
     blankDisplay(2,5);
   } else { //fn running
     switch(fn){
       case fnIsTime:
       byte hr; hr = tod.hour();
-        if(readEEPROM(optsLoc[1],false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
-        editDisplay(hr, 0, 1, readEEPROM(optsLoc[4],false));
+        if(readEEPROM(16,false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
+        editDisplay(hr, 0, 1, readEEPROM(19,false));
         editDisplay(tod.minute(), 2, 3, true);
-        if(EEPROM.read(optsLoc[3])==1) editDisplay(tod.day(), 4, 5, EEPROM.read(optsLoc[4])); //date
+        if(readEEPROM(18,false)==1) editDisplay(tod.day(), 4, 5, readEEPROM(19,false)); //date
         else editDisplay(tod.second(), 4, 5, true); //seconds
         break;
       case fnIsDate:
-      editDisplay(EEPROM.read(optsLoc[2])==1?tod.month():tod.day(), 0, 1, EEPROM.read(optsLoc[4]));
-        editDisplay(EEPROM.read(optsLoc[2])==1?tod.day():tod.month(), 2, 3, EEPROM.read(optsLoc[4]));
+        editDisplay(readEEPROM(17,false)==1?tod.month():tod.day(), 0, 1, readEEPROM(19,false));
+        editDisplay(readEEPROM(17,false)==1?tod.day():tod.month(), 2, 3, readEEPROM(19,false));
         blankDisplay(4, 4);
         editDisplay(toddow, 5, 5, false); //TODO is this 0=Sunday, 6=Saturday?
         break;
       case fnIsDayCount:
         long targetDayCount; targetDayCount = dateToDayCount(
-          readEEPROM(dayCountYearLoc,true),
-          readEEPROM(dayCountMonthLoc,false),
-          readEEPROM(dayCountDateLoc,false)
+          readEEPROM(3,true),
+          readEEPROM(5,false),
+          readEEPROM(6,false)
         );
         long currentDayCount; currentDayCount = dateToDayCount(tod.year(),tod.month(),tod.day());
         editDisplay(abs(targetDayCount-currentDayCount),0,3,false);
@@ -754,7 +771,7 @@ void updateDisplay(){
         break;
       case fnIsAlarm: //alarm
         //TODO this isn't a real display
-        editDisplay(0,0,1,EEPROM.read(optsLoc[4])); //hrs
+        editDisplay(0,0,1,readEEPROM(19,false)); //hrs
         editDisplay(0,2,3,true); //mins
         editDisplay(0,4,5,false); //status
         break;
