@@ -20,7 +20,7 @@ _In these instructions, **Select** is the main pushbutton, and **Adjust** can be
 | **Timer** | `__ __ _0` | A countdown timer, in hours, minutes, and seconds; or `0` when stopped. Can be set to the minute, up to 18 hours. Begins running as soon as you set it, and will continue to run in the background if you change to a different function. To cancel while running, hold **Select**. When timer runs out, press **Select** to silence. If power is lost, the timer will reset to `0`. |
 | **Day counter** | `_1 23 __` | Shows the number of days until/since a date you specify. Set the same way as **Date.** |
 | **Thermometer** | `__ 38 25` | Shows the temperature of the onboard DS3231 chip (e.g. 38.25°C – I think). May not be very useful as it tends to read higher than ambient temperature and its tolerance is low. |
-| **Cleaner** | `88 88 88` | Cycles all the digits on all the tubes. A quick and dirty anti-cathode-poisoning mode, until automatic digit cycling is implemented. |
+| **Tube tester** | `88 88 88` | Cycles through all the digits on all the tubes. |
 
 ### Options Menu
 
@@ -44,12 +44,12 @@ _In these instructions, **Select** is the main pushbutton, and **Adjust** can be
 | 9. Alarm tone pitch | [Note number on a piano keyboard](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8). Some are louder than others! |
 | 10. Timer interval mode | What happens when the timer reaches 0.<br/>0 = stop and sound continuously<br/>1 = restart and sound a single tone (interval timer) |
 | 11. Timer tone pitch | Set the same way as the alarm tone pitch, above. |
-| 12. Hourly strike | _Not yet implemented._<br/>0 = off<br/>1 = double tone<br/>2 = pips<br/>3 = strike the hour<br/>4 = ship's bell<br/>(Clocks without radio/timer control only. Will not sound during day-off or night-off.) |
+| 12. Hourly strike | 0 = off<br/>1 = single beep<br/>2 = pips<br/>3 = strike the hour<br/>4 = ship's bell<br/>(Clocks without radio/timer control only. Will not sound during day-off or night-off.) |
 | 13. Hourly strike pitch | Set the same way as the alarm tone pitch, above. |
 | | **Night-off and day-off** |
 | 14. Night-off | To save tube life and/or preserve your sleep, dim or shut off tubes nightly when you're not around or sleeping.<br/>0 = none (tubes fully on at night)<br/>1 = dim tubes at night<br/>2 = shut off tubes at night<br/>When off, you can press **Select** to illuminate the tubes briefly. |
 | 15. Night starts at | Time of day. |
-| 16. Night ends at | Time of day. Set to 0:00 to use the alarm time. At this time (whether night-off/alarm is enabled or not), all tubes will briefly cycle through all digits at full brightness to help prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm) _(not yet implemented)_. |
+| 16. Night ends at | Time of day. Set to 0:00 to use the alarm time. At this time (whether night-off/alarm is enabled or not), all tubes will briefly cycle through all digits at full brightness to help prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm). |
 | 17. Day-off | To further save tube life, shut off tubes during the day when you're not around.<br/>0 = none (tubes fully on during the day)<br/>1 = clock at work (shut off all day on weekends)<br/>2 = clock at home (shut off during work hours)<br/>When off, you can press **Select** to illuminuate the tubes briefly. |
 | 18. First day of work week | 0–6 (Sunday–Saturday) |
 | 19. Last day of work week | 0–6 (Sunday–Saturday) |

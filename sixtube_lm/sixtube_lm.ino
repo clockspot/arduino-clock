@@ -32,9 +32,9 @@ const byte fnIsAlarm = 2;
 const byte fnIsTimer = 3;
 const byte fnIsDayCount = 4;
 const byte fnIsTemp = 5;
-const byte fnIsCleaner = 6;
+const byte fnIsTubeTester = 6; //cycles all digits on all tubes 1/second, similar to anti-cathode-poisoning cleaner
 // functions enabled in this clock, in their display order. Only fnIsTime is required
-const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCount, fnIsTemp, fnIsCleaner};
+const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCount, fnIsTemp, fnIsTubeTester};
 
 // These are the RLB board connections to Arduino analog input pins.
 // S1/PL13 = Reset
@@ -171,6 +171,8 @@ word timerRemain = 0; //timer actual counter
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night-off or day-off) timeout counter, seconds
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
+byte cleanRemain = 11; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
+word cleanSpeed = 300; //ms
 
 
 ////////// Main code control //////////
@@ -183,9 +185,18 @@ void setup(){
   if(readInput(mainSel)==LOW) initEEPROM();
 }
 
-unsigned long pollLast = 0;
+unsigned long pollLast = 0; //every 50ms
+unsigned long pollCleanLast = 0; //every cleanSpeed ms
 void loop(){
   unsigned long now = millis();
+  //Handle tube cleaning. A special case since it runs at a speed outside the normal cycles as below
+  if(cleanRemain) {
+    if(pollCleanLast<now+cleanSpeed) {
+      pollCleanLast=now;
+      cleanRemain--;
+      updateDisplay();
+    }
+  }
   //Things done every 50ms - avoids overpolling(?) and switch bounce(?)
   if(pollLast<now+50) {
     pollLast=now;
@@ -623,8 +634,8 @@ void checkRTC(bool force){
     if(fnSetPg || fn>=fnOpts){
       if(pollLast-inputLast>120000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
     }
-    //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, or running timer)
-    else if(fn!=fnIsTime && fn!=fnIsCleaner && fn!=fnIsDayCount && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
+    //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, tester, or running/signaling timer)
+    else if(fn!=fnIsTime && fn!=fnIsTubeTester && fn!=fnIsDayCount && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
       if(pollLast>inputLast+5000) { fnSetPg = 0; fn = fnIsTime; force=true; }
     }
   }
@@ -649,10 +660,36 @@ void checkRTC(bool force){
             fnSetPg = 0; fn = fnIsTime; signalPitch = getHz(readEEPROM(39,false)); signalRemain = signalDur*60;
         } //end toddow check
       } //end alarm trigger
-      //checkDigitCycle();
+      //if it's the top or bottom of the hour, maybe do some striking
+      //TODO some of these could do with better timing than once per second (e.g. strike/2s and ship's bells in pairs)
+      if((tod.minute()==0 || tod.minute()==30) && signalType<2 && readEEPROM(21,false)>0 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {
+        signalPitch = getHz(readEEPROM(41,false));
+        byte hr; hr = tod.hour(); hr = (hr==0?12:(hr>12?hr-12:hr));
+        switch(readEEPROM(21,false)) {
+          case 1: //single beep via normal signal cycle
+            if(tod.minute()==0) signalRemain = 1; break;
+          case 2: //pips - directly play 500ms hour pip
+            if(tod.minute()==0 && signalType==0) tone(signalPin, signalPitch, 500); break;
+          case 3: //hour strike via normal signal cycle
+            if(tod.minute()==0) {
+              signalRemain = hr; break;
+            }
+          case 4: //ship's bell at :00 and :30 mins
+            hr = ((hr%4)*2)+(tod.minute()==30?1:0);
+          default: break;
+        } //end strike type
+      } //end striking
+      //check if we should trigger the cleaner (at night end time, or alarm time if night end is 0:00)
+      if(tod.hour()*60+tod.minute()==(readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true))) {
+        cleanRemain = 11; //loop() will pick this up
+      } //end cleaner check
     }
-    if(tod.second()==30 && fn==fnIsTime && fnSetPg==0) { //At bottom of minute, on fn time (not setting), maybe show date
+    if(tod.second()==30 && fn==fnIsTime && fnSetPg==0) { //At bottom of minute, maybe show date
       if(readEEPROM(18,false)==2) { fn = fnIsDate; inputLast = pollLast; }
+    }
+    if(tod.minute()==59 && tod.second()>=55 && signalType<2 && readEEPROM(21,false)==2 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {
+      //In last 5 seconds of hour, maybe do pips - directly play 100ms seconds pip
+      if(signalType==0) tone(signalPin, signalPitch, 100);
     }
     
     //Things to do every natural second (decrementing real-time counters)
@@ -770,7 +807,17 @@ void getHz(byte note){
 void updateDisplay(){
   //Run as needed to update display when the value being shown on it has changed
   //This formats the new value and puts it in displayNext[] for cycleDisplay() to pick up
-  if(fnSetPg) { //setting value, for either fn or option
+  if(cleanRemain) { //cleaning tubes
+    displayDim = 2;
+    byte digit = (11-cleanRemain)%10;
+    editDisplay(digit,0,0,true);
+    editDisplay(digit,1,1,true);
+    editDisplay(digit,2,2,true);
+    editDisplay(digit,3,3,true);
+    editDisplay(digit,4,4,true);
+    editDisplay(digit,5,5,true);
+  }
+  else if(fnSetPg) { //setting value, for either fn or option
     displayDim = 2;
     blankDisplay(4, 5);
     if(fnSetValMax==1439) { //Time of day (0-1439 mins, 0:00–23:59): show hrs/mins
@@ -789,7 +836,8 @@ void updateDisplay(){
     displayDim = 2;
     editDisplay(fn-fnOpts+1,0,1,0); //display option number (1-index) on hour tubes
     blankDisplay(2,5);
-  } else { //fn running
+  }
+  else { //fn running
     //Set displayDim per night-off and day-off settings - fnIsAlarm may override this
     word todmins = tod.hour()*60+tod.minute();
     if(unoffDur > 0) {
@@ -852,7 +900,7 @@ void updateDisplay(){
         editDisplay(abs(temp)/100,1,3,(temp<0?true:false)); //leading zeros if negative
         editDisplay(abs(temp)%100,4,5,true);
         break;
-      case fnIsCleaner:
+      case fnIsTubeTester:
         editDisplay(tod.second(),0,0,true);
         editDisplay(tod.second(),1,1,true);
         editDisplay(tod.second(),2,2,true);
