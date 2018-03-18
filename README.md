@@ -41,11 +41,11 @@ _In these instructions, **Select** is the main pushbutton, and **Adjust** can be
 | | **Alarms and sounds** |
 | 7. Alarm days | 0 = every day<br/>1 = work week only (per settings below)<br/>2 = weekend only |
 | 8. Alarm snooze | 0–60 minutes. 0 disables snooze. |
-| 9. Alarm tone pitch | _Not yet implemented._<br/>[Note number on a piano keyboard](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8). Some are louder than others. |
+| 9. Alarm tone pitch | [Note number on a piano keyboard](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8). Some are louder than others! |
 | 10. Timer interval mode | What happens when the timer reaches 0.<br/>0 = stop and sound continuously<br/>1 = restart and sound a single tone (interval timer) |
-| 11. Timer tone pitch | _Not yet implemented._<br/>Set the same way as the alarm tone pitch, above. |
+| 11. Timer tone pitch | Set the same way as the alarm tone pitch, above. |
 | 12. Hourly strike | _Not yet implemented._<br/>0 = off<br/>1 = double tone<br/>2 = pips<br/>3 = strike the hour<br/>4 = ship's bell<br/>(Clocks without radio/timer control only. Will not sound during day-off or night-off.) |
-| 13. Hourly strike pitch | _Not yet implemented._<br/>Set the same way as the alarm tone pitch, above. |
+| 13. Hourly strike pitch | Set the same way as the alarm tone pitch, above. |
 | | **Night-off and day-off** |
 | 14. Night-off | To save tube life and/or preserve your sleep, dim or shut off tubes nightly when you're not around or sleeping.<br/>0 = none (tubes fully on at night)<br/>1 = dim tubes at night<br/>2 = shut off tubes at night<br/>When off, you can press **Select** to illuminate the tubes briefly. |
 | 15. Night starts at | Time of day. |

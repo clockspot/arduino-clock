@@ -3,7 +3,6 @@
 // Originally written by Robin Birtles and Chris Gerekos based on http://arduinix.com/Main/Code/ANX-6Tube-Clock-Crossfade.txt
 // Refactored and expanded by Luke McKenzie (luke@theclockspot.com)
 
-// TODO: Alarm - display, set, sound, snooze, 24h silence
 // TODO: Timer - display, set, run, sound, silence - make non-volatile?
 // TODO: Cathode anti-poisoning
 // TODO: implement other setup options
@@ -69,16 +68,19 @@ const char mainAdjFn = -1;
 // const byte altAdjFn = -1;
 
 const byte enableSoftAlarmSwitch = 1;
-// 1 = yes. Use if using the integrated beeper or another non-switched device (bell solenoid, etc).
+// 1 = yes. Use if using the integrated piezo or another non-switched device (bell solenoid, etc).
 // 0 = no. Use if the connected alarm device has its own switch (e.g. clock radio function switch).
 //     Alarm will be permanently on in software.
-const byte alarmRadio = 0;
-// 0 = no. Alarm output is connected to the onboard piezoelectric beeper or similar signal device.
-//     When alarm and timer go off, it will output a beep pattern for alarmDur minutes.
-// 1 = yes. Alarm output is connected to a relay to switch other equipment (like a radio).
-//     When alarm goes off, output will stay on for alarmDur minutes (120 is common).
+const byte signalPin = 10;
+const byte signalType = 0;
+//What is the signal pin connected to?
+// 0 = Piezo. When alarm and timer go off, it will output a beep pattern with tone() for signalDur minutes.
+// 1 = Signal relay TODO. Same as above, but it will simply switch the pin, for e.g. a solenoid.
+// 2 = Radio relay TODO.
+//     When alarm goes off, output will stay on for signalDur minutes (120 is common).
 //     When timer is running, output will stay on until timer runs down.
-const byte alarmDur = 1;
+const word signalBeepDur = 500; //With signalType 0/1, beeps happen once per second; how long is each beep in ms?
+const byte signalDur = 1; //When alarm goes off (and timer, with signalType 0/1), how many mins does signal run for?
 
 const byte unoffDur = 10; //when display is dim/off, a press will light the tubes for this many seconds
 
@@ -161,7 +163,8 @@ bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
 word fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
 
 // Volatile running values
-word soundRemain = 0; //alarm/timer sound timeout counter, seconds
+word signalRemain = 0; //alarm/timer signal timeout counter, seconds
+word signalPitch = 440; //which pitch to use - set by what started the signal going
 word snoozeRemain = 0; //snooze timeout counter, seconds
 word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,800 seconds - fits just inside a word)
 word timerRemain = 0; //timer actual counter
@@ -285,7 +288,7 @@ void checkRot(){
 
 ////////// Input handling and value setting //////////
 
-bool stoppingSound = false; //Special stuff (snooze canceling) happens right after a press that silences the sound
+bool stoppingSignal = false; //Special stuff (snooze canceling) happens right after a press that silences the signal
 void ctrlEvt(byte ctrl, byte evt){
   //Handle control events (from checkBtn or checkRot), based on current fn and set state.
   //evt: 1=press, 2=short hold, 3=long hold, 0=release.
@@ -293,21 +296,22 @@ void ctrlEvt(byte ctrl, byte evt){
   //But we can handle short and long holds and releases for the sel ctrls (always buttons).
   //TODO needs alt handling
   
-  //Before all else, is it a press while the beeper is sounding? Silence it
-  if(soundRemain>0 && evt==1){
-    stoppingSound = true;
-    soundRemain = 0;
-    noTone(10);
+  //Before all else, is it a press to stop the signal? Silence it
+  if(signalRemain>0 && evt==1){
+    stoppingSignal = true;
+    signalRemain = 0;
+    if(signalType==0) noTone(signalPin);
     //If we're displaying the clock (as alarm trigger does), start snooze. 0 will have no effect
     if(fn==fnIsTime) snoozeRemain = readEEPROM(24,false)*60;
     return;
   }
   //After pressing to silence, short hold cancels a snooze; ignore other btn evts
-  if(stoppingSound){
-    stoppingSound = false;
+  if(stoppingSignal){
+    stoppingSignal = false;
     if(evt==2 && snoozeRemain>0) {
       snoozeRemain = 0;
-      tone(10, 3136, 100); //G7
+      //A short beep at alarm pitch. Use signalBeepDur or 100ms, whichever is smaller
+      if(signalType==0) tone(signalPin, getHz(readEEPROM(39,false)), (signalBeepDur<100?signalBeepDur:100));
     }
     btnStop();
     return;
@@ -620,7 +624,7 @@ void checkRTC(bool force){
       if(pollLast-inputLast>120000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
     }
     //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, or running timer)
-    else if(fn!=fnIsTime && fn!=fnIsCleaner && fn!=fnIsDayCount && !(fn==fnIsTimer && (timerRemain>0 || soundRemain>0))){
+    else if(fn!=fnIsTime && fn!=fnIsCleaner && fn!=fnIsDayCount && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
       if(pollLast>inputLast+5000) { fnSetPg = 0; fn = fnIsTime; force=true; }
     }
   }
@@ -642,7 +646,7 @@ void checkRTC(bool force){
         if(readEEPROM(23,false)==0 || //any day of the week
           (readEEPROM(23,false)==1 && toddow>=readEEPROM(33,false) && toddow<=readEEPROM(34,false)) || //weekday only
           (readEEPROM(23,false)==2 && toddow<readEEPROM(33,false) && toddow>readEEPROM(34,false))) { //weekend only
-            fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60;
+            fnSetPg = 0; fn = fnIsTime; signalPitch = getHz(readEEPROM(39,false)); signalRemain = signalDur*60;
         } //end toddow check
       } //end alarm trigger
       //checkDigitCycle();
@@ -657,26 +661,26 @@ void checkRTC(bool force){
       if(timerRemain>0) {
         timerRemain--;
         if(timerRemain<=0) { //timer has elasped
-          if(readEEPROM(25,false)) { //interval timer: sound for 1sec and restart; don't change to timer fn
-            soundRemain = 1; timerRemain = timerInitial;
+          signalPitch = getHz(readEEPROM(40,false));
+          if(readEEPROM(25,false)) { //interval timer: a short signal and restart; don't change to timer fn
+            signalRemain = 1; timerRemain = timerInitial;
           } else {
-            fnSetPg = 0; fn = fnIsTimer; inputLast = pollLast; soundRemain = alarmDur*60;
+            fnSetPg = 0; fn = fnIsTimer; inputLast = pollLast; signalRemain = signalDur*60;
           }
           //TODO radio mode
         } //end timer elapsed
       }
-      //If beeper has time on it, decrement and sound the beeper for 1/2 second
-      if(soundRemain>0) {
-        soundRemain--;
-        //tone(10, 1568, 500); //G6
-        tone(10, 1760, 500); //A6
-        //tone(10, 1976, 500); //B6
-        //tone(10, 2093, 500); //C7
-      }
       //If alarm snooze has time on it, decrement and trigger beeper if we reach zero (and alarm is still on)
       if(snoozeRemain>0) {
         snoozeRemain--;
-        if(snoozeRemain<=0 && readEEPROM(2,false)) { fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60; }
+        if(snoozeRemain<=0 && readEEPROM(2,false)) {
+          fnSetPg = 0; fn = fnIsTime; signalPitch = getHz(readEEPROM(39,false)); signalRemain = signalDur*60;
+        }
+      }
+      //If signal has time on it, decrement and make a beep
+      if(signalRemain>0) {
+        signalRemain--;
+        if(signalType==0) tone(signalPin, signalPitch, signalBeepDur);
       }
       if(unoffRemain>0) {
         unoffRemain--; //updateDisplay will naturally put it back to off state if applicable
@@ -776,6 +780,9 @@ void updateDisplay(){
       if(fnSetVal>=60) editDisplay(fnSetVal/60, 0, 1, false); else blankDisplay(0,1); //hour only if present, else blank
       editDisplay(fnSetVal%60, 2, 3, (fnSetVal>=60?true:false)); //leading zero only if hour present
       editDisplay(0,4,5,true); //placeholder seconds
+    } else if(fnSetValMax==88) { //A piezo pitch. Play a short demo beep.
+      editDisplay(fnSetVal, 0, 3, false);
+      if(signalType==0) tone(signalPin, getHz(fnSetVal), (signalBeepDur<100?signalBeepDur:100));
     } else editDisplay(fnSetVal, 0, 3, false); //some other type of value
   }
   else if(fn >= fnOpts){ //options menu, but not setting a value
