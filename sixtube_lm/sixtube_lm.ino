@@ -313,7 +313,7 @@ void ctrlEvt(byte ctrl, byte evt){
     stoppingSignal = true;
     signalRemain = 0;
     if(signalType==0) noTone(signalPin);
-    //If we're displaying the clock (as alarm trigger does), start snooze. 0 will have no effect
+    //If we're displaying the clock (as alarm trigger does), start snooze. 0 will have no effect. TODO chime may trigger this also?
     if(fn==fnIsTime) snoozeRemain = readEEPROM(24,false)*60;
     return;
   }
@@ -690,7 +690,7 @@ void checkRTC(bool force){
         case 1: //single beep via normal signal cycle
           if(tod.minute()==0) signalRemain = 1; break;
         case 2: //long pip
-          if(tod.minute()==0) tone(signalPin, signalPitch, (signalType==0?500:signalBeepDur));
+          if(tod.minute()==0) tone(signalPin, signalPitch, (signalType==0?500:signalBeepDur)); break;
         case 3: //hour strike via normal signal cycle
           if(tod.minute()==0) signalRemain = hr; break;
         case 4: //ship's bell at :00 and :30 mins
