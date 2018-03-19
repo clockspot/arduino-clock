@@ -34,7 +34,7 @@ const byte fnIsDayCount = 4;
 const byte fnIsTemp = 5;
 const byte fnIsTubeTester = 6; //cycles all digits on all tubes 1/second, similar to anti-cathode-poisoning cleaner
 // functions enabled in this clock, in their display order. Only fnIsTime is required
-const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCount, fnIsTemp, fnIsTubeTester};
+const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCount}; //, fnIsTemp, fnIsTubeTester
 
 // These are the RLB board connections to Arduino analog input pins.
 // S1/PL13 = Reset
@@ -89,9 +89,9 @@ const byte displaySize = 6; //number of tubes
 // How long (in ms) are the button hold durations?
 const word btnShortHold = 1000; //for setting the displayed feataure
 const word btnLongHold = 3000; //for for entering options menu
-const byte velThreshold = 100; //ms
+const byte velThreshold = 150; //ms
 // When an adj up/down input (btn or rot) follows another in less than this time, value will change more (10 vs 1).
-// Recommend ~100 for rotaries. If you want to use this feature with buttons, extend to ~400.
+// Recommend ~150 for rotaries. If you want to use this feature with buttons, extend to ~400.
 
 
 ////////// Other global consts and vars //////////
@@ -172,7 +172,7 @@ word unoffRemain = 0; //un-off (briefly turn on tubes during full night-off or d
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 byte cleanRemain = 11; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
-word cleanSpeed = 300; //ms
+word cleanSpeed = 200; //ms
 
 
 ////////// Main code control //////////
@@ -191,19 +191,18 @@ void loop(){
   unsigned long now = millis();
   //Handle tube cleaning. A special case since it runs at a speed outside the normal cycles as below
   if(cleanRemain) {
-    if(pollCleanLast<now+cleanSpeed) {
+    if(pollCleanLast+cleanSpeed<now) {
       pollCleanLast=now;
       cleanRemain--;
       updateDisplay();
     }
   }
   //Things done every 50ms - avoids overpolling(?) and switch bounce(?)
-  if(pollLast<now+50) {
+  if(pollLast+20<now) {
     pollLast=now;
     checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
     checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
     doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
-    //cycleBellTone(); //if beeper is making a bell tone noise, continue to "animate" its decay TODO
   }
   //Things done every loop cycle
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
@@ -285,13 +284,15 @@ void checkRot(){
     AdaEncoder *thisEncoder=NULL;
     thisEncoder = AdaEncoder::genie();
     if(thisEncoder!=NULL) {
-      inputLast2 = inputLast; inputLast = millis();
+      unsigned long inputThis = millis();
+      if(inputThis-inputLast < 70) return; //ignore inputs that come faster than a human could rotate
       int8_t clicks = thisEncoder->query(); //signed number of clicks it has moved
       byte dir = (clicks<0?0:1);
       clicks = abs(clicks);
       for(byte i=0; i<clicks; i++){ //in case of more than one click
         ctrlEvt((thisEncoder->getID()=='a'?(dir?mainAdjUp:mainAdjDn):(dir?altAdjUp:altAdjDn)),1);
       }
+      inputLast2 = inputLast; inputLast = inputThis;
     }
   }
 }//end checkRot
@@ -399,6 +400,9 @@ void ctrlEvt(byte ctrl, byte evt){
     else { //fn setting
       if(evt==1) { //we respond only to press evts during fn setting
         //TODO could we do release/shorthold on mainSel so we can exit without making changes?
+        //currently no, because we don't btnStop() when short hold goes into fn setting, in case long hold may go to options menu
+        //so we can't handle a release because it would immediately save if releasing from the short hold.
+        //Consider recording the btn start time when going into fn setting so we can distinguish its release from a future one
         if(ctrl==mainSel) { //mainSel push: go to next option or save and exit setting mode
           btnStop(); //not waiting for mainSelHold, so can stop listening here
           //We will set ds3231 time parts directly
@@ -574,18 +578,19 @@ word readEEPROM(int loc, bool isWord){
 void writeEEPROM(int loc, int val, bool isWord){
   if(isWord) {
     Serial.print(F("EEPROM write word:"));
+    Serial.print(F(" loc ")); Serial.print(loc,DEC);
     if(EEPROM.read(loc)!=highByte(val)) {
       EEPROM.write(loc,highByte(val));
-      Serial.print(F(" loc ")); Serial.print(loc,DEC);
       Serial.print(F(" val ")); Serial.print(highByte(val),DEC);
-    } else Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" unchanged (no write)."));
+    } else Serial.print(F(" unchanged (no write)."));
+    Serial.print(F(" loc ")); Serial.print(loc+1,DEC);
     if(EEPROM.read(loc+1)!=lowByte(val)) {
       EEPROM.write(loc+1,lowByte(val));
-      Serial.print(F(" loc ")); Serial.print(loc+1,DEC);
       Serial.print(F(" val ")); Serial.print(lowByte(val),DEC);
-    } else Serial.print(F(" loc ")); Serial.print(loc+1,DEC); Serial.print(F(" unchanged (no write)."));
+    } else Serial.print(F(" unchanged (no write)."));
   } else {
-    Serial.print(F("EEPROM write byte:")); Serial.print(F(" loc ")); Serial.print(loc,DEC);
+    Serial.print(F("EEPROM write byte:"));
+    Serial.print(F(" loc ")); Serial.print(loc,DEC);
     if(EEPROM.read(loc)!=val) { EEPROM.write(loc,val);
       Serial.print(F(" val ")); Serial.print(val,DEC);
     } else Serial.print(F(" unchanged (no write)."));
@@ -649,48 +654,50 @@ void checkRTC(bool force){
     if(force && rtcSecLast != tod.second()) force=false; //in the odd case it's BOTH, recognize the natural second
     rtcSecLast = tod.second();
     
+    //Things to do at specific times
     if(tod.second()==0) { //at top of minute
       //at 2am, check for DST change
       if(tod.minute()==0 && tod.hour()==2) autoDST();
       //check if we should trigger the alarm - if the time is right and the alarm is on...
       if(tod.hour()*60+tod.minute()==readEEPROM(0,true) && readEEPROM(2,false)) {
         if(readEEPROM(23,false)==0 || //any day of the week
-          (readEEPROM(23,false)==1 && toddow>=readEEPROM(33,false) && toddow<=readEEPROM(34,false)) || //weekday only
-          (readEEPROM(23,false)==2 && toddow<readEEPROM(33,false) && toddow>readEEPROM(34,false))) { //weekend only
+          (readEEPROM(23,false)==1 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow)) || //weekday only
+          (readEEPROM(23,false)==2 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow)) ) { //weekend only
             fnSetPg = 0; fn = fnIsTime; signalPitch = getHz(readEEPROM(39,false)); signalRemain = signalDur*60;
         } //end toddow check
       } //end alarm trigger
-      //if it's the top or bottom of the hour, maybe do some striking
-      //TODO some of these could do with better timing than once per second (e.g. strike/2s and ship's bells in pairs)
-      if((tod.minute()==0 || tod.minute()==30) && signalType<2 && readEEPROM(21,false)>0 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {
-        signalPitch = getHz(readEEPROM(41,false));
-        byte hr; hr = tod.hour(); hr = (hr==0?12:(hr>12?hr-12:hr));
-        switch(readEEPROM(21,false)) {
-          case 1: //single beep via normal signal cycle
-            if(tod.minute()==0) signalRemain = 1; break;
-          case 2: //pips - directly play 500ms hour pip
-            if(tod.minute()==0 && signalType==0) tone(signalPin, signalPitch, 500); break;
-          case 3: //hour strike via normal signal cycle
-            if(tod.minute()==0) {
-              signalRemain = hr; break;
-            }
-          case 4: //ship's bell at :00 and :30 mins
-            hr = ((hr%4)*2)+(tod.minute()==30?1:0);
-          default: break;
-        } //end strike type
-      } //end striking
       //check if we should trigger the cleaner (at night end time, or alarm time if night end is 0:00)
       if(tod.hour()*60+tod.minute()==(readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true))) {
         cleanRemain = 11; //loop() will pick this up
       } //end cleaner check
+      //
     }
-    if(tod.second()==30 && fn==fnIsTime && fnSetPg==0) { //At bottom of minute, maybe show date
+    if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0) { //At bottom of minute, maybe show date - not when unoffing
       if(readEEPROM(18,false)==2) { fn = fnIsDate; inputLast = pollLast; }
     }
-    if(tod.minute()==59 && tod.second()>=55 && signalType<2 && readEEPROM(21,false)==2 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {
-      //In last 5 seconds of hour, maybe do pips - directly play 100ms seconds pip
-      if(signalType==0) tone(signalPin, signalPitch, 100);
+    
+    //Strikes - only if fn=clock, not setting, not night-off/day-off, and appropriate signal type.
+    //Short pips before the top of the hour
+    if(tod.minute()==59 && tod.second()>=55 && readEEPROM(21,false)==2 && signalType<2 && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {
+      signalPitch = getHz(readEEPROM(41,false));
+      tone(signalPin, signalPitch, (signalType==0?100:signalBeepDur));
     }
+    //Strikes on/after the hour
+    if(tod.second()==0 && (tod.minute()==0 || tod.minute()==30) && signalType<2 && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2){
+      signalPitch = getHz(readEEPROM(41,false));
+      byte hr; hr = tod.hour(); hr = (hr==0?12:(hr>12?hr-12:hr));
+      switch(readEEPROM(21,false)) {
+        case 1: //single beep via normal signal cycle
+          if(tod.minute()==0) signalRemain = 1; break;
+        case 2: //long pip
+          tone(signalPin, signalPitch, (signalType==0?500:signalBeepDur));
+        case 3: //hour strike via normal signal cycle
+          if(tod.minute()==0) signalRemain = hr; break;
+        case 4: //ship's bell at :00 and :30 mins
+          signalRemain = ((hr%4)*2)+(tod.minute()==30?1:0); break;
+        default: break;
+      } //end strike type
+    } //end strike
     
     //Things to do every natural second (decrementing real-time counters)
     if(!force) {
@@ -724,7 +731,8 @@ void checkRTC(bool force){
       }
     } //end natural second
     
-    //Finally, whether natural tick or not, if we're not setting anything, update the display
+    //Finally, whether natural tick or not, if we're not setting anything, update the display.
+    //This also determines night-off/day-off, which is why chimes will happen if we go into off at top of hour TODO find a way to fix this
     if(fnSetPg==0) updateDisplay();
     
   } //end if force or new second
@@ -775,6 +783,8 @@ void switchAlarm(char dir){
     if(dir==1) writeEEPROM(2,1,false);
     if(dir==-1) writeEEPROM(2,0,false);
     if(dir==0) writeEEPROM(2,!readEEPROM(2,false),false);
+    snoozeRemain = 0;
+    updateDisplay();
   }
 }
 
@@ -800,6 +810,18 @@ word getHz(byte note){
 //     }
 //   }
 // }
+
+bool isTimeInRange(word tstart, word tend, word ttest) {
+  //Times are in minutes since midnight, 0-1439
+  //if tstart < tend, ttest is in range if >= tstart AND < tend
+  //if tstart > tend (range passes a midnight), ttest is in range if >= tstart OR < tend
+  //if tstart == tend, no ttest is in range
+  return ( (tstart<tend && ttest>=tstart && ttest<tend) || (tstart>tend && (ttest>=tstart || ttest<tend)) );
+}
+bool isDayInRange(byte dstart, byte dend, byte dtest) {
+  //Similar to isTimeInRange, only the range is inclusive in both ends (always minimum 1 day match)
+  return ( (dstart<=dend && dtest>=dstart && dtest<=dend) || (dstart>dend && (dtest>=dstart || dtest<=dend)) );
+}
 
 ////////// Display data formatting //////////
 void updateDisplay(){
@@ -836,17 +858,22 @@ void updateDisplay(){
     blankDisplay(2,5);
   }
   else { //fn running
+    
     //Set displayDim per night-off and day-off settings - fnIsAlarm may override this
+    //issue: moving from off alarm to next fn briefly shows alarm in full brightness. I think because of the display delays. TODO
     word todmins = tod.hour()*60+tod.minute();
-    if(unoffDur > 0) {
-      displayDim = 2;
-    } else if(readEEPROM(27,false) && (todmins>=readEEPROM(28,true) || todmins<(readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)))) { //night-off
-      displayDim = (readEEPROM(27,false)==1?1:0); //dim or off
-    } else if(readEEPROM(32,false)==1 && toddow<readEEPROM(33,false) && toddow>readEEPROM(34,false)) { //day-off all day on weekends
-      displayDim = 0;
-    } else if(readEEPROM(32,false)==2 && toddow>=readEEPROM(33,false) && toddow<=readEEPROM(34,false) && todmins>=readEEPROM(35,true) && todmins<readEEPROM(37,true)) { //day-off during office hours
-      displayDim = 0;
-    } else displayDim = 2;
+    //In order of precedence:
+    //temporary unoff
+    if(unoffRemain > 0) displayDim = 2;
+    //day-off on weekends, all day
+    else if( readEEPROM(32,false)==1 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) ) displayDim = 0;
+    //day-off on weekdays, during office hours only
+    else if( readEEPROM(32,false)==2 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) && isTimeInRange(readEEPROM(35,true), readEEPROM(37,true), todmins) ) displayDim = 0;
+    //night-off - if night end is 0:00, use alarm time instead
+    else if( readEEPROM(27,false) && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins) ) displayDim = (readEEPROM(27,false)==1?1:0); //dim or off
+    //normal
+    else displayDim = 2;
+    
     switch(fn){
       case fnIsTime:
         byte hr; hr = tod.hour();
