@@ -780,12 +780,10 @@ void switchAlarm(char dir){
 
 word getHz(byte note){
   //Given a piano key note, return frequency
-  //TODO (note-basenote)/12 resolves to a float...
-  return 440*(2^((note-49)/12));
-  //37 = 220 A3
-  //49 = 440 A4
-  //56 = 659.2 E5
-  //61 = 880 A5
+  char relnote = note-49; //signed, relative to concert A
+  float reloct = relnote/12.0; //signed
+  word mult = 440*pow(2,reloct);
+  return mult;
 }
 //Sometimes we activate the beeper directly (e.g. pips) but most of the time we make a bell tone TODO
 // char curBellToneLevel; //support negative just in case
