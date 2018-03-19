@@ -690,7 +690,7 @@ void checkRTC(bool force){
         case 1: //single beep via normal signal cycle
           if(tod.minute()==0) signalRemain = 1; break;
         case 2: //long pip
-          tone(signalPin, signalPitch, (signalType==0?500:signalBeepDur));
+          if(tod.minute()==0) tone(signalPin, signalPitch, (signalType==0?500:signalBeepDur));
         case 3: //hour strike via normal signal cycle
           if(tod.minute()==0) signalRemain = hr; break;
         case 4: //ship's bell at :00 and :30 mins
