@@ -3,8 +3,7 @@
 // Originally written by Robin Birtles and Chris Gerekos based on http://arduinix.com/Main/Code/ANX-6Tube-Clock-Crossfade.txt
 // Refactored and expanded by Luke McKenzie (luke@theclockspot.com)
 
-// TODO: Alarm - display, set, sound, snooze, 24h silence
-// TODO: Timer - display, set, run, sound, silence
+// TODO: Timer - display, set, run, sound, silence - make non-volatile?
 // TODO: Cathode anti-poisoning
 // TODO: implement other setup options
 
@@ -33,9 +32,9 @@ const byte fnIsAlarm = 2;
 const byte fnIsTimer = 3;
 const byte fnIsDayCount = 4;
 const byte fnIsTemp = 5;
-const byte fnIsCleaner = 6;
+const byte fnIsTubeTester = 6; //cycles all digits on all tubes 1/second, similar to anti-cathode-poisoning cleaner
 // functions enabled in this clock, in their display order. Only fnIsTime is required
-const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsTimer, fnIsDayCount, fnIsTemp, fnIsCleaner};
+const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCount}; //, fnIsTemp, fnIsTubeTester
 
 // These are the RLB board connections to Arduino analog input pins.
 // S1/PL13 = Reset
@@ -69,54 +68,86 @@ const char mainAdjFn = -1;
 // const byte altAdjFn = -1;
 
 const byte enableSoftAlarmSwitch = 1;
-// 1 = yes. Use if using the integrated beeper or another non-switched device (bell solenoid, etc).
+// 1 = yes. Use if using the integrated piezo or another non-switched device (bell solenoid, etc).
 // 0 = no. Use if the connected alarm device has its own switch (e.g. clock radio function switch).
 //     Alarm will be permanently on in software.
-const byte alarmRadio = 0;
-// 0 = no. Alarm output is connected to the onboard piezoelectric beeper or similar signal device.
-//     When alarm and timer go off, it will output a beep pattern for alarmDur minutes.
-// 1 = yes. Alarm output is connected to a relay to switch other equipment (like a radio).
-//     When alarm goes off, output will stay on for alarmDur minutes (120 is common).
+const byte signalPin = 10;
+const byte signalType = 0;
+//What is the signal pin connected to?
+// 0 = Piezo. When alarm and timer go off, it will output a beep pattern with tone() for signalDur minutes.
+// 1 = Signal relay TODO. Same as above, but it will simply switch the pin, for e.g. a solenoid.
+// 2 = Radio relay TODO.
+//     When alarm goes off, output will stay on for signalDur minutes (120 is common).
 //     When timer is running, output will stay on until timer runs down.
-const byte alarmDur = 1;
+const word signalBeepDur = 500; //With signalType 0/1, beeps happen once per second; how long is each beep in ms?
+const byte signalDur = 1; //When alarm goes off (and timer, with signalType 0/1), how many mins does signal run for?
+
+const byte unoffDur = 10; //when display is dim/off, a press will light the tubes for this many seconds
 
 const byte displaySize = 6; //number of tubes
 
 // How long (in ms) are the button hold durations?
 const word btnShortHold = 1000; //for setting the displayed feataure
 const word btnLongHold = 3000; //for for entering options menu
-const byte velThreshold = 100; //ms
+const byte velThreshold = 150; //ms
 // When an adj up/down input (btn or rot) follows another in less than this time, value will change more (10 vs 1).
-// Recommend ~100 for rotaries. If you want to use this feature with buttons, extend to ~400.
-
-//EEPROM locations for set values - default values are in initEEPROM()
-//const byte alarmTimeLoc = 0; //and 1 (word) in minutes past midnight.
-//const byte alarmOnLoc = 2; //byte
-const byte dayCountYearLoc = 3; //and 4 (word)
-const byte dayCountMonthLoc = 5; //byte
-const byte dayCountDateLoc = 6; //byte
-
-//EEPROM locations and default values for options menu
-//Option numbers are 1-index, so arrays are padded to be 1-index too, for coding convenience. TODO change this
-//Most vals (default, min, max) are 1-byte. In case of two-byte (max-min>255), high byte is loc, low byte is loc+1.
-//options are offset to loc 16, to reserve 16 bytes of space for other set values per above
-//       Option number: -  1  2  3  4  5  6  7  8  9  10 11   12   13 14 15 16   17   18
-const byte optsLoc[] = {0,16,17,18,19,20,21,22,23,24, 25,27,  28,  30,32,33,34,  35,  37}; //EEPROM locs
-const word optsDef[] = {0, 2, 1, 0, 0, 0, 0, 0, 0, 0,500, 0,1320, 360, 0, 1, 5, 480,1020};
-const word optsMin[] = {0, 1, 1, 0, 0, 0, 0, 0, 0, 0,  1, 0,   0,   0, 0, 0, 0,   0,   0};
-const word optsMax[] = {0, 2, 2, 2, 1,50, 1, 6, 4,60,999, 2,1439,1439, 2, 6, 6,1439,1439};
+// Recommend ~150 for rotaries. If you want to use this feature with buttons, extend to ~400.
 
 
-////////// Other global consts and vars used in multiple sections //////////
+////////// Other global consts and vars //////////
 
+/*EEPROM locations
+These should be permanently associated with a value (unless deprecated and reused).
+We could name them all with consts for coding convenience, but for now just using directly in code.
+Most values in the clock are 1-byte; if 2-byte, high byte is loc, low byte is loc+1.
+These ones are set outside the options menu - defaults defined in initEEPROM()
+  0-1 Alarm time, mins
+  2 Alarm on
+  3-4 Day count year
+  5 Day count month
+  6 Day count date
+( 7-15 are available )
+These ones are set inside the options menu - defaults defined in arrays below
+  16 Time format
+  17 Date format 
+  18 Display date during time
+  19 Leading zero in hour, date, and month
+  20 Digit fade duration TODO
+  21 Hourly strike TODO
+  22 Auto DST
+  23 Alarm days
+  24 Alarm snooze
+  25 Timer interval mode TODO
+( 26 is available )
+  27 Night-off TODO
+  28-29 Night start, mins TODO
+  30-31 Night end, mins TODO
+  32 Day-off TODO
+  33 First day of workweek
+  34 Last day of workweek
+  35-36 Work starts at, mins TODO
+  37-38 Work ends at, mins TODO
+  39 Alarm tone pitch TODO
+  40 Timer tone pitch TODO
+  41 Hourly strike pitch TODO
+*/
+
+//Options menu options' EEPROM locations and default/min/max values. Numbers (and pos in these arrays) 
+//Although these arrays are 0-index, the option number displayed (and listed in readme) is 1-index. (see "fn-fnOpts+1")
+//Options' numbers may be changed by reordering these arrays (and changing readme accordingly).
+//        Option number: 1  2  3  4  5  6  7  8  9 10 11 12 13 14   15   16 17 18 19   20   21
+const byte optsLoc[] = {16,17,18,19,20,22,23,24,39,25,40,21,41,27,  28,  30,32,33,34,  35,  37};
+const word optsDef[] = { 2, 1, 0, 0, 0, 0, 0, 0,61, 0,61, 0,61, 0,1320, 360, 0, 1, 5, 480,1020};
+const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0,49, 0,49, 0,49, 0,   0,   0, 0, 0, 0,   0,   0};
+const word optsMax[] = { 2, 2, 2, 1,50, 6, 2,60,88, 1,88, 4,88, 2,1439,1439, 2, 6, 6,1439,1439};
+
+//RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
 RTClib rtc; //an object to access a snapshot of the ds3231 rtc via now()
 DateTime tod; //stores the now() snapshot for several functions to use
 byte toddow; //stores the day of week as calculated from tod
 
 // Hardware inputs and value setting
-//AdaEncoder mainRot;
-//AdaEncoder altRot;
 byte btnCur = 0; //Momentary button currently in use - only one allowed at a time
 byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=set by btnStop()
 unsigned long inputLast = 0; //When a button was last pressed
@@ -132,13 +163,16 @@ bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
 word fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
 
 // Volatile running values
-word alarmTime = 0; //alarm time of day TODO move these to alarmTimeLoc and alarmOnLoc
-bool alarmOn = 0; //alarm switch
-word soundRemain = 0; //alarm/timer sound timeout counter, seconds
+word signalRemain = 0; //alarm/timer signal timeout counter, seconds
+word signalPitch = 440; //which pitch to use - set by what started the signal going
 word snoozeRemain = 0; //snooze timeout counter, seconds
 word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,800 seconds - fits just inside a word)
 word timerRemain = 0; //timer actual counter
+word unoffRemain = 0; //un-off (briefly turn on tubes during full night-off or day-off) timeout counter, seconds
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
+byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
+byte cleanRemain = 11; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
+word cleanSpeed = 200; //ms
 
 
 ////////// Main code control //////////
@@ -148,15 +182,23 @@ void setup(){
   Wire.begin();
   initOutputs();
   initInputs();
-  if(!enableSoftAlarmSwitch) alarmOn=1; //TODO test and get rid of
   if(readInput(mainSel)==LOW) initEEPROM();
 }
 
-unsigned long pollLast = 0;
+unsigned long pollLast = 0; //every 50ms
+unsigned long pollCleanLast = 0; //every cleanSpeed ms
 void loop(){
   unsigned long now = millis();
+  //Handle tube cleaning. A special case since it runs at a speed outside the normal cycles as below
+  if(cleanRemain) {
+    if(pollCleanLast+cleanSpeed<now) {
+      pollCleanLast=now;
+      cleanRemain--;
+      updateDisplay();
+    }
+  }
   //Things done every 50ms - avoids overpolling(?) and switch bounce(?)
-  if(pollLast<now+50) {
+  if(pollLast+20<now) {
     pollLast=now;
     checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
     checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
@@ -242,13 +284,15 @@ void checkRot(){
     AdaEncoder *thisEncoder=NULL;
     thisEncoder = AdaEncoder::genie();
     if(thisEncoder!=NULL) {
-      inputLast2 = inputLast; inputLast = millis();
+      unsigned long inputThis = millis();
+      if(inputThis-inputLast < 70) return; //ignore inputs that come faster than a human could rotate
       int8_t clicks = thisEncoder->query(); //signed number of clicks it has moved
       byte dir = (clicks<0?0:1);
       clicks = abs(clicks);
       for(byte i=0; i<clicks; i++){ //in case of more than one click
         ctrlEvt((thisEncoder->getID()=='a'?(dir?mainAdjUp:mainAdjDn):(dir?altAdjUp:altAdjDn)),1);
       }
+      inputLast2 = inputLast; inputLast = inputThis;
     }
   }
 }//end checkRot
@@ -256,7 +300,7 @@ void checkRot(){
 
 ////////// Input handling and value setting //////////
 
-bool stoppingSound = false; //Special stuff (snooze canceling) happens right after a press that silences the sound
+bool stoppingSignal = false; //Special stuff (snooze canceling) happens right after a press that silences the signal
 void ctrlEvt(byte ctrl, byte evt){
   //Handle control events (from checkBtn or checkRot), based on current fn and set state.
   //evt: 1=press, 2=short hold, 3=long hold, 0=release.
@@ -264,22 +308,31 @@ void ctrlEvt(byte ctrl, byte evt){
   //But we can handle short and long holds and releases for the sel ctrls (always buttons).
   //TODO needs alt handling
   
-  //Before all else, is it a press while the beeper is sounding? Silence it
-  if(soundRemain>0 && evt==1){
-    stoppingSound = true;
-    soundRemain = 0;
-    noTone(10);
+  //Before all else, is it a press to stop the signal? Silence it
+  if(signalRemain>0 && evt==1){
+    stoppingSignal = true;
+    signalRemain = 0;
+    if(signalType==0) noTone(signalPin);
     //If we're displaying the clock (as alarm trigger does), start snooze. 0 will have no effect
-    if(fn==fnIsTime) snoozeRemain = readEEPROM(optsLoc[9],false)*60;
+    if(fn==fnIsTime) snoozeRemain = readEEPROM(24,false)*60;
     return;
   }
   //After pressing to silence, short hold cancels a snooze; ignore other btn evts
-  if(stoppingSound){
-    stoppingSound = false;
+  if(stoppingSignal){
+    stoppingSignal = false;
     if(evt==2 && snoozeRemain>0) {
       snoozeRemain = 0;
-      tone(10, 3136, 100); //G7
+      //A short beep at alarm pitch. Use signalBeepDur or 100ms, whichever is smaller
+      if(signalType==0) tone(signalPin, getHz(readEEPROM(39,false)), (signalBeepDur<100?signalBeepDur:100));
     }
+    btnStop();
+    return;
+  }
+  
+  //Is it a press for an un-off?
+  if(displayDim==0 && evt==1) {
+    unoffRemain = unoffDur;
+    updateDisplay();
     btnStop();
     return;
   }
@@ -301,14 +354,12 @@ void ctrlEvt(byte ctrl, byte evt){
           case fnIsDate: //set year
             fnSetValDate[1]=tod.month(), fnSetValDate[2]=tod.day(); startSet(tod.year(),0,9999,1); break;
           case fnIsAlarm: //set mins
-            //DS3231_get_a1(&buff[0], 59); //TODO write a wrapper function for this
-            //startSet(buff,0,1439,1); //alarm: set mins
-            break;
+            startSet(readEEPROM(0,true),0,1439,1); break;
           case fnIsTimer: //set mins, up to 18 hours (64,800 seconds - fits just inside a word)
             if(timerRemain>0) { timerRemain = 0; btnStop(); updateDisplay(); break; } //If the timer is running, zero it out.
             startSet(timerInitial/60,0,1080,1); break;
           case fnIsDayCount: //set year like date, but from eeprom like startOpt
-            startSet(readEEPROM(dayCountYearLoc,true),2000,9999,1); break;
+            startSet(readEEPROM(3,true),2000,9999,1); break;
           case fnIsTemp:
             break; //nothing - or is this where we do the calibration? TODO
           default: break;
@@ -349,6 +400,9 @@ void ctrlEvt(byte ctrl, byte evt){
     else { //fn setting
       if(evt==1) { //we respond only to press evts during fn setting
         //TODO could we do release/shorthold on mainSel so we can exit without making changes?
+        //currently no, because we don't btnStop() when short hold goes into fn setting, in case long hold may go to options menu
+        //so we can't handle a release because it would immediately save if releasing from the short hold.
+        //Consider recording the btn start time when going into fn setting so we can distinguish its release from a future one
         if(ctrl==mainSel) { //mainSel push: go to next option or save and exit setting mode
           btnStop(); //not waiting for mainSelHold, so can stop listening here
           //We will set ds3231 time parts directly
@@ -376,22 +430,22 @@ void ctrlEvt(byte ctrl, byte evt){
                 default: break;
               } break;
             case fnIsAlarm:
-              break;
+              writeEEPROM(0,fnSetVal,true);
+              clearSet(); break;
             case fnIsTimer: //timer
               timerInitial = fnSetVal*60; //timerRemain is seconds, but timer is set by minute
               timerRemain = timerInitial; //set actual timer going
-              clearSet();
-              break;
+              clearSet(); break;
             case fnIsDayCount: //set like date, save in eeprom like finishOpt
               switch(fnSetPg){
                 case 1: //save year, set month
-                  writeEEPROM(dayCountYearLoc,fnSetVal,true);
-                  startSet(readEEPROM(dayCountMonthLoc,false),1,12,2); break;
+                  writeEEPROM(3,fnSetVal,true);
+                  startSet(readEEPROM(5,false),1,12,2); break;
                 case 2: //save month, set date
-                  writeEEPROM(dayCountMonthLoc,fnSetVal,false);
-                  startSet(readEEPROM(dayCountDateLoc,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
+                  writeEEPROM(5,fnSetVal,false);
+                  startSet(readEEPROM(6,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
                 case 3: //save date
-                  writeEEPROM(dayCountDateLoc,fnSetVal,false);
+                  writeEEPROM(6,fnSetVal,false);
                   clearSet(); break;
                 default: break;
               } break;
@@ -403,7 +457,6 @@ void ctrlEvt(byte ctrl, byte evt){
         } //end mainSel push
         if(ctrl==mainAdjUp) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
         if(ctrl==mainAdjDn) doSet(inputLast-inputLast2<velThreshold ? -10 : -1);
-        //showSitch();
       } //end if evt==1
     } //end fn setting
     
@@ -411,10 +464,12 @@ void ctrlEvt(byte ctrl, byte evt){
   
   else { //options menu setting - to/from EEPROM
     
+    byte opt = fn-fnOpts; //current option number, 0-index (for opts[] arrays)
+    
     if(evt==2 && ctrl==mainSel) { //mainSel short hold: exit options menu
       btnStop();
       //if we were setting a value, writes setting val to EEPROM if needed
-      if(fnSetPg) writeEEPROM(optsLoc[fnSetPg],fnSetVal,optsMax[fnSetPg]-optsMin[fnSetPg]>255?true:false);
+      if(fnSetPg) writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]-optsMin[opt]>255?true:false);
       fn = fnIsTime;
       clearSet();
       return;
@@ -422,8 +477,7 @@ void ctrlEvt(byte ctrl, byte evt){
     
     if(!fnSetPg){ //viewing option number
       if(ctrl==mainSel && evt==0) { //mainSel release: enter option value setting
-        byte n = fn-fnOpts+1; //For a given options menu option (1-index), read from EEPROM and call startSet
-        startSet(readEEPROM(optsLoc[n],optsMax[n]-optsMin[n]>255?true:false),optsMin[n],optsMax[n],n);
+        startSet(readEEPROM(optsLoc[opt],optsMax[opt]-optsMin[opt]>255?true:false),optsMin[opt],optsMax[opt],1);
       }
       if(ctrl==mainAdjUp && evt==1) fnOptScroll(1); //next one up or cycle to beginning
       if(ctrl==mainAdjDn && evt==1) fnOptScroll(-1); //next one down or cycle to end?
@@ -433,7 +487,7 @@ void ctrlEvt(byte ctrl, byte evt){
     else { //setting option value
       if(ctrl==mainSel && evt==0) { //mainSel release: save and exit option value setting
         //Writes setting val to EEPROM if needed
-        writeEEPROM(optsLoc[fnSetPg],fnSetVal,optsMax[fnSetPg]-optsMin[fnSetPg]>255?true:false);
+        writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]-optsMin[opt]>255?true:false);
         clearSet();
       }
       if(ctrl==mainAdjUp && evt==1) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
@@ -452,7 +506,7 @@ void fnScroll(char dir){
   if(dir==-1) for(pos=posLast; pos>=0; pos--) if(fnsEnabled[pos]==fn) { fn = (pos==0?posLast:fnsEnabled[pos-1]); break; }
 }
 void fnOptScroll(char dir){
-  //Switch to the next options fn between min (fnOpts) and max (fnOpts+sizeof(optsLoc)-1) (inclusive)
+  //Switch to the next options fn between min and max (inclusive), looping around at range ends
   byte posLast = fnOpts+sizeof(optsLoc)-1;
   if(dir==1) fn = (fn==posLast? fnOpts: fn+1);
   if(dir==-1) fn = (fn==fnOpts? posLast: fn-1);
@@ -503,36 +557,40 @@ void initEEPROM(){
   ds3231.setMinute(0);
   ds3231.setSecond(0);
   //Set the default values that aren't part of the options menu
-  //writeEEPROM(alarmTimeLoc,420,true); //7am - word
-  //writeEEPROM(alarmOnLoc,enableSoftAlarmSwitch==0?1:0,false); //off, or on if no software switch spec'd
-  writeEEPROM(dayCountYearLoc,2018,true);
-  writeEEPROM(dayCountMonthLoc,1,false);
-  writeEEPROM(dayCountDateLoc,1,false);
+  writeEEPROM(0,420,true); //7am - word
+  writeEEPROM(2,enableSoftAlarmSwitch==0?1:0,false); //off, or on if no software switch spec'd
+  writeEEPROM(3,2018,true);
+  writeEEPROM(5,1,false);
+  writeEEPROM(6,1,false);
   //then the options menu defaults
-  for(byte i=1; i<=sizeof(optsLoc)-1; i++) writeEEPROM(optsLoc[i],optsDef[i],optsMax[i]-optsMin[i]>255?true:false); //options menu
+  for(byte opt=0; opt<sizeof(optsLoc); opt++) writeEEPROM(optsLoc[opt],optsDef[opt],optsMax[opt]-optsMin[opt]>255?true:false);
 }
 word readEEPROM(int loc, bool isWord){
   if(isWord) {
-    word w = (EEPROM.read(loc)<<8)+EEPROM.read(loc+1); return w; //word / unsigned int, 0-65535
+    //TODO why was it done this way
+    //word w = (EEPROM.read(loc)<<8)+EEPROM.read(loc+1); return w; //word / unsigned int, 0-65535
+    return (EEPROM.read(loc)<<8)+EEPROM.read(loc+1);
   } else {
-    byte b = EEPROM.read(loc); return b; //byte, 0-255
+    //byte b = EEPROM.read(loc); return b; //byte, 0-255
+    return EEPROM.read(loc);
   }
 }
 void writeEEPROM(int loc, int val, bool isWord){
   if(isWord) {
     Serial.print(F("EEPROM write word:"));
+    Serial.print(F(" loc ")); Serial.print(loc,DEC);
     if(EEPROM.read(loc)!=highByte(val)) {
       EEPROM.write(loc,highByte(val));
-      Serial.print(F(" loc ")); Serial.print(loc,DEC);
       Serial.print(F(" val ")); Serial.print(highByte(val),DEC);
-    } else Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" unchanged (no write)."));
+    } else Serial.print(F(" unchanged (no write)."));
+    Serial.print(F(" loc ")); Serial.print(loc+1,DEC);
     if(EEPROM.read(loc+1)!=lowByte(val)) {
       EEPROM.write(loc+1,lowByte(val));
-      Serial.print(F(" loc ")); Serial.print(loc+1,DEC);
       Serial.print(F(" val ")); Serial.print(lowByte(val),DEC);
-    } else Serial.print(F(" loc ")); Serial.print(loc+1,DEC); Serial.print(F(" unchanged (no write)."));
+    } else Serial.print(F(" unchanged (no write)."));
   } else {
-    Serial.print(F("EEPROM write byte:")); Serial.print(F(" loc ")); Serial.print(loc,DEC);
+    Serial.print(F("EEPROM write byte:"));
+    Serial.print(F(" loc ")); Serial.print(loc,DEC);
     if(EEPROM.read(loc)!=val) { EEPROM.write(loc,val);
       Serial.print(F(" val ")); Serial.print(val,DEC);
     } else Serial.print(F(" unchanged (no write)."));
@@ -581,8 +639,8 @@ void checkRTC(bool force){
     if(fnSetPg || fn>=fnOpts){
       if(pollLast-inputLast>120000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
     }
-    //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, or running timer)
-    else if(fn!=fnIsTime && fn!=fnIsCleaner && fn!=fnIsDayCount && !(fn==fnIsTimer && (timerRemain>0 || soundRemain>0))){
+    //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, tester, or running/signaling timer)
+    else if(fn!=fnIsTime && fn!=fnIsTubeTester && fn!=fnIsDayCount && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
       if(pollLast>inputLast+5000) { fnSetPg = 0; fn = fnIsTime; force=true; }
     }
   }
@@ -596,42 +654,85 @@ void checkRTC(bool force){
     if(force && rtcSecLast != tod.second()) force=false; //in the odd case it's BOTH, recognize the natural second
     rtcSecLast = tod.second();
     
+    //Things to do at specific times
     if(tod.second()==0) { //at top of minute
       //at 2am, check for DST change
       if(tod.minute()==0 && tod.hour()==2) autoDST();
-      //check if we should trigger the alarm - TODO weekday limiter
-      if(tod.hour()*60+tod.minute()==alarmTime && alarmOn && false) {
-        fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60;
-      }
-      //checkDigitCycle();
+      //check if we should trigger the alarm - if the time is right and the alarm is on...
+      if(tod.hour()*60+tod.minute()==readEEPROM(0,true) && readEEPROM(2,false)) {
+        if(readEEPROM(23,false)==0 || //any day of the week
+          (readEEPROM(23,false)==1 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow)) || //weekday only
+          (readEEPROM(23,false)==2 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow)) ) { //weekend only
+            fnSetPg = 0; fn = fnIsTime; signalPitch = getHz(readEEPROM(39,false)); signalRemain = signalDur*60;
+        } //end toddow check
+      } //end alarm trigger
+      //check if we should trigger the cleaner (at night end time, or alarm time if night end is 0:00)
+      if(tod.hour()*60+tod.minute()==(readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true))) {
+        cleanRemain = 11; //loop() will pick this up
+      } //end cleaner check
+      //
     }
-    if(tod.second()==30 && fn==fnIsTime && fnSetPg==0) { //At bottom of minute, on fn time (not setting), maybe show date
-      if(readEEPROM(optsLoc[3],false)==2) { fn = fnIsDate; inputLast = pollLast; }
+    if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0) { //At bottom of minute, maybe show date - not when unoffing
+      if(readEEPROM(18,false)==2) { fn = fnIsDate; inputLast = pollLast; }
     }
+    
+    //Strikes - only if fn=clock, not setting, not night-off/day-off, and appropriate signal type.
+    //Short pips before the top of the hour
+    if(tod.minute()==59 && tod.second()>=55 && readEEPROM(21,false)==2 && signalType<2 && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {
+      signalPitch = getHz(readEEPROM(41,false));
+      tone(signalPin, signalPitch, (signalType==0?100:signalBeepDur));
+    }
+    //Strikes on/after the hour
+    if(tod.second()==0 && (tod.minute()==0 || tod.minute()==30) && signalType<2 && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2){
+      signalPitch = getHz(readEEPROM(41,false));
+      byte hr; hr = tod.hour(); hr = (hr==0?12:(hr>12?hr-12:hr));
+      switch(readEEPROM(21,false)) {
+        case 1: //single beep via normal signal cycle
+          if(tod.minute()==0) signalRemain = 1; break;
+        case 2: //long pip
+          tone(signalPin, signalPitch, (signalType==0?500:signalBeepDur));
+        case 3: //hour strike via normal signal cycle
+          if(tod.minute()==0) signalRemain = hr; break;
+        case 4: //ship's bell at :00 and :30 mins
+          signalRemain = ((hr%4)*2)+(tod.minute()==30?1:0); break;
+        default: break;
+      } //end strike type
+    } //end strike
     
     //Things to do every natural second (decrementing real-time counters)
     if(!force) {
       //If timer has time on it, decrement and trigger beeper if we reach zero
       if(timerRemain>0) {
         timerRemain--;
-        if(timerRemain<=0) { fnSetPg = 0; fn = fnIsTimer; inputLast = pollLast; soundRemain = alarmDur*60; } //TODO radio mode
-      }
-      //If beeper has time on it, decrement and sound the beeper for 1/2 second
-      if(soundRemain>0) {
-        soundRemain--;
-        //tone(10, 1568, 500); //G6
-        tone(10, 1760, 500); //A6
-        //tone(10, 1976, 500); //B6
-        //tone(10, 2093, 500); //C7
+        if(timerRemain<=0) { //timer has elasped
+          signalPitch = getHz(readEEPROM(40,false));
+          if(readEEPROM(25,false)) { //interval timer: a short signal and restart; don't change to timer fn
+            signalRemain = 1; timerRemain = timerInitial;
+          } else {
+            fnSetPg = 0; fn = fnIsTimer; inputLast = pollLast; signalRemain = signalDur*60;
+          }
+          //TODO radio mode
+        } //end timer elapsed
       }
       //If alarm snooze has time on it, decrement and trigger beeper if we reach zero (and alarm is still on)
       if(snoozeRemain>0) {
         snoozeRemain--;
-        if(snoozeRemain<=0 && alarmOn) { fnSetPg = 0; fn = fnIsTime; soundRemain = alarmDur*60; }
+        if(snoozeRemain<=0 && readEEPROM(2,false)) {
+          fnSetPg = 0; fn = fnIsTime; signalPitch = getHz(readEEPROM(39,false)); signalRemain = signalDur*60;
+        }
+      }
+      //If signal has time on it, decrement and make a beep
+      if(signalRemain>0) {
+        signalRemain--;
+        if(signalType==0) tone(signalPin, signalPitch, signalBeepDur);
+      }
+      if(unoffRemain>0) {
+        unoffRemain--; //updateDisplay will naturally put it back to off state if applicable
       }
     } //end natural second
     
-    //Finally, whether natural tick or not, if we're not setting anything, update the display
+    //Finally, whether natural tick or not, if we're not setting anything, update the display.
+    //This also determines night-off/day-off, which is why chimes will happen if we go into off at top of hour TODO find a way to fix this
     if(fnSetPg==0) updateDisplay();
     
   } //end if force or new second
@@ -643,7 +744,7 @@ void autoDST(){
   //If rule matches, will set to 3am in spring, 1am in fall (and set fellBack so it only happens once)
   if(fellBack) { fellBack=false; return; } //If we fell back at last 2am, do nothing.
   if(toddow==0) { //is it sunday? currently all these rules fire on Sundays only
-    switch(readEEPROM(optsLoc[7],false)){
+    switch(readEEPROM(22,false)){
       case 1: //second Sunday in March to first Sunday in November (US/CA)
         if(tod.month()==3 && tod.day()>=8 && tod.day()<=14) setDST(1);
         if(tod.month()==11 && tod.day()<=7) setDST(-1);
@@ -679,55 +780,120 @@ void setDST(char dir){
 
 void switchAlarm(char dir){
   if(enableSoftAlarmSwitch){
-    if(dir==1) alarmOn=1;
-    if(dir==-1) alarmOn=0;
-    if(dir==0) alarmOn = !alarmOn;
+    if(dir==1) writeEEPROM(2,1,false);
+    if(dir==-1) writeEEPROM(2,0,false);
+    if(dir==0) writeEEPROM(2,!readEEPROM(2,false),false);
+    snoozeRemain = 0;
+    updateDisplay();
   }
+}
+
+word getHz(byte note){
+  //Given a piano key note, return frequency
+  char relnote = note-49; //signed, relative to concert A
+  float reloct = relnote/12.0; //signed
+  word mult = 440*pow(2,reloct);
+  return mult;
+}
+//Sometimes we activate the beeper directly (e.g. pips) but most of the time we make a bell tone TODO
+// char curBellToneLevel; //support negative just in case
+// word curBellTonePitch;
+// void cycleBellTone(){
+//   //Called by loop() 50ms polling – make bell tone decay
+//   //An Arduino pin directly to a piezo element/buzzer is not very good. The piezo is like a capacitor and you need a resistor of 100 ohm to reduce the peak currents.
+//   if(curBellToneLevel > 0) {
+//     curBellToneLevel *= 0.9; //decay by 1/10 each time
+//     if(curBellToneLevel<=0) {
+//       currBelToneLevel = 0; //TODO stop tone fully
+//     } else {
+//       //TODO make the bell this level - whatever it was doing before
+//     }
+//   }
+// }
+
+bool isTimeInRange(word tstart, word tend, word ttest) {
+  //Times are in minutes since midnight, 0-1439
+  //if tstart < tend, ttest is in range if >= tstart AND < tend
+  //if tstart > tend (range passes a midnight), ttest is in range if >= tstart OR < tend
+  //if tstart == tend, no ttest is in range
+  return ( (tstart<tend && ttest>=tstart && ttest<tend) || (tstart>tend && (ttest>=tstart || ttest<tend)) );
+}
+bool isDayInRange(byte dstart, byte dend, byte dtest) {
+  //Similar to isTimeInRange, only the range is inclusive in both ends (always minimum 1 day match)
+  return ( (dstart<=dend && dtest>=dstart && dtest<=dend) || (dstart>dend && (dtest>=dstart || dtest<=dend)) );
 }
 
 ////////// Display data formatting //////////
 void updateDisplay(){
   //Run as needed to update display when the value being shown on it has changed
   //This formats the new value and puts it in displayNext[] for cycleDisplay() to pick up
-  if(fnSetPg) { //setting value
-    // //little tubes:
-    // if(fn==fnOpts) editDisplay(fnSetPg, 4, 5, false); //options menu: current option key
-    // else //fn setting: blank
+  if(cleanRemain) { //cleaning tubes
+    displayDim = 2;
+    byte digit = (11-cleanRemain)%10;
+    editDisplay(digit,0,0,true);
+    editDisplay(digit,1,1,true);
+    editDisplay(digit,2,2,true);
+    editDisplay(digit,3,3,true);
+    editDisplay(digit,4,4,true);
+    editDisplay(digit,5,5,true);
+  }
+  else if(fnSetPg) { //setting value, for either fn or option
+    displayDim = 2;
     blankDisplay(4, 5);
-    //big tubes:
     if(fnSetValMax==1439) { //Time of day (0-1439 mins, 0:00–23:59): show hrs/mins
-      editDisplay(fnSetVal/60, 0, 1, EEPROM.read(optsLoc[4])); //hours with leading zero
+      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false)); //hours with leading zero
       editDisplay(fnSetVal%60, 2, 3, true);
     } else if(fnSetValMax==1080) { //Timer duration (0-1080 mins, up to 18:00): show hrs/mins w/minimal leading
       if(fnSetVal>=60) editDisplay(fnSetVal/60, 0, 1, false); else blankDisplay(0,1); //hour only if present, else blank
       editDisplay(fnSetVal%60, 2, 3, (fnSetVal>=60?true:false)); //leading zero only if hour present
       editDisplay(0,4,5,true); //placeholder seconds
+    } else if(fnSetValMax==88) { //A piezo pitch. Play a short demo beep.
+      editDisplay(fnSetVal, 0, 3, false);
+      if(signalType==0) tone(signalPin, getHz(fnSetVal), (signalBeepDur<100?signalBeepDur:100));
     } else editDisplay(fnSetVal, 0, 3, false); //some other type of value
   }
   else if(fn >= fnOpts){ //options menu, but not setting a value
-    editDisplay(fn-fnOpts+1,0,1,0); //display option number on hour tubes
+    displayDim = 2;
+    editDisplay(fn-fnOpts+1,0,1,0); //display option number (1-index) on hour tubes
     blankDisplay(2,5);
-  } else { //fn running
+  }
+  else { //fn running
+    
+    //Set displayDim per night-off and day-off settings - fnIsAlarm may override this
+    //issue: moving from off alarm to next fn briefly shows alarm in full brightness. I think because of the display delays. TODO
+    word todmins = tod.hour()*60+tod.minute();
+    //In order of precedence:
+    //temporary unoff
+    if(unoffRemain > 0) displayDim = 2;
+    //day-off on weekends, all day
+    else if( readEEPROM(32,false)==1 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) ) displayDim = 0;
+    //day-off on weekdays, during office hours only
+    else if( readEEPROM(32,false)==2 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) && isTimeInRange(readEEPROM(35,true), readEEPROM(37,true), todmins) ) displayDim = 0;
+    //night-off - if night end is 0:00, use alarm time instead
+    else if( readEEPROM(27,false) && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins) ) displayDim = (readEEPROM(27,false)==1?1:0); //dim or off
+    //normal
+    else displayDim = 2;
+    
     switch(fn){
       case fnIsTime:
-      byte hr; hr = tod.hour();
-        if(readEEPROM(optsLoc[1],false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
-        editDisplay(hr, 0, 1, readEEPROM(optsLoc[4],false));
+        byte hr; hr = tod.hour();
+        if(readEEPROM(16,false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
+        editDisplay(hr, 0, 1, readEEPROM(19,false));
         editDisplay(tod.minute(), 2, 3, true);
-        if(EEPROM.read(optsLoc[3])==1) editDisplay(tod.day(), 4, 5, EEPROM.read(optsLoc[4])); //date
+        if(readEEPROM(18,false)==1) editDisplay(tod.day(), 4, 5, readEEPROM(19,false)); //date
         else editDisplay(tod.second(), 4, 5, true); //seconds
         break;
       case fnIsDate:
-      editDisplay(EEPROM.read(optsLoc[2])==1?tod.month():tod.day(), 0, 1, EEPROM.read(optsLoc[4]));
-        editDisplay(EEPROM.read(optsLoc[2])==1?tod.day():tod.month(), 2, 3, EEPROM.read(optsLoc[4]));
+        editDisplay(readEEPROM(17,false)==1?tod.month():tod.day(), 0, 1, readEEPROM(19,false));
+        editDisplay(readEEPROM(17,false)==1?tod.day():tod.month(), 2, 3, readEEPROM(19,false));
         blankDisplay(4, 4);
         editDisplay(toddow, 5, 5, false); //TODO is this 0=Sunday, 6=Saturday?
         break;
       case fnIsDayCount:
         long targetDayCount; targetDayCount = dateToDayCount(
-          readEEPROM(dayCountYearLoc,true),
-          readEEPROM(dayCountMonthLoc,false),
-          readEEPROM(dayCountDateLoc,false)
+          readEEPROM(3,true),
+          readEEPROM(5,false),
+          readEEPROM(6,false)
         );
         long currentDayCount; currentDayCount = dateToDayCount(tod.year(),tod.month(),tod.day());
         editDisplay(abs(targetDayCount-currentDayCount),0,3,false);
@@ -735,10 +901,12 @@ void updateDisplay(){
         blankDisplay(4,5);
         break;
       case fnIsAlarm: //alarm
-        //TODO this isn't a real display
-        editDisplay(0,0,1,EEPROM.read(optsLoc[4])); //hrs
-        editDisplay(0,2,3,true); //mins
-        editDisplay(0,4,5,false); //status
+        word almTime; almTime = readEEPROM(0,true);
+        editDisplay(almTime/60, 0, 1, readEEPROM(19,false)); //hours with leading zero
+        editDisplay(almTime%60, 2, 3, true);
+        editDisplay(readEEPROM(2,false),4,4,false); //status 1/0
+        displayDim = (readEEPROM(2,false)?2:1); //status bright/dim
+        blankDisplay(5,5);
         break;
       case fnIsTimer: //timer - display time left.
         //Relative unit positioning: when t <1h, display min/sec in place of hr/min on 4-tube displays
@@ -757,7 +925,7 @@ void updateDisplay(){
         editDisplay(abs(temp)/100,1,3,(temp<0?true:false)); //leading zeros if negative
         editDisplay(abs(temp)%100,4,5,true);
         break;
-      case fnIsCleaner:
+      case fnIsTubeTester:
         editDisplay(tod.second(),0,0,true);
         editDisplay(tod.second(),1,1,true);
         editDisplay(tod.second(),2,2,true);
@@ -815,43 +983,47 @@ void initOutputs() {
 }
 
 void cycleDisplay(){
-  bool dim = 0;//(opts[2]>0?true:false); //Under normal circumstances, dim constantly if the time is right
-  if(fnSetPg>0) { //but if we're setting, dim for every other 500ms since we started setting
+  //Other display code decides whether we should dim per function or time of day
+  bool dim = (displayDim==1?1:0);
+  //But if we're setting, decide here to dim for every other 500ms since we started setting
+  if(fnSetPg>0) {
     if(setStartLast==0) setStartLast = millis();
     dim = 1-(((millis()-setStartLast)/500)%2);
   } else {
     if(setStartLast>0) setStartLast=0;
   }
   
-  //Anode channel 0: tubes #2 (min x10) and #5 (sec x1)
-  setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
-  digitalWrite(anodes[0], HIGH); //Turn on tubes
-  delay(displayLastFade[0]/(dim?4:1)); //Display for fade-out cycles
-  setCathodes(displayNext[2],displayNext[5]); //Switch cathodes to new digits
-  delay(displayNextFade[0]/(dim?4:1)); //Display for fade-in cycles
-  digitalWrite(anodes[0], LOW); //Turn off tubes
+  if(displayDim>0) { //if other display code says to shut off entirely, skip this part
+    //Anode channel 0: tubes #2 (min x10) and #5 (sec x1)
+    setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
+    digitalWrite(anodes[0], HIGH); //Turn on tubes
+    delay(displayLastFade[0]/(dim?4:1)); //Display for fade-out cycles
+    setCathodes(displayNext[2],displayNext[5]); //Switch cathodes to new digits
+    delay(displayNextFade[0]/(dim?4:1)); //Display for fade-in cycles
+    digitalWrite(anodes[0], LOW); //Turn off tubes
   
-  if(dim) delay(fadeMax/1.5);
+    if(dim) delay(fadeMax/1.5);
   
-  //Anode channel 1: tubes #4 (sec x10) and #1 (hour x1)
-  setCathodes(displayLast[4],displayLast[1]);
-  digitalWrite(anodes[1], HIGH);
-  delay(displayLastFade[1]/(dim?4:1));
-  setCathodes(displayNext[4],displayNext[1]);
-  delay(displayNextFade[1]/(dim?4:1));
-  digitalWrite(anodes[1], LOW);
+    //Anode channel 1: tubes #4 (sec x10) and #1 (hour x1)
+    setCathodes(displayLast[4],displayLast[1]);
+    digitalWrite(anodes[1], HIGH);
+    delay(displayLastFade[1]/(dim?4:1));
+    setCathodes(displayNext[4],displayNext[1]);
+    delay(displayNextFade[1]/(dim?4:1));
+    digitalWrite(anodes[1], LOW);
   
-  if(dim) delay(fadeMax/1.5);
+    if(dim) delay(fadeMax/1.5);
   
-  //Anode channel 2: tubes #0 (hour x10) and #3 (min x1)
-  setCathodes(displayLast[0],displayLast[3]);
-  digitalWrite(anodes[2], HIGH);
-  delay(displayLastFade[2]/(dim?4:1));
-  setCathodes(displayNext[0],displayNext[3]);
-  delay(displayNextFade[2]/(dim?4:1));
-  digitalWrite(anodes[2], LOW);
+    //Anode channel 2: tubes #0 (hour x10) and #3 (min x1)
+    setCathodes(displayLast[0],displayLast[3]);
+    digitalWrite(anodes[2], HIGH);
+    delay(displayLastFade[2]/(dim?4:1));
+    setCathodes(displayNext[0],displayNext[3]);
+    delay(displayNextFade[2]/(dim?4:1));
+    digitalWrite(anodes[2], LOW);
   
-  if(dim) delay(fadeMax*0.75);
+    if(dim) delay(fadeMax*0.75);
+  } //end if displayDim !== 0
   
   // Loop thru and update all the arrays, and fades.
   for( byte i = 0 ; i < 6 ; i ++ ) {
