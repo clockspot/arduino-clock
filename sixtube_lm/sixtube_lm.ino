@@ -778,7 +778,7 @@ void switchAlarm(char dir){
   }
 }
 
-void getHz(byte note){
+word getHz(byte note){
   //Given a piano key note, return frequency
   //TODO (note-basenote)/12 resolves to a float...
   return 440*(2^((note-49)/12));
@@ -968,7 +968,7 @@ void cycleDisplay(){
     if(setStartLast>0) setStartLast=0;
   }
   
-  if(displayDim !== 0) { //if other display code says to shut off entirely, skip this part
+  if(displayDim>0) { //if other display code says to shut off entirely, skip this part
     //Anode channel 0: tubes #2 (min x10) and #5 (sec x1)
     setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
     digitalWrite(anodes[0], HIGH); //Turn on tubes
