@@ -13,7 +13,7 @@ _In these instructions, **Select** is the main pushbutton, and **Adjust** can be
 | Function | Looks like | Notes |
 | --- | --- | --- |
 | **Time** | `12 34 56` | The time of day. You can choose 12h or 24h format in Options. When setting, it's in 24h format (so you can tell AM from PM) and the seconds will reset to :00 when you save. The clock keeps time during power outages and compensates for temperature effects. |
-| **Date** | `_2 _4 _0`<br/>(for&nbsp;Sun&nbsp;2/4) | You can choose month/date or date/month format in the options menu (2). Setting is done in three stages: first year, then month, then date.<br/>Weekdays are: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat |
+| **Date** | `_2 _4 _0`<br/>(for&nbsp;Sun&nbsp;2/4) | You can choose the date format in the options menu (2). Setting is done in three stages: first year, then month, then date.<br/>Weekdays are: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat |
 | **Alarm** | `_7 00 1_` | Shows alarm time (always in 24hr format) and on/off status on 5th tube (1=on, 0=off) and by display brightness (bright=on, dim=off). Use **Adjust** to switch on/off. Hold **Select** to set time (same way as **Time**). When alarm sounds, press **Select** to snooze, or hold for 1sec (followed by a short beep) to silence the alarm for the day. Options menu lets you restrict the alarm to your workweek or weekend only. In a power outage, the alarm will remain set, but it will not sound if power is disconnected at alarm time. |
 | **Timer** | `__ __ _0` | A countdown timer, in hours, minutes, and seconds; or `0` when stopped. Can be set to the minute, up to 18 hours. Begins running as soon as you set it, and will continue to run in the background if you change to a different function. To cancel while running, hold **Select**. When timer runs out, press **Select** to silence. If power is lost, the timer will reset to `0`. |
 | **Day counter** | `_1 23 __` | Shows the number of days until/since a date you specify. Set the same way as **Date.** |
@@ -30,7 +30,7 @@ _In these instructions, **Select** is the main pushbutton, and **Adjust** can be
 | --- | --- |
 | **Timekeeping and display** ||
 | 1. Time format | 1 = 12-hour<br/>2 = 24-hour<br/>(time-of-day display only; setting times is always done in 24h) |
-| 2. Date format | 1 = month/date<br/>2 = date/month |
+| 2. Date format | 1 = month/date/weekday<br/>2 = date/month/weekday<br/>3 = month/date/year<br/>4 = date/month/year<br/>5 = year/month/date<br/>Note that four-tube clocks will not display the third value. |
 | 3. Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date (as above) every minute at :30 seconds |
 | 4. Leading zero in hour, date, and month? | 0 = no<br/>1 = yes |
 | 5. Digit fade | _Not yet implemented._<br/>0–50 (in hundredths of a second) |

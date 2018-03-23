@@ -139,7 +139,7 @@ These ones are set inside the options menu - defaults defined in arrays below
 const byte optsLoc[] = {16,17,18,19,20,22,23,24,39,25,40,21,41,27,  28,  30,32,33,34,  35,  37};
 const word optsDef[] = { 2, 1, 0, 0, 0, 0, 0, 0,61, 0,61, 0,61, 0,1320, 360, 0, 1, 5, 480,1020};
 const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0,49, 0,49, 0,49, 0,   0,   0, 0, 0, 0,   0,   0};
-const word optsMax[] = { 2, 2, 2, 1,50, 6, 2,60,88, 1,88, 4,88, 2,1439,1439, 2, 6, 6,1439,1439};
+const word optsMax[] = { 2, 5, 2, 1,50, 6, 2,60,88, 1,88, 4,88, 2,1439,1439, 2, 6, 6,1439,1439};
 
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
@@ -884,10 +884,17 @@ void updateDisplay(){
         else editDisplay(tod.second(), 4, 5, true); //seconds
         break;
       case fnIsDate:
-        editDisplay(readEEPROM(17,false)==1?tod.month():tod.day(), 0, 1, readEEPROM(19,false));
-        editDisplay(readEEPROM(17,false)==1?tod.day():tod.month(), 2, 3, readEEPROM(19,false));
-        blankDisplay(4, 4);
-        editDisplay(toddow, 5, 5, false); //TODO is this 0=Sunday, 6=Saturday?
+        byte df; df = readEEPROM(17,false); //1=m/d/w, 2=d/m/w, 3=m/d/y, 4=d/m/y, 5=y/m/d
+        if(df<=4) {
+          editDisplay((df==1||df==3?tod.month():tod.day()),0,1,readEEPROM(19,false)); //month or date first
+          editDisplay((df==1||df==3?tod.day():tod.month()),2,3,readEEPROM(19,false)); //date or month second
+          editDisplay((df<=2?toddow:tod.year()),4,5,(df<=2?false:true)); //dow or year third - dow never leading zero, year always
+        }
+        else { //df==5
+          editDisplay(tod.year(),0,1,true); //year always has leading zero
+          editDisplay(tod.month(),2,3,readEEPROM(19,false));
+          editDisplay(tod.day(),4,5,readEEPROM(19,false));
+        }
         break;
       case fnIsDayCount:
         long targetDayCount; targetDayCount = dateToDayCount(
