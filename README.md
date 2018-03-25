@@ -1,6 +1,8 @@
 # arduino-nixie
 **A digital clock with perpetual calendar, alarm, countdown timer, and day counter.** Written for the Arduino Nano at the heart of [RLB Designs'](http://rlb-designs.com/) Universal Nixie Driver Board (UNDB) v5.0, featuring a DS3231 thermocompensated battery-backed real-time clock, and driving up to 6 digits multiplexed in pairs via two SN74141 driver chips. Uses AdaEncoder and ooPinChangeInt (for rotary encoders, optional) and NorthernWidget DS3231 libraries.
 
+[Latest release can be downloaded here.](https://github.com/clockspot/arduino-nixie/releases/latest)
+
 ## Instructions
 
 _In these instructions, **Select** is the main pushbutton, and **Adjust** can be a pair of up/down buttons (hold to set faster), or a knob (rotary encoder). Other variations may apply depending on the options selected in the code, and functions may be reordered or left out._
@@ -31,7 +33,7 @@ _In these instructions, **Select** is the main pushbutton, and **Adjust** can be
 | **Timekeeping and display** ||
 | 1. Time format | 1 = 12-hour<br/>2 = 24-hour<br/>(time-of-day display only; setting times is always done in 24h) |
 | 2. Date format | 1 = month/date/weekday<br/>2 = date/month/weekday<br/>3 = month/date/year<br/>4 = date/month/year<br/>5 = year/month/date<br/>Note that four-tube clocks will not display the third value. |
-| 3. Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date (as above) every minute at :30 seconds |
+| 3. Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date (as above) every minute at :30 seconds<br/>3 = same as 2, but scrolls in and out |
 | 4. Leading zero in hour, date, and month? | 0 = no<br/>1 = yes |
 | 5. Digit fade | _Not yet implemented._<br/>0–50 (in hundredths of a second) |
 | 6. Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ) |

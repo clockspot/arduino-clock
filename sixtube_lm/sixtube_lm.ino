@@ -1,20 +1,8 @@
-// Code for Arduino Nano in RLB Designs IN-12/17 clock v5.0
-// featuring timekeeping by DS1307 RTC and six digits multiplexed 3x2 via two SN74141 driver chips
-// Originally written by Robin Birtles and Chris Gerekos based on http://arduinix.com/Main/Code/ANX-6Tube-Clock-Crossfade.txt
-// Refactored and expanded by Luke McKenzie (luke@theclockspot.com)
-
-// TODO: Timer - display, set, run, sound, silence - make non-volatile?
-// TODO: Cathode anti-poisoning
-// TODO: implement other setup options
-
-// notes on variable sizes on atmega
-// char = int8_t, -128 to 127 (negatives stored via 2's complement).
-// byte = uint8_t, 0 to 255
-// int  = int16_t, -32768 to 32767. Watch out for bitshift right operator
-// word = uint16_t, 0 to 65535 (or unsigned int)
-// long = int32_t, -2147483648 to 2147483647.
-// float, but use integer math when you can
-// integer constant modifiers: use leading B for binary, 0 for octal, 0x for hex; trailing U for unsigned and/or L for long
+// Digital clock code for the Arduino Nano in RLB Designs' Universal Nixie Driver Board v5.0
+// featuring timekeeping by DS3231 RTC, driving up to six digits multiplexed 3x2 via two SN74141 driver chips
+// An alternate sketch by Luke McKenzie (luke@theclockspot.com) - https://github.com/clockspot/arduino-nixie
+// based on original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
+// based on http://arduinix.com/Main/Code/ANX-6Tube-Clock-Crossfade.txt
 
 #include <EEPROM.h>
 #include <DS3231.h>
@@ -24,6 +12,8 @@
 
 
 ////////// Configuration consts //////////
+
+const byte displaySize = 6; //number of tubes in display module. Small display adjustments are made for 4-tube clocks
 
 // available clock functions, and unique IDs (between 0 and 200)
 const byte fnIsTime = 0;
@@ -47,9 +37,9 @@ const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCoun
 // A6-A7 are analog-only pins that aren't quite as responsive and require a physical pullup resistor (1K to +5V), and can't be used with rotary encoders because they don't support pin change interrupts.
 
 // What input is associated with each control?
-const byte mainSel = A2; //main select button - must be equipped
-const byte mainAdjUp = A1; //main up/down buttons or rotary encoder - must be equipped
-const byte mainAdjDn = A0;
+const byte mainSel = A1; //main select button - must be equipped
+const byte mainAdjUp = A3; //main up/down buttons or rotary encoder - must be equipped
+const byte mainAdjDn = A2;
 const byte altSel = 0; //alt select button - if unequipped, set to 0
 const byte altAdjUp = 0; //A6; //alt up/down buttons or rotary encoder - if unequipped, set to 0
 const byte altAdjDn = 0; //A3;
@@ -60,8 +50,8 @@ const byte mainAdjType = 1;
 const byte altAdjType = 0; //if unquipped, set to 0
 
 // In normal running mode, what do the controls do?
-// assign -1 = nothing, -2 = cycle through functions, or a specific function per above
-// TODO, one of them needs to do nothing for the alarm switch, right?
+// -1 = nothing/alarm switch, -2 = cycle through functions, fn in fnsEnabled[] = go to that function
+// If using soft alarm switch per below, one of these needs to be -1 to switch the alarm
 const char mainSelFn = -2;
 const char mainAdjFn = -1;
 // const byte altSelFn = -1;
@@ -72,19 +62,14 @@ const byte enableSoftAlarmSwitch = 1;
 // 0 = no. Use if the connected alarm device has its own switch (e.g. clock radio function switch).
 //     Alarm will be permanently on in software.
 const byte signalPin = 10;
-const byte signalType = 0;
-//What is the signal pin connected to?
+const byte signalType = 0; //What is the signal pin connected to?
 // 0 = Piezo. When alarm and timer go off, it will output a beep pattern with tone() for signalDur minutes.
 // 1 = Signal relay TODO. Same as above, but it will simply switch the pin, for e.g. a solenoid.
-// 2 = Radio relay TODO.
-//     When alarm goes off, output will stay on for signalDur minutes (120 is common).
-//     When timer is running, output will stay on until timer runs down.
+// 2 = Radio relay TODO. When alarm goes off, output will stay on for signalDur minutes. When timer is running, output will stay on until timer runs down.
 const word signalBeepDur = 500; //With signalType 0/1, beeps happen once per second; how long is each beep in ms?
-const byte signalDur = 1; //When alarm goes off (and timer, with signalType 0/1), how many mins does signal run for?
+const byte signalDur = 1; //When alarm goes off (and timer, with signalType 0/1), how many mins does signal run for? (e.g. 3 for signalType 0/1, 120 for signalType 2)
 
 const byte unoffDur = 10; //when display is dim/off, a press will light the tubes for this many seconds
-
-const byte displaySize = 6; //number of tubes
 
 // How long (in ms) are the button hold durations?
 const word btnShortHold = 1000; //for setting the displayed feataure
@@ -93,6 +78,14 @@ const byte velThreshold = 150; //ms
 // When an adj up/down input (btn or rot) follows another in less than this time, value will change more (10 vs 1).
 // Recommend ~150 for rotaries. If you want to use this feature with buttons, extend to ~400.
 
+// What is the "frame rate" of the tube cleaning and display scrolling? up to 65535 ms
+const word cleanSpeed = 200; //ms
+const word scrollSpeed = 100; //ms - e.g. scroll-in-and-out date at :30 - to give the illusion of a slow scroll that doesn't pause, use (timeoutTempFn*1000)/(displaySize+1) - e.g. 714 for displaySize=6 and timeoutTempFn=5
+
+// What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
+const word timeoutSet = 120; //sec
+const word timeoutTempFn = 5; //sec
+
 
 ////////// Other global consts and vars //////////
 
@@ -100,52 +93,52 @@ const byte velThreshold = 150; //ms
 These should be permanently associated with a value (unless deprecated and reused).
 We could name them all with consts for coding convenience, but for now just using directly in code.
 Most values in the clock are 1-byte; if 2-byte, high byte is loc, low byte is loc+1.
-These ones are set outside the options menu - defaults defined in initEEPROM()
+These ones are set outside the options menu (defaults defined in initEEPROM()):
   0-1 Alarm time, mins
   2 Alarm on
   3-4 Day count year
   5 Day count month
   6 Day count date
 ( 7-15 are available )
-These ones are set inside the options menu - defaults defined in arrays below
+These ones are set inside the options menu (defaults defined in arrays below):
   16 Time format
   17 Date format 
   18 Display date during time
   19 Leading zero in hour, date, and month
   20 Digit fade duration TODO
-  21 Hourly strike TODO
+  21 Hourly strike
   22 Auto DST
   23 Alarm days
   24 Alarm snooze
-  25 Timer interval mode TODO
+  25 Timer interval mode
 ( 26 is available )
-  27 Night-off TODO
-  28-29 Night start, mins TODO
-  30-31 Night end, mins TODO
-  32 Day-off TODO
+  27 Night-off
+  28-29 Night start, mins
+  30-31 Night end, mins
+  32 Day-off
   33 First day of workweek
   34 Last day of workweek
-  35-36 Work starts at, mins TODO
-  37-38 Work ends at, mins TODO
-  39 Alarm tone pitch TODO
-  40 Timer tone pitch TODO
-  41 Hourly strike pitch TODO
+  35-36 Work starts at, mins
+  37-38 Work ends at, mins
+  39 Alarm tone pitch
+  40 Timer tone pitch
+  41 Hourly strike pitch
 */
 
-//Options menu options' EEPROM locations and default/min/max values. Numbers (and pos in these arrays) 
-//Although these arrays are 0-index, the option number displayed (and listed in readme) is 1-index. (see "fn-fnOpts+1")
+//Options menu options' EEPROM locations and default/min/max values.
 //Options' numbers may be changed by reordering these arrays (and changing readme accordingly).
-//        Option number: 1  2  3  4  5  6  7  8  9 10 11 12 13 14   15   16 17 18 19   20   21
+//Although these arrays are 0-index, the option number displayed (and listed in readme) is 1-index. (search for "fn-fnOpts+1")
+//1-index option number: 1  2  3  4  5  6  7  8  9 10 11 12 13 14   15   16 17 18 19   20   21
 const byte optsLoc[] = {16,17,18,19,20,22,23,24,39,25,40,21,41,27,  28,  30,32,33,34,  35,  37};
 const word optsDef[] = { 2, 1, 0, 0, 0, 0, 0, 0,61, 0,61, 0,61, 0,1320, 360, 0, 1, 5, 480,1020};
 const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0,49, 0,49, 0,49, 0,   0,   0, 0, 0, 0,   0,   0};
-const word optsMax[] = { 2, 5, 2, 1,50, 6, 2,60,88, 1,88, 4,88, 2,1439,1439, 2, 6, 6,1439,1439};
+const word optsMax[] = { 2, 5, 3, 1,50, 6, 2,60,88, 1,88, 4,88, 2,1439,1439, 2, 6, 6,1439,1439};
 
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
 RTClib rtc; //an object to access a snapshot of the ds3231 rtc via now()
 DateTime tod; //stores the now() snapshot for several functions to use
-byte toddow; //stores the day of week as calculated from tod
+byte toddow; //stores the day of week (read separately from ds3231 dow counter)
 
 // Hardware inputs and value setting
 byte btnCur = 0; //Momentary button currently in use - only one allowed at a time
@@ -154,7 +147,7 @@ unsigned long inputLast = 0; //When a button was last pressed
 unsigned long inputLast2 = 0; //Second-to-last of above
 
 const byte fnOpts = 201; //fn values from here to 255 correspond to options in the options menu
-byte fn = fnIsTime; //currently displayed fn, as above
+byte fn = fnIsTime; //currently displayed fn (per fnsEnabled)
 byte fnSetPg = 0; //whether this function is currently being set, and which option/page it's on
 word fnSetVal; //the value currently being set, if any - unsigned int 0-65535
 word fnSetValMin; //min possible - unsigned int
@@ -162,7 +155,7 @@ word fnSetValMax; //max possible - unsigned int
 bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
 word fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
 
-// Volatile running values
+// Volatile running values used throughout the code. (Others are defined right above the method that uses them)
 word signalRemain = 0; //alarm/timer signal timeout counter, seconds
 word signalPitch = 440; //which pitch to use - set by what started the signal going
 word snoozeRemain = 0; //snooze timeout counter, seconds
@@ -172,7 +165,8 @@ word unoffRemain = 0; //un-off (briefly turn on tubes during full night-off or d
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 byte cleanRemain = 11; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
-word cleanSpeed = 200; //ms
+byte scrollDisplay[6] = {15,15,15,15,15,15}; //For animating a value into displayNext from right, and out to left
+char scrollRemain = 0; //"frames" of scroll – 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change
 
 
 ////////// Main code control //////////
@@ -187,29 +181,39 @@ void setup(){
 
 unsigned long pollLast = 0; //every 50ms
 unsigned long pollCleanLast = 0; //every cleanSpeed ms
+unsigned long pollScrollLast = 0; //every scrollSpeed ms
 void loop(){
   unsigned long now = millis();
-  //Handle tube cleaning. A special case since it runs at a speed outside the normal cycles as below
-  if(cleanRemain) {
-    if(pollCleanLast+cleanSpeed<now) {
-      pollCleanLast=now;
-      cleanRemain--;
-      updateDisplay();
+  //If we're running a tube cleaning, advance it every cleanSpeed ms.
+  if(cleanRemain && pollCleanLast+cleanSpeed<now) {
+    pollCleanLast=now;
+    cleanRemain--;
+    updateDisplay();
+  }
+  //If we're scrolling an animation, advance it every scrollSpeed ms.
+  else if(scrollRemain!=0 && scrollRemain!=-128 && pollScrollLast+scrollSpeed<now) {
+    pollScrollLast=now;
+    if(scrollRemain<0) {
+      scrollRemain++; updateDisplay();
+    } else {
+      scrollRemain--; updateDisplay();
+      if(scrollRemain==0) scrollRemain=-128;
     }
   }
-  //Things done every 50ms - avoids overpolling(?) and switch bounce(?)
-  if(pollLast+20<now) {
+  //Check the RTC and inputs every every 50ms - avoids overpolling(?) and switch bounce(?)
+  if(pollLast+50<now) { //todo 20 vs 50
     pollLast=now;
     checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
     checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
     doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
   }
-  //Things done every loop cycle
+  //Every loop cycle, cycle the display
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
 }
 
 
 ////////// Control inputs //////////
+
 void initInputs(){
   //TODO are there no "loose" pins left floating after this? per https://electronics.stackexchange.com/q/37696/151805
   pinMode(A0, INPUT_PULLUP);
@@ -225,17 +229,14 @@ void initInputs(){
 }
 
 void checkInputs(){
-  // TODO can all this if/else business be defined at load instead of evaluated every sample? OR is it compiled that way?
-  //potential issue: if user only means to rotate or push encoder but does both?
-
-  //sample button states
+  //TODO can all this if/else business be defined at load instead of evaluated every sample? OR is it compiled that way?
+  //TODO potential issue: if user only means to rotate or push encoder but does both?
+  //check button states
   checkBtn(mainSel); //main select
   if(mainAdjType==1) { checkBtn(mainAdjUp); checkBtn(mainAdjDn); } //main adjust buttons (if equipped)
-  //if(altSel!=0) checkBtn(altSel); //alt select (if equipped)
-  //if(altAdjType==1) { checkBtn(altAdjUp); checkBtn(altAdjDn); } //alt adjust buttons (if equipped)
-  
-  //check adaencoder library to see if rot(s) have moved
-  if(mainAdjType==2 || altAdjType==2) checkRot();
+  if(altSel!=0) checkBtn(altSel); //alt select (if equipped)
+  if(altAdjType==1) { checkBtn(altAdjUp); checkBtn(altAdjDn); } //alt adjust buttons (if equipped)
+  if(mainAdjType==2 || altAdjType==2) checkRot(); //if main or alt rotary encoder is equipped, check for moves
 }
 
 bool readInput(byte pin){
@@ -270,9 +271,7 @@ void checkBtn(byte btn){
   }
 }
 void btnStop(){
-  //In some cases, when handling btn evt 1/2/3, we may call this
-  //so following events 2/3/0 won't cause unintended behavior
-  //(e.g. after a fn change, or going in or out of set)
+  //In some cases, when handling btn evt 1/2/3, we may call this so following events 2/3/0 won't cause unintended behavior (e.g. after a fn change, or going in or out of set)
   btnCurHeld = 4;
 }
 
@@ -360,39 +359,28 @@ void ctrlEvt(byte ctrl, byte evt){
             startSet(timerInitial/60,0,1080,1); break;
           case fnIsDayCount: //set year like date, but from eeprom like startOpt
             startSet(readEEPROM(3,true),2000,9999,1); break;
-          case fnIsTemp:
-            break; //nothing - or is this where we do the calibration? TODO
+          case fnIsTemp: //is this where we do the calibration? TODO
+          case fnIsTubeTester:
           default: break;
         }
-        //showSitch();
         return;
       }
       else if((ctrl==mainSel && evt==0) || ((ctrl==mainAdjUp || ctrl==mainAdjDn) && evt==1)) { //sel release or adj press - switch fn, depending on config
         //-1 = nothing, -2 = cycle through functions, other = go to specific function (see fn)
         //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
-        bool fnChgd = false;
         if(ctrl==mainSel){
           if(mainSelFn!=-1) { //do a function switch
-            fnChgd = true;
             if(mainSelFn==-2) fnScroll(1); //Go to next fn in the cycle
             else fn = mainSelFn;
+            checkRTC(true); //updates display
           } else if(fn==fnIsAlarm) switchAlarm(0); //switch alarm
         }
         else if(ctrl==mainAdjUp || ctrl==mainAdjDn) {
           if(mainAdjFn!=-1) { //do a function switch
-            fnChgd = true;
             if(mainAdjFn==-2) fnScroll(ctrl==mainAdjUp?1:-1); //Go to next or previous fn in the cycle
             else fn = mainAdjFn;
+            checkRTC(true); //updates display
           } else if(fn==fnIsAlarm) switchAlarm(ctrl==mainAdjUp?1:-1); //switch alarm
-        }
-        if(fnChgd){
-          switch(fn){
-            //static ones
-            case fnIsAlarm: case fnIsTemp:
-              updateDisplay(); break;
-            //"ticking" ones
-            default: checkRTC(true); break;
-          }
         }
       }
     } //end fn running
@@ -627,6 +615,7 @@ byte dayOfWeek(word y, byte m, byte d){
 
 
 ////////// Clock ticking and timed event triggering //////////
+
 byte rtcSecLast = 61;
 void checkRTC(bool force){
   //Checks display timeouts;
@@ -637,11 +626,11 @@ void checkRTC(bool force){
   if(pollLast > inputLast){ //don't bother if the last input (which may have called checkRTC) was more recent than poll
     //Option/setting timeout: if we're in the options menu, or we're setting a value
     if(fnSetPg || fn>=fnOpts){
-      if(pollLast-inputLast>120000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
+      if(pollLast>inputLast+(timeoutSet*1000)) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
     }
     //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, tester, or running/signaling timer)
     else if(fn!=fnIsTime && fn!=fnIsTubeTester && fn!=fnIsDayCount && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
-      if(pollLast>inputLast+5000) { fnSetPg = 0; fn = fnIsTime; force=true; }
+      if(pollLast>inputLast+(timeoutTempFn*1000)) { fnSetPg = 0; fn = fnIsTime; force=true; }
     }
   }
   
@@ -650,9 +639,6 @@ void checkRTC(bool force){
   toddow = ds3231.getDoW()-1; //ds3231 weekday is 1-index
   
   if(rtcSecLast != tod.second() || force) { //If it's a new RTC second, or we are forcing it
-    
-    if(force && rtcSecLast != tod.second()) force=false; //in the odd case it's BOTH, recognize the natural second
-    rtcSecLast = tod.second();
     
     //Things to do at specific times
     if(tod.second()==0) { //at top of minute
@@ -673,7 +659,8 @@ void checkRTC(bool force){
       //
     }
     if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0) { //At bottom of minute, maybe show date - not when unoffing
-      if(readEEPROM(18,false)==2) { fn = fnIsDate; inputLast = pollLast; }
+      if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = pollLast; updateDisplay(); }
+      if(readEEPROM(18,false)==3) { startScroll(); }
     }
     
     //Strikes - only if fn=clock, not setting, not night-off/day-off, and appropriate signal type.
@@ -700,7 +687,7 @@ void checkRTC(bool force){
     } //end strike
     
     //Things to do every natural second (decrementing real-time counters)
-    if(!force) {
+    if(rtcSecLast != tod.second()) {
       //If timer has time on it, decrement and trigger beeper if we reach zero
       if(timerRemain>0) {
         timerRemain--;
@@ -731,9 +718,11 @@ void checkRTC(bool force){
       }
     } //end natural second
     
-    //Finally, whether natural tick or not, if we're not setting anything, update the display.
+    //Finally, update the display, whether natural tick or not, as long as we're not setting or on a scrolled display (unless forced eg. fn change)
     //This also determines night-off/day-off, which is why chimes will happen if we go into off at top of hour TODO find a way to fix this
-    if(fnSetPg==0) updateDisplay();
+    if(fnSetPg==0 && (scrollRemain==0 || force)) updateDisplay();
+    
+    rtcSecLast = tod.second();
     
   } //end if force or new second
 } //end checkRTC()
@@ -795,21 +784,6 @@ word getHz(byte note){
   word mult = 440*pow(2,reloct);
   return mult;
 }
-//Sometimes we activate the beeper directly (e.g. pips) but most of the time we make a bell tone TODO
-// char curBellToneLevel; //support negative just in case
-// word curBellTonePitch;
-// void cycleBellTone(){
-//   //Called by loop() 50ms polling – make bell tone decay
-//   //An Arduino pin directly to a piezo element/buzzer is not very good. The piezo is like a capacitor and you need a resistor of 100 ohm to reduce the peak currents.
-//   if(curBellToneLevel > 0) {
-//     curBellToneLevel *= 0.9; //decay by 1/10 each time
-//     if(curBellToneLevel<=0) {
-//       currBelToneLevel = 0; //TODO stop tone fully
-//     } else {
-//       //TODO make the bell this level - whatever it was doing before
-//     }
-//   }
-// }
 
 bool isTimeInRange(word tstart, word tend, word ttest) {
   //Times are in minutes since midnight, 0-1439
@@ -823,10 +797,18 @@ bool isDayInRange(byte dstart, byte dend, byte dtest) {
   return ( (dstart<=dend && dtest>=dstart && dtest<=dend) || (dstart>dend && (dtest>=dstart || dtest<=dend)) );
 }
 
+
 ////////// Display data formatting //////////
+
 void updateDisplay(){
   //Run as needed to update display when the value being shown on it has changed
   //This formats the new value and puts it in displayNext[] for cycleDisplay() to pick up
+  
+  if(scrollRemain==-128) {  //If the current display is flagged to be scrolled out, do it. This is kind of the counterpart to startScroll()
+    for(byte i=0; i<6; i++) scrollDisplay[i] = displayNext[i]; //cache the current value in scrollDisplay[] just in case it changed
+    scrollRemain = (0-displaySize)-1;
+  }
+  
   if(cleanRemain) { //cleaning tubes
     displayDim = 2;
     byte digit = (11-cleanRemain)%10;
@@ -836,6 +818,32 @@ void updateDisplay(){
     editDisplay(digit,3,3,true);
     editDisplay(digit,4,4,true);
     editDisplay(digit,5,5,true);
+  }
+  /*
+  Scrolling "frames" (ex. on 4-tube clock):
+  To use this, call editDisplay() as usual, then startScroll()
+  4:              [       ]1 2 3 4      tube[n] (0-index) is source[n-scrollRemain] unless that index < 0, then blank
+  3:              [      1]2 3 4
+  2:              [    1 2]3 4
+  1:              [  1 2 3]4
+  0/-128:         [1 2 3 4]
+  -4:            1[2 3 4  ]      tube[n] is source[n+displaySize+scrollRemain+1] unless that index >= displaySize, then blank
+  -3:          1 2[3 4    ]
+  -2:        1 2 3[4      ]
+  -1:      1 2 3 4[       ]
+  0: (scroll functions are skipped to display whatever's applicable)
+  */
+  else if(scrollRemain>0) { //scrolling display: value coming in - these don't use editDisplay as we're going array to array
+    for(byte i=0; i<displaySize; i++) {
+      char isrc = i-scrollRemain;
+      displayNext[i] = (isrc<0? 15: scrollDisplay[isrc]);
+    }
+  }
+  else if(scrollRemain<0 && scrollRemain!=-128) { //scrolling display: value going out
+    for(byte i=0; i<displaySize; i++) {
+      char isrc = i+displaySize+scrollRemain+1;
+      displayNext[i] = (isrc>=displaySize? 15: scrollDisplay[isrc]);
+    }
   }
   else if(fnSetPg) { //setting value, for either fn or option
     displayDim = 2;
@@ -964,9 +972,15 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros){
 void blankDisplay(byte posStart, byte posEnd){
   for(byte i=posStart; i<=posEnd; i++) displayNext[i]=15;
 } //end blankDisplay();
+void startScroll() { //To scroll a value in, call this after calling editDisplay as normal
+  for(byte i=0; i<6; i++) scrollDisplay[i] = displayNext[i]; //cache the incoming value in scrollDisplay[]
+  blankDisplay(0,5);
+  scrollRemain = displaySize+1; //this will trigger updateDisplay() to start scrolling. displaySize+1 adds blank frame at front
+} //end startScroll()
 
 
 ////////// Hardware outputs //////////
+
 //This clock is 2x3 multiplexed: two tubes powered at a time.
 //The anode channel determines which two tubes are powered,
 //and the two SN74141 cathode driver chips determine which digits are lit.
@@ -1030,7 +1044,7 @@ void cycleDisplay(){
     digitalWrite(anodes[2], LOW);
   
     if(dim) delay(fadeMax*0.75);
-  } //end if displayDim !== 0
+  } //end if displayDim>0
   
   // Loop thru and update all the arrays, and fades.
   for( byte i = 0 ; i < 6 ; i ++ ) {
