@@ -990,12 +990,43 @@ byte binOutB[4] = {6,7,8,9};
 //3 pins out to anode channel switches
 byte anodes[3] = {11,12,13};
 
-float fadeMax = 5.0f;
-float fadeStep = 1.0f;
 int displayLast[6]={11,11,11,11,11,11}; //What is currently being displayed. We slowly fade away from this.
-float displayNextFade[6]={0.0f,0.0f,0.0f,0.0f,0.0f,0.0f}; //Fading in displayNext values
-float displayLastFade[6]={8.0f,8.0f,8.0f,8.0f,8.0f,8.0f}; //Fading out displayLast values
-unsigned long setStartLast = 0; //to control flashing
+
+//ms
+/*
+------ ------ ------
+full transition, let's say is 200ms
+transition start is 10000ms
+cycle = 6 (normal) or 3 (dim)
+mils diff at 1st cycle is 0; nextDur = ((diff*(6-1))/200)+1 = 1; lastDur = (6-nextDur) = 5;
+mils diff at 2nd cycle is 10; nextDur = 1....
+3rd - 20
+4th - 30
+5th - 40; nextDur = 2.... lastDur = 4......
+
+1st - 0 - /0!!!!!!!!
+
+at 6ms per digit, 1ms change each time, 3 pairs of digits = 75ms transition.
+=====- =====- =====-
+====-- ====-- ====--
+===--- ===--- ===---
+==---- ==---- ==----
+=----- =----- =-----
+at 4ms per digit, 4x4x3 = 48ms
+at 3ms per digit, 3x3x3 = 27ms
+at 6ms 6x6x3 = 108ms
+*/
+const char fadeDur = 6; //each multiplexed pair of digits appears for this amount of time: partly next digit, partly last digit, partly dim (if applicable)
+const char dimDur = 4; //half of fadeDur for half brightness? don't go over fadeDur-2
+char fadeNextDur = 0; //Fading in displayNext values --TODO put back at 0
+char fadeLastDur = 6; //Fading out displayLast values
+unsigned long fadeStartLast = 0; //when the last digit fade was started
+byte cycleStage = 0; //Which stage of the multiplexing cycle we're in
+unsigned long cycleLast = 0; //when the last stage was started
+char cycleDelay = 0; //how long until the next stage starts - set from fadeNextDur and fadeLastDur
+unsigned long setStartLast = 0; //to control flashing during start
+
+word outputCounter = 0;
 
 void initOutputs() {
   for(byte i=0; i<4; i++) { pinMode(binOutA[i],OUTPUT); pinMode(binOutB[i],OUTPUT); }
@@ -1004,61 +1035,168 @@ void initOutputs() {
 }
 
 void cycleDisplay(){
+  unsigned long mils = millis();
+  
   //Other display code decides whether we should dim per function or time of day
   bool dim = (displayDim==1?1:0);
   //But if we're setting, decide here to dim for every other 500ms since we started setting
   if(fnSetPg>0) {
-    if(setStartLast==0) setStartLast = millis();
-    dim = 1-(((millis()-setStartLast)/500)%2);
+    if(setStartLast==0) setStartLast = mils;
+    dim = 1-(((mils-setStartLast)/500)%2);
   } else {
     if(setStartLast>0) setStartLast=0;
   }
+  
+  // Loop thru and update all the arrays, and fades.
+  fadeLastDur = fadeDur-(dim?dimDur:0); //default value
+  if(readEEPROM(20,false)==0) { //fading disabled
+    for(byte i=0; i<6; i++) if(displayNext[i] != displayLast[i]) displayLast[i] = displayNext[i];
+  } else { //fading enabled
+    if(fadeStartLast==0) { //not fading - time to fade?
+      for(byte i=0; i<6; i++) if(displayNext[i] != displayLast[i]) { fadeStartLast = mils; break; }
+    }
+    if(fadeStartLast!=0) { //currently fading
+      fadeNextDur = (((mils-fadeStartLast)*(fadeDur-(dim?dimDur:0)-1))/(readEEPROM(20,false)*10))+1; //partial based on time since fadeStatLast and EEPROM overall digit fade setting
+      fadeLastDur = fadeDur - fadeNextDur;
+      if(fadeNextDur >= fadeDur) { //fade is over
+        fadeStartLast = 0;
+        fadeNextDur = 0;
+        fadeLastDur = fadeDur;
+        for(byte j=0; j<6; j++) displayLast[j] = displayNext[j];
+      } //end fade is over
+    } //end curently fading
+  } //end fading enabled
   
   if(displayDim>0) { //if other display code says to shut off entirely, skip this part
     //Anode channel 0: tubes #2 (min x10) and #5 (sec x1)
     setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
     digitalWrite(anodes[0], HIGH); //Turn on tubes
-    delay(displayLastFade[0]/(dim?4:1)); //Display for fade-out cycles
+    delay(fadeLastDur-(dim?dimDur:0)); //Display for fade-out cycles
     setCathodes(displayNext[2],displayNext[5]); //Switch cathodes to new digits
-    delay(displayNextFade[0]/(dim?4:1)); //Display for fade-in cycles
+    delay(fadeNextDur-(dim?dimDur:0)); //Display for fade-in cycles
     digitalWrite(anodes[0], LOW); //Turn off tubes
   
-    if(dim) delay(fadeMax/1.5);
+    if(dim) delay(dimDur);
   
     //Anode channel 1: tubes #4 (sec x10) and #1 (hour x1)
     setCathodes(displayLast[4],displayLast[1]);
     digitalWrite(anodes[1], HIGH);
-    delay(displayLastFade[1]/(dim?4:1));
+    delay(fadeLastDur);
     setCathodes(displayNext[4],displayNext[1]);
-    delay(displayNextFade[1]/(dim?4:1));
+    delay(fadeNextDur);
     digitalWrite(anodes[1], LOW);
   
-    if(dim) delay(fadeMax/1.5);
+    if(dim) delay(dimDur);
   
     //Anode channel 2: tubes #0 (hour x10) and #3 (min x1)
     setCathodes(displayLast[0],displayLast[3]);
     digitalWrite(anodes[2], HIGH);
-    delay(displayLastFade[2]/(dim?4:1));
+    delay(fadeLastDur);
     setCathodes(displayNext[0],displayNext[3]);
-    delay(displayNextFade[2]/(dim?4:1));
+    delay(fadeNextDur);
     digitalWrite(anodes[2], LOW);
   
-    if(dim) delay(fadeMax*0.75);
+    if(dim) delay(dimDur);
   } //end if displayDim>0
   
-  // Loop thru and update all the arrays, and fades.
-  for( byte i = 0 ; i < 6 ; i ++ ) {
-    if( displayNext[i] != displayLast[i] ) {
-      displayNextFade[i] += fadeStep;
-      displayLastFade[i] -= fadeStep;
   
-      if( displayNextFade[i] >= fadeMax ){
-        displayNextFade[i] = 0.0f;
-        displayLastFade[i] = fadeMax;
-        displayLast[i] = displayNext[i];
-      }
+  
+  // if(outputCounter<20) {
+  //   Serial.print(fadeStartLast,DEC);
+  //   Serial.print(F(" "));
+  //   Serial.print(fadeLastDur,DEC);
+  //   Serial.print(F(" "));
+  //   Serial.print(fadeNextDur,DEC);
+  //   Serial.print(F(" "));
+  //   for(byte k=0; k<6; k++) { Serial.print(displayLast[k]); Serial.print(F(",")); }
+  //   Serial.print(F(" "));
+  //   for(byte l=0; l<6; l++) { Serial.print(displayNext[l]); Serial.print(F(",")); }
+  //   Serial.println();
+  //   outputCounter++;
+  // }
+  
+} //end cycleDisplay()
+
+void cycleDisplayNew(){
+  unsigned long mils = millis();
+  
+  if(cycleLast < mils+cycleDelay) {
+    cycleLast = mils;
+    
+    //Other display code decides whether we should dim per function or time of day
+    bool dim = (displayDim==1?1:0);
+    //But if we're setting, decide here to dim for every other 500ms since we started setting
+    if(fnSetPg>0) {
+      if(setStartLast==0) setStartLast = mils;
+      dim = 1-(((mils-setStartLast)/500)%2);
+    } else {
+      if(setStartLast>0) setStartLast=0;
     }
-  }
+  
+    if(displayDim>0) { //if other display code says to shut off entirely, skip this part
+    
+      switch(cycleStage){
+        case 0: //off and delay for dim, if applicable - also shift the delays
+          cycleStage++;
+          digitalWrite(anodes[2], LOW);
+          if(readEEPROM(20,false)>0) { //if fade enabled
+            if(fadeStartLast==0) { //If we've completely faded, check to see if new differs from old, then initiate a new fade
+              for(byte i=0; i<6; i++) if(displayNext[i] != displayLast[i]) { fadeStartLast = mils; break; }
+            }
+            if(fadeStartLast!=0) { //If we're working on fading
+              fadeNextDur = ((mils-fadeStartLast*(fadeDur-(dim?dimDur:0)-1))/(readEEPROM(20,false)*10))+1; //partial based on time since fadeStatLast and EEPROM overall digit fade setting
+              if(fadeNextDur >= fadeDur) { fadeNextDur = fadeDur; fadeStartLast = 0; for(byte j=0; j<6; j++) displayLast[j] = displayNext[j]; } //end of the fade
+              fadeLastDur = fadeDur-(dim?dimDur:0)-fadeNextDur; if(fadeLastDur > fadeDur) fadeLastDur = 0; //just in case it loops around (does this happen?)
+            }
+          } else { //no fade - we don't care about any of the last stuff, always go straight to next
+            fadeNextDur = fadeDur-(dim?dimDur:0);
+          }
+          if(dim) { cycleDelay = dimDur; break; } //otherwise continue
+        case 1: //Anode channel 0: tubes #2 (min x10) and #5 (sec x1), outgoing digits on
+          cycleStage++;
+          setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
+          digitalWrite(anodes[0], HIGH); //Turn on tubes
+          if(fadeLastDur>0) { cycleDelay = fadeLastDur; break; } //Display for fade-out cycles, if applicable //(displayLastFade[0]/(dim?4:1))
+        case 2: //incoming digits on
+          cycleStage++; 
+          setCathodes(displayNext[2],displayNext[5]); //Switch cathodes to new digits
+          cycleDelay = fadeNextDur; break; //Display for fade-in cycles
+        case 3: //off and pause for dim
+          cycleStage++;
+          digitalWrite(anodes[0], LOW); //Turn off tubes
+          if(dim) { cycleDelay = dimDur; break; } //otherwise continue
+        case 4: //Anode channel 1: tubes #4 (sec x10) and #1 (hour x1), outgoing digits on
+          cycleStage++; 
+          setCathodes(displayLast[4],displayLast[1]);
+          digitalWrite(anodes[1], HIGH);
+          if(fadeLastDur>0) { cycleDelay = fadeLastDur; break; }
+        case 5: //incoming digits on
+          cycleStage++; 
+          setCathodes(displayNext[4],displayNext[1]);
+          cycleDelay = fadeNextDur; break;
+        case 6: //off and pause for dim
+          cycleStage++;
+          digitalWrite(anodes[1], LOW);
+          if(dim) { cycleDelay = dimDur; break; } //otherwise continue
+        case 7: //Anode channel 2: tubes #0 (hour x10) and #3 (min x1), outgoing digits on
+          cycleStage++; 
+          setCathodes(displayLast[0],displayLast[3]);
+          digitalWrite(anodes[2], HIGH);
+          if(fadeLastDur>0) { cycleDelay = fadeLastDur; break; }
+        case 8: //incoming digits on
+          cycleStage=0;
+          setCathodes(displayNext[0],displayNext[3]);
+          cycleDelay = fadeNextDur; break;
+        default: break;
+      } //end switch(cycleStage)
+
+    } //end if displayDim>0
+    else if(fadeLastDur>0) { //if we've just shut off the display in the middle of a fade (does this ever happen?), set things up for when display comes back
+      fadeLastDur = 0; //force a full fade in to the new value...
+      for(byte k=0; k<6; k++) { displayLast[k] = 0; } //...from a blank display
+    } //end if fadeLastDur>0
+  
+  } //end cycleLast cycle
 } //end cycleDisplay()
 
 void setCathodes(byte decValA, byte decValB){
