@@ -788,16 +788,17 @@ void setDST(char dir){
 
 void switchAlarm(char dir){
   if(enableSoftAlarmSwitch){
+    signalStop(); //snoozeRemain = 0;
     if(dir==1) writeEEPROM(2,1,false);
     if(dir==-1) writeEEPROM(2,0,false);
     if(dir==0) writeEEPROM(2,!readEEPROM(2,false),false);
-    snoozeRemain = 0;
+    if(readEEPROM(2,false)) signalStart(fnIsAlarm,0,100); //Short beep at alarm pitch
     updateDisplay();
   }
 }
 void switchPower(char dir){
   if(enableSoftPowerSwitch && signalType==2){
-    //signalStop(); do we need this? TODO
+    //signalStop(); could use this instead of the below to turn the radio off
     if(dir==1) { digitalWrite(signalPin,HIGH); Serial.print(millis(),DEC); Serial.println(F(" Relay on, switchPower")); }
     if(dir==-1) { digitalWrite(signalPin,LOW); Serial.print(millis(),DEC); Serial.println(F(" Relay off, switchPower")); }
     if(dir==0) { digitalWrite(signalPin,!digitalRead(signalPin)); Serial.print(millis(),DEC); Serial.println(digitalRead(signalPin)==HIGH?F(" Relay toggled on, switchPower"):F(" Relay toggled off, switchPower")); }
