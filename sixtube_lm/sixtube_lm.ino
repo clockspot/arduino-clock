@@ -57,6 +57,7 @@ const char mainAdjFn = -1;
 // const byte altSelFn = -1;
 // const byte altAdjFn = -1;
 
+///////TODO SEARCH FOR THESE ////////////////
 const byte signalPin = 10;
 const byte signalType = 0; //What is the signal pin connected to?
 // 0 = Piezo. When alarm and timer go off, it will output a beep pattern with tone() for signalDur seconds.
@@ -66,12 +67,30 @@ const word signalDur = 180; //Per above. Use e.g. 180 secs (3min) for signalType
 const word signalBeepDur = 500; //With signalType 0/1, "beeps" happen once per second; how long is each beep in ms?
 //Particularly when driving a solenoid with signalType 1, this should be set to a comfortable activation duration for the solenoid.
 
+//What are the signal pin(s) connected to?
+const char piezoPin = 10;
+const char relayPin = -1;
+//If running a v5.0 board with only a piezo output, leave these set to 10 and -1 (disabled) respectively - unless removing the piezo to drive a relay instead, in which case, reverse them.
+//If running a v5.x board, piezo is 10, relay is X.
+const byte relayMode = 0; //what does the relay pin do?
+//0 = switch (for e.g. appliance/radio) - see switchDur
+//1 = pulses (for e.g. solenoid) - see relayPulse
+const word signalDur = 180; //sec - when alarm or timer go off (piezo or relay pulse), pulses are sent once/sec for this many seconds (e.g. 180 = 3min)
+const word switchDur = 7200; //sec - when alarm goes off (relay switch), relay is switched for this many seconds (e.g. 7200 = 2hr)
+const word piezoPulse = 500; //ms - used with tone()
+const word relayPulse = 200; //ms - for pulsing e.g. a solenoid
+//If both piezo and relay are equipped, you get these extra menu options:
+//alarm signal: 0: piezo, 1: relay (pulse or switch for wake)
+//timer mode: 0: countdown and stop, 1: countdown and restart (interval timer)
+//timer signal: 0: piezo, 1: relay (pulse or switch for sleep)
+//strike signal (if relayMode is pulse): 0: piezo, 1: relay pulse
+
 const byte enableSoftAlarmSwitch = 1;
 // 1 = yes (normal). Alarm can be switched on and off when clock is displaying the alarm time (fnIsAlarm).
 // 0 = no. Alarm will be permanently on. Use with signalType=2 if the connected device has its own switch.
 const byte enableSoftPowerSwitch = 0;
 // 0 = no (normal).
-// 1 = yes. If signalType=2, this allows the relay to be switched on and off when clock is displaying time of day (fnIsTime). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in an old clock radio of the type where the clock does all the switching.
+// 1 = yes. If relay equipped in switch mode, this allows the relay to be switched on and off directly when clock is displaying time of day (fnIsTime). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in an old clock radio of the type where the clock does all the switching.
 
 const byte unoffDur = 10; //when display is dim/off, a press will light the tubes for this many seconds
 
@@ -129,6 +148,9 @@ Some are skipped when they wouldn't apply to a given clock's hardware config; se
   39 Alarm tone pitch - skipped when signalType!=0
   40 Timer tone pitch - skipped when signalType!=0
   41 Hourly strike pitch - skipped when signalType!=0
+  42 Alarm signal type - skipped when not both piezo and relay TODO
+  43 Timer signal type - ditto TODO
+  44 Strike signal type - skip if not relay pulse TODO
 */
 
 //Options menu options' EEPROM locations and default/min/max values.
