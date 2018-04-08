@@ -1,4 +1,7 @@
 # arduino-nixie
+
+![Nixie clocks](https://i.imgur.com/FemMWax.jpg)
+
 **A digital clock with perpetual calendar, alarm, countdown timer/appliance timer, and day counter.** Written for the Arduino Nano at the heart of [RLB Designs'](http://rlb-designs.com/) Universal Nixie Driver Board (UNDB) v5.0, featuring a DS3231 thermocompensated battery-backed real-time clock, and driving up to 6 digits multiplexed in pairs via two SN74141 driver chips. Uses AdaEncoder and ooPinChangeInt (for rotary encoders, optional) and NorthernWidget DS3231 libraries.
 
 [Latest release can be downloaded here.](https://github.com/clockspot/arduino-nixie/releases/latest)
