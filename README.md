@@ -2,13 +2,13 @@
 
 ![Nixie clocks](https://i.imgur.com/FemMWax.jpg)
 
-**A digital clock with perpetual calendar, alarm, countdown timer/appliance timer, and day counter.** Written for the Arduino Nano at the heart of [RLB Designs'](http://rlb-designs.com/) Universal Nixie Driver Board (UNDB) v5.0, featuring a DS3231 thermocompensated battery-backed real-time clock, and driving up to 6 digits multiplexed in pairs via two SN74141 driver chips.
+**A digital clock with perpetual calendar, alarm, countdown timer/appliance timer, and day counter.** Written for the Arduino Nano at the heart of [RLB Designs'](http://rlb-designs.com/) Universal Nixie Driver Board (UNDB) v5.0, featuring a DS3231 real-time clock, and driving up to 6 digits multiplexed in pairs via two SN74141 driver chips.
 
-[The latest release can be downloaded here.](https://github.com/clockspot/arduino-nixie/releases/latest). Skip to [Hardware Configuration](#hardware-configuration) for details on how to tweak the sketch for your clock's hardware configuration.
+[The latest release can be downloaded here.](https://github.com/clockspot/arduino-nixie/releases/latest) Skip to [Hardware Configuration](#hardware-configuration) for details on how to tweak the sketch for your clock's hardware configuration.
 
-## How to Operate the Clock
+## Clock Operating Instructions
 
-_Note: Many variations of these instructions are possible, depending on the hardware configuration of your clock; but this covers most cases._
+_Note: Many variations are possible, depending on your clock's hardware; but this covers most cases._
 
 ### Clock Functions
 
@@ -70,14 +70,14 @@ A number of hardware-related settings are specified in consts at the top of the 
 * **What type of Adjust controls** are equipped: pushbuttons (default) or rotary encoders.
 * **What type of signal outputs** are equipped: a piezo beeper (default) and/or a relay.
   * **Signal duration** (default 3min) and **piezo pulse duration** (default 500ms)
-  * If relay is equipped, **whether relay is switched** (default) **or pulsed:**
-    * In pulse mode, the relay will be pulsed, like the beeper is, to control an intermittent signaling device like a solenoid or indicator lamp; specify **relay pulse duration** (default 200ms)
-    * In switch mode, the relay will be switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify **alarm switch duration** (default 2 hours). Also specify:
-      * **whether soft alarm switch** is enabled. Default is yes; it is switched with Adjust while viewing the alarm time. Change to no if the appliance has its own alarm switch; the clock's alarm will be permanently on.
-      * **whether soft power switch** is enabled. Default is yes; appliance can be switched manually with Adujust while viewing the time of day. Change to no if the appliance has an independent power switch or does not need to be manually switched.
+  * If relay is equipped, **relay mode**:
+    * In switched mode (default), the relay will be switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify **alarm switch duration** (default 2 hours).
+    * In pulse mode, the relay will be pulsed, like the beeper is, to control an intermittent signaling device like a solenoid or indicator lamp; specify **relay pulse duration** (default 200ms).
+* **Soft alarm switch** enabled: default is yes; it is switched with Adjust while viewing the alarm time. Change to no if the signal output/appliance has its own switch on this relay circuit; the clock's alarm will be permanently on.
+* **Soft power switch** enabled (switched relay only): default is yes; appliance can be switched manually with Adjust while viewing the time of day. Change to no if the appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched.
 * **Various other durations** for things like scrolling speed, set mode timeouts, short and long button holds, "hold to set faster" thresholds, etc.
 
-You can also set the defaults for the options menu to better suit the clock's intended use.
+You can also set the **defaults for the options menu** to better suit the clock's intended use.
 
 **To compile the edited sketch:** You will need to add the [ooPinChangeInt](https://code.google.com/archive/p/oopinchangeint/downloads) and [NorthernWidget DS3231](https://github.com/NorthernWidget/DS3231) libraries to your Arduino IDE.
 

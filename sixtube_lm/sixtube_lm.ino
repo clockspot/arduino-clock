@@ -73,10 +73,10 @@ const word relayPulse = 200; //ms - used with pulsed relay
 
 const byte enableSoftAlarmSwitch = 1;
 // 1 = yes. Alarm can be switched on and off when clock is displaying the alarm time (fnIsAlarm).
-// 0 = no. Alarm will be permanently on. Use with switched relay if the connected device has its own switch.
+// 0 = no. Alarm will be permanently on. Use with switched relay if the appliance has its own switch on this relay circuit.
 const byte enableSoftPowerSwitch = 1; //works with switched relay only
 // 1 = yes. Relay can be switched on and off directly when clock is displaying time of day (fnIsTime). This is useful if  connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
-// 0 = no. Use if the connected appliance has an independent power switch or does not need to be manually switched.
+// 0 = no. Use if the connected appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched.
 
 const byte unoffDur = 10; //when display is dim/off, a press will light the tubes for this many seconds
 
