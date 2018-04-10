@@ -4,7 +4,7 @@
 
 **A digital clock with perpetual calendar, alarm, countdown timer/appliance timer, and day counter.** Written for the Arduino Nano at the heart of [RLB Designs'](http://rlb-designs.com/) Universal Nixie Driver Board (UNDB) v5.0, featuring a DS3231 real-time clock, and driving up to 6 digits multiplexed in pairs via two SN74141 driver chips.
 
-[The latest release can be downloaded here.](https://github.com/clockspot/arduino-nixie/releases/latest) Skip to [Hardware Configuration](#hardware-configuration) for details on how to tweak the sketch for your clock's hardware configuration.
+[The latest release can be downloaded here.](https://github.com/clockspot/arduino-nixie/releases/latest) Skip to [Hardware Configuration](#hardware-configuration) for details on how to tweak the sketch.
 
 ## Clock Operating Instructions
 
@@ -17,10 +17,10 @@ _Note: Many variations are possible, depending on your clock's hardware; but thi
 
 | Function | Looks like | Notes |
 | --- | --- | --- |
-| **Time** | `12 34 56` | The time of day. You can choose 12h or 24h format in the options menu (1). When setting, it's in 24h format (so you can tell AM from PM) and the seconds will reset to :00 when you save. The clock keeps time during power outages and compensates for temperature effects.<br/><br/>If your clock is controlling an appliance (relay in switch mode), use **Adjust** here to switch it on and off manually. |
+| **Time** | `12 34 56` | The time of day. You can choose 12h or 24h format in the options menu (1). When setting, it's in 24h format (so you can tell AM from PM) and the seconds will reset to :00 when you save. The clock keeps time during power outages and compensates for temperature effects.<br/><br/>If your clock is controlling an appliance ([relay in switched mode](#hardware-configuration)), use **Adjust** here to switch it on and off manually. |
 | **Date** | `_2 _4 _0`<br/>(for&nbsp;Sun&nbsp;2/4) | You can choose the date format in the options menu (2). Setting is done in three stages: first year, then month, then date.<br/>Weekdays are: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat |
 | **Alarm** | `_7 00 1_` | Shows alarm time (always in 24hr format) and on/off status on 5th tube (1=on, 0=off) and by display brightness (bright=on, dim=off). Use **Adjust** to switch on/off. Hold **Select** to set time (same way as **Time**). When alarm sounds, press **Select** to snooze, or hold for 1sec (followed by a short beep) to silence the alarm for the day. Options menu lets you restrict the alarm to your workweek or weekend only. In a power outage, the alarm will remain set, but it will not sound if power is disconnected at alarm time. |
-| **Timer** | `__ __ _0` | A countdown timer, in hours, minutes, and seconds; or `0` when stopped. Can be set to the minute, up to 18 hours. Begins running as soon as you set it, and will continue to run in the background if you change to a different function. To cancel while running, hold **Select**. When timer runs out, press **Select** to silence. If power is lost, the timer will reset to `0`. Can be configured to work as an interval timer in the options menu (10), or as an appliance timer instead (see Hardware Configuration). |
+| **Timer** | `__ __ _0` | A countdown timer, in hours, minutes, and seconds; or `0` when stopped. Can be set to the minute, up to 18 hours. Begins running as soon as you set it, and will continue to run in the background if you change to a different function. To cancel while running, hold **Select**. When timer runs out, press **Select** to silence. If power is lost, the timer will reset to `0`. Can be configured to work as an interval timer in the options menu (10), or as an appliance timer instead ([relay in switched mode](#hardware-configuration)). |
 | **Day counter** | `_1 23 __` | Shows the number of days until/since a date you specify. Set the same way as **Date.** |
 | **Temperature** | `__ 38 25` | (Disabled by default.) Shows the temperature of the onboard DS3231 chip (e.g. 38.25°C – I think). May not be very useful as it tends to read higher than ambient temperature and its tolerance is low. |
 | **Tube tester** | `88 88 88` | (Disabled by default.) Cycles through all the digits on all the tubes. |
@@ -71,7 +71,7 @@ A number of hardware-related settings are specified in consts at the top of the 
 * **What type of signal outputs** are equipped: a piezo beeper (default) and/or a relay.
   * **Signal duration** (default 3min) and **piezo pulse duration** (default 500ms)
   * If relay is equipped, **relay mode**:
-    * In switched mode (default), the relay will be switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify **alarm switch duration** (default 2 hours).
+    * In switched mode (default), the relay will be switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify **relay switch duration** (default 2 hours).
     * In pulse mode, the relay will be pulsed, like the beeper is, to control an intermittent signaling device like a solenoid or indicator lamp; specify **relay pulse duration** (default 200ms).
 * **Soft alarm switch** enabled: default is yes; it is switched with Adjust while viewing the alarm time. Change to no if the signal output/appliance has its own switch on this relay circuit; the clock's alarm will be permanently on.
 * **Soft power switch** enabled (switched relay only): default is yes; appliance can be switched manually with Adjust while viewing the time of day. Change to no if the appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched.
