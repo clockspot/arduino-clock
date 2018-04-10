@@ -57,40 +57,26 @@ const char mainAdjFn = -1;
 // const byte altSelFn = -1;
 // const byte altAdjFn = -1;
 
-///////TODO SEARCH FOR THESE ////////////////
-const byte signalPin = 10;
-const byte signalType = 0; //What is the signal pin connected to?
-// 0 = Piezo. When alarm and timer go off, it will output a beep pattern with tone() for signalDur seconds.
-// 1 = Relay, signal style. Same as above, but it will simply switch the pin, for e.g. a solenoid striking a bell.
-// 2 = Relay, radio style. When alarm goes off, output will stay on for signalDur seconds (e.g. clock radio or appliance timer). When timer is running, output will stay on until timer runs down (e.g. clock radio "sleep" function) – but note that if the connected device has its own switch (see below), this will only work if the device is switched on.
-
-const word signalBeepDur = 500; //With signalType 0/1, "beeps" happen once per second; how long is each beep in ms?
-//Particularly when driving a solenoid with signalType 1, this should be set to a comfortable activation duration for the solenoid.
-
 //What are the signal pin(s) connected to?
 const char piezoPin = 10;
-const char relayPin = -1;
-//If running a v5.0 board with only a piezo output, leave these set to 10 and -1 (disabled) respectively - unless removing the piezo to drive a relay instead, in which case, reverse them.
-//If running a v5.x board, piezo is 10, relay is X.
-const byte relayMode = 0; //what does the relay pin do?
-//0 = switch (for e.g. appliance/radio) - see switchDur
-//1 = pulses (for e.g. solenoid) - see relayPulse
-const word signalDur = 180; //sec - when alarm or timer go off (piezo or relay pulse), pulses are sent once/sec for this many seconds (e.g. 180 = 3min)
-const word switchDur = 7200; //sec - when alarm goes off (relay switch), relay is switched for this many seconds (e.g. 7200 = 2hr)
-const word piezoPulse = 500; //ms - used with tone()
-const word relayPulse = 200; //ms - for pulsing e.g. a solenoid
-//If both piezo and relay are equipped, you get these extra menu options:
-//alarm signal: 0: piezo, 1: relay (pulse or switch for wake)
-//timer mode: 0: countdown and stop, 1: countdown and restart (interval timer)
-//timer signal: 0: piezo, 1: relay (pulse or switch for sleep)
-//strike signal (if relayMode is pulse): 0: piezo, 1: relay pulse
+const char relayPin = 127;
+// If running a v5.0 board with only a piezo output, leave these set to 10 and -1 (disabled) respectively - unless removing the piezo to drive a relay instead, in which case, reverse them.
+// If running a v5.x board with both piezo and relay, piezo is 10, relay is X. Extra menu options will appear to let end user decide which functions control which outputs.
+// Relay toggles are written to the serial console for testing. To test without relay present, set relayPin to 127.
+const byte relayMode = 0; //If relay is equipped, what does it do?
+// 0 = switched mode: the relay will be switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in switchDur.
+// 1 = pulsed mode: the relay will be pulsed, like the beeper is, to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in relayPulse.
+const word signalDur = 180; //sec - when pulsed signal is going, pulses are sent once/sec for this period (e.g. 180 = 3min)
+const word switchDur = 7200; //sec - when alarm triggers switched relay, it's switched on for this period (e.g. 7200 = 2hr)
+const word piezoPulse = 500; //ms - used with piezo via tone()
+const word relayPulse = 200; //ms - used with pulsed relay
 
 const byte enableSoftAlarmSwitch = 1;
-// 1 = yes (normal). Alarm can be switched on and off when clock is displaying the alarm time (fnIsAlarm).
-// 0 = no. Alarm will be permanently on. Use with signalType=2 if the connected device has its own switch.
-const byte enableSoftPowerSwitch = 0;
-// 0 = no (normal).
-// 1 = yes. If relay equipped in switch mode, this allows the relay to be switched on and off directly when clock is displaying time of day (fnIsTime). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in an old clock radio of the type where the clock does all the switching.
+// 1 = yes. Alarm can be switched on and off when clock is displaying the alarm time (fnIsAlarm).
+// 0 = no. Alarm will be permanently on. Use with switched relay if the connected device has its own switch.
+const byte enableSoftPowerSwitch = 1; //works with switched relay only
+// 1 = yes. Relay can be switched on and off directly when clock is displaying time of day (fnIsTime). This is useful if  connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
+// 0 = no. Use if the connected appliance has an independent power switch or does not need to be manually switched.
 
 const byte unoffDur = 10; //when display is dim/off, a press will light the tubes for this many seconds
 
@@ -113,7 +99,7 @@ const word timeoutTempFn = 5; //sec
 ////////// Other global consts and vars //////////
 
 /*EEPROM locations for non-volatile clock settings
-Don't change these; they should remain permanent to avoid the need for EEPROM initializations after code upgrades; and they are used directly in code.
+Don't change which location is associated with which setting; they should remain permanent to avoid the need for EEPROM initializations after code upgrades; and they are used directly in code.
 Most values in the clock are 1-byte; if 2-byte, high byte is loc, low byte is loc+1.
 
 These ones are set outside the options menu (defaults defined in initEEPROM()):
@@ -125,17 +111,17 @@ These ones are set outside the options menu (defaults defined in initEEPROM()):
 ( 7-15 are available )
 
 These ones are set inside the options menu (defaults defined in arrays below).
-Some are skipped when they wouldn't apply to a given clock's hardware config; see fnOptScroll(). Make sure these ones' defaults work for all configs.
+Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
   16 Time format
   17 Date format 
   18 Display date during time
   19 Leading zero in hour, date, and month
-  20 Digit fade duration TODO
-  21 Hourly strike - skipped when signalType==2 (radio mode)
+  20 Digit fade duration
+  21 Strike - skipped when no piezo and relay is switch (start=0)
   22 Auto DST
   23 Alarm days
   24 Alarm snooze
-  25 Timer interval mode - skipped when signalType==2 (radio mode)
+  25 Timer interval mode - skipped when no piezo and relay is switch (start=0)
 ( 26 is available )
   27 Night-off
   28-29 Night start, mins
@@ -145,22 +131,22 @@ Some are skipped when they wouldn't apply to a given clock's hardware config; se
   34 Last day of workweek
   35-36 Work starts at, mins
   37-38 Work ends at, mins
-  39 Alarm tone pitch - skipped when signalType!=0
-  40 Timer tone pitch - skipped when signalType!=0
-  41 Hourly strike pitch - skipped when signalType!=0
-  42 Alarm signal type - skipped when not both piezo and relay TODO
-  43 Timer signal type - ditto TODO
-  44 Strike signal type - skip if not relay pulse TODO
+  39 Alarm beeper pitch - skipped when no piezo
+  40 Timer beeper pitch - skipped when no piezo
+  41 Strike beeper pitch - skipped when no piezo
+  42 Alarm signal - skipped when no relay (start=0) or no piezo (start=0)
+  43 Timer signal - skipped when no relay (start=0) or no piezo (start=1)
+  44 Strike signal - skipped when no pulse relay (start=0) or no piezo (start=1)
 */
 
 //Options menu options' EEPROM locations and default/min/max values.
 //Options' numbers may be changed by reordering these arrays (and changing readme accordingly).
 //Although these arrays are 0-index, the option number displayed (and listed in readme) is 1-index. (search for "fn-fnOpts+1")
-//1-index option number: 1  2  3  4  5  6  7  8  9 10 11 12 13 14   15   16 17 18 19   20   21
-const byte optsLoc[] = {16,17,18,19,20,22,23,24,39,25,40,21,41,27,  28,  30,32,33,34,  35,  37};
-const word optsDef[] = { 2, 1, 0, 0, 0, 0, 0, 0,61, 0,61, 0,61, 0,1320, 360, 0, 1, 5, 480,1020};
-const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0,49, 0,49, 0,49, 0,   0,   0, 0, 0, 0,   0,   0};
-const word optsMax[] = { 2, 5, 3, 1,20, 6, 2,60,88, 1,88, 4,88, 2,1439,1439, 2, 6, 6,1439,1439};
+//1-index option number: 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17   18   19 20 21 22   23   24
+const byte optsLoc[] = {16,17,18,19,20,22,23,24,42,39,43,25,40,21,44,41,27,  28,  30,32,33,34,  35,  37};
+const word optsDef[] = { 2, 1, 0, 0, 0, 0, 0, 0, 0,61, 0, 0,61, 0, 0,61, 0,1320, 360, 0, 1, 5, 480,1020};
+const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,49, 0, 0,49, 0, 0,49, 0,   0,   0, 0, 0, 0,   0,   0};
+const word optsMax[] = { 2, 5, 3, 1,20, 6, 2,60, 1,88, 1, 1,88, 4, 1,88, 2,1439,1439, 2, 6, 6,1439,1439};
 
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
@@ -190,7 +176,7 @@ word snoozeRemain = 0; //snooze timeout counter, seconds
 word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,800 seconds - fits just inside a word)
 word timerRemain = 0; //timer actual counter
 word signalPitch = 440; //current signal pitch - set by what started the signal going
-unsigned long signalBeepStopTime = 0; //to stop beeps after a time
+unsigned long signalPulseStopTime = 0; //to stop beeps after a time
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night-off or day-off) timeout counter, seconds
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
@@ -206,7 +192,18 @@ void setup(){
   Wire.begin();
   initOutputs();
   initInputs();
+  //Initialize EEPROM if requested
   //if(readInput(mainSel)==LOW) initEEPROM(); TODO why is this firing so much
+  //Some options need to be set to a fixed value per the hardware configuration
+  if(relayPin<0 || piezoPin<0) { //If no relay or no piezo, set each signal setting to [if no relay then beeper else relay]
+    writeEEPROM(42,(relayPin<0?0:1),false); //alarm
+    writeEEPROM(43,(relayPin<0?0:1),false); //timer
+    writeEEPROM(44,(relayPin<0?0:1),false); //strike
+  }
+  if(piezoPin<0 && relayMode==0) { //If no piezo and relay is switch
+    writeEEPROM(21,0,false); //turn off strike
+    writeEEPROM(25,0,false); //turn off timer interval mode
+  }
 }
 
 unsigned long pollLast = 0; //every 50ms
@@ -455,7 +452,10 @@ void ctrlEvt(byte ctrl, byte evt){
             case fnIsTimer: //timer
               timerInitial = fnSetVal*60; //timerRemain is seconds, but timer is set by minute
               timerRemain = timerInitial; //set actual timer going
-              if(signalType==2) { digitalWrite(signalPin,HIGH); Serial.print(millis(),DEC); Serial.println(F(" Relay on, timer set")); }
+              if(relayPin>=0 && relayMode==0 && readEEPROM(43,false)==1) { //if switched relay, and timer signal is set to it
+                if(relayPin!=127) digitalWrite(relayPin,HIGH);
+                Serial.print(millis(),DEC); Serial.println(F(" Relay on, timer set"));
+              }
               clearSet(); break;
             case fnIsDayCount: //set like date, save in eeprom like finishOpt
               switch(fnSetPg){
@@ -534,8 +534,10 @@ void fnOptScroll(char dir){
   //Certain options don't apply to some hardware configurations; skip those
   byte optLoc = optsLoc[fn-fnOpts];
   if(
-      (signalType!=0 && (optLoc==39||optLoc==40||optLoc==41)) //signal is not piezo: no signal pitches
-      || (signalType==2 && (optLoc==21||optLoc==25)) //signal is relay radio: no hourly strike or interval timer
+      (piezoPin<0 && (optLoc==39||optLoc==40||optLoc==41)) //no piezo: no signal pitches
+      || ((piezoPin<0 && relayMode==0) && (optLoc==21||optLoc==25)) //no piezo, and relay is switch: no strike or timer interval mode
+      || ((relayPin<0 || piezoPin<0) && (optLoc==42||optLoc==43||optLoc==44)) //no relay or no piezo: no alarm/timer/strike signal
+      || ((relayMode==0) && (optLoc==44)) //relay is switch: no strike signal
     ) fnOptScroll(dir);
 }
 
@@ -672,7 +674,7 @@ void checkRTC(bool force){
       if(pollLast>inputLast+(timeoutTempFn*1000)) { fnSetPg = 0; fn = fnIsTime; force=true; }
     }
     //Stop a signal beep if it's time to
-    if(signalBeepStopTime && signalBeepStopTime<millis()) { signalBeepStop(); signalBeepStopTime = 0; }
+    if(signalPulseStopTime && signalPulseStopTime<millis()) { signalPulseStop(); signalPulseStopTime = 0; }
   }
   
   //Update things based on RTC
@@ -690,7 +692,7 @@ void checkRTC(bool force){
         if(readEEPROM(23,false)==0 || //any day of the week
           (readEEPROM(23,false)==1 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow)) || //weekday only
           (readEEPROM(23,false)==2 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow)) ) { //weekend only
-            fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,signalDur,0);
+            fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0); //TODO this is a special case
         } //end toddow check
       } //end alarm trigger
       //check if we should trigger the cleaner (at night end time, or alarm time if night end is 0:00)
@@ -704,13 +706,13 @@ void checkRTC(bool force){
       if(readEEPROM(18,false)==3) { startScroll(); }
     }
     
-    //Strikes - only if fn=clock, not setting, not night-off/day-off, and appropriate signal type.
+    //Strikes - only if fn=clock, not setting, not night-off/day-off. Setting 21 will be off if signal type is no good
     //Short pips before the top of the hour
-    if(tod.minute()==59 && tod.second()>=55 && readEEPROM(21,false)==2 && signalType<2 && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {
+    if(tod.minute()==59 && tod.second()>=55 && readEEPROM(21,false)==2 && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {
       signalStart(fnIsTime,0,100);
     }
     //Strikes on/after the hour
-    if(tod.second()==0 && (tod.minute()==0 || tod.minute()==30) && signalType<2 && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2){
+    if(tod.second()==0 && (tod.minute()==0 || tod.minute()==30) && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2){
       byte hr; hr = tod.hour(); hr = (hr==0?12:(hr>12?hr-12:hr));
       switch(readEEPROM(21,false)) {
         case 1: //single beep
@@ -731,28 +733,28 @@ void checkRTC(bool force){
       if(timerRemain>0) {
         timerRemain--;
         if(timerRemain<=0) { //timer has elasped
-          if(signalType==2) { //radio mode - turn off signal
+          if(relayPin>=0 && relayMode==0 && readEEPROM(43,false)==1) { //if switched relay, and timer signal is set to it
             signalStop();
-          } else { //not radio mode - turn on signal
+          } else { //not switched relay: turn on signal
             if(readEEPROM(25,false)) { //interval timer: a short signal and restart; don't change to timer fn
               signalStart(fnIsTimer,0,0); timerRemain = timerInitial;
             } else {
               fnSetPg = 0; fn = fnIsTimer; inputLast = pollLast; signalStart(fnIsTimer,signalDur,0);
             }
-          } //end not radio mode
+          } //end not switched relay
         } //end timer elapsed
       }
       //If alarm snooze has time on it, decrement and trigger signal if we reach zero (and alarm is still on)
       if(snoozeRemain>0) {
         snoozeRemain--;
         if(snoozeRemain<=0 && readEEPROM(2,false)) {
-          fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,signalDur,0);
+          fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0); //TODO this is a special case
         }
       }
-      //If signal has time on it, decrement and make a beep
+      //If signal has time on it, decrement and make a beep (if applicable to outputs)
       if(signalRemain>0) {
         signalRemain--;
-        if(signalType<2) signalBeepStart(0);
+        signalPulseStart(0);
       }
       if(unoffRemain>0) {
         unoffRemain--; //updateDisplay will naturally put it back to off state if applicable
@@ -819,11 +821,16 @@ void switchAlarm(char dir){
   }
 }
 void switchPower(char dir){
-  if(enableSoftPowerSwitch && signalType==2){
+  if(enableSoftPowerSwitch && relayPin>=0 && relayMode==0) { //if switched relay, and soft switch enabled
     //signalStop(); could use this instead of the below to turn the radio off
-    if(dir==1) { digitalWrite(signalPin,HIGH); Serial.print(millis(),DEC); Serial.println(F(" Relay on, switchPower")); }
-    if(dir==-1) { digitalWrite(signalPin,LOW); Serial.print(millis(),DEC); Serial.println(F(" Relay off, switchPower")); }
-    if(dir==0) { digitalWrite(signalPin,!digitalRead(signalPin)); Serial.print(millis(),DEC); Serial.println(digitalRead(signalPin)==HIGH?F(" Relay toggled on, switchPower"):F(" Relay toggled off, switchPower")); }
+    if(relayPin!=127) {
+      digitalWrite(relayPin,(dir==1?HIGH:(dir==-1?LOW:!digitalRead(relayPin))));
+    }
+    Serial.print(millis(),DEC);
+    Serial.print(F(" Relay "));
+    if(dir==0) Serial.print(F("toggled "));
+    Serial.print(digitalRead(relayPin)==HIGH?F("on"):F("off"));
+    Serial.println(F(", switchPower"));
   }
 }
 
@@ -899,7 +906,7 @@ void updateDisplay(){
       editDisplay(0,4,5,true); //placeholder seconds
     } else if(fnSetValMax==88) { //A piezo pitch. Play a short demo beep.
       editDisplay(fnSetVal, 0, 3, false);
-      if(signalType==0) { signalStop(); tone(signalPin, getHz(fnSetVal), 100); } //One exception to using signalStart since we need to specify pitch directly
+      if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(fnSetVal), 100); } //One exception to using signalStart since we need to specify pitch directly
     } else editDisplay(fnSetVal, 0, 3, false); //some other type of value
   }
   else if(fn >= fnOpts){ //options menu, but not setting a value
@@ -1044,7 +1051,8 @@ unsigned long setStartLast = 0; //to control flashing during start
 void initOutputs() {
   for(byte i=0; i<4; i++) { pinMode(binOutA[i],OUTPUT); pinMode(binOutB[i],OUTPUT); }
   for(byte i=0; i<3; i++) { pinMode(anodes[i],OUTPUT); }
-  pinMode(10, OUTPUT); //Alarm signal pin
+  if(piezoPin>=0) pinMode(piezoPin, OUTPUT);
+  if(relayPin>=0 && relayPin!=127) pinMode(relayPin, OUTPUT);
 }
 
 void cycleDisplay(){
@@ -1142,39 +1150,48 @@ void decToBin(bool binVal[], byte i){
   binVal[0] = i%2;
 } //end decToBin()
 
-void signalStart(byte sigFn, byte sigDur, word beepDur){ //make some noise! or switch on an appliance!
+void signalStart(byte sigFn, byte sigDur, word pulseDur){ //make some noise! or switch on an appliance!
   //sigFn isn't necessarily the current fn, just the one generating the signal
   //sigDur is the number of seconds to put on signalRemain, or 0 for a single immediate beep (skipped in radio mode).
-  //If doing a single beep, beepDur is the number of ms it should last, or 0 for signalBeepDur. If signalType==1 signalBeepDur will be used anyway.
+  //Special case: if sigFn==fnIsAlarm, and sigDur>0, we'll use signalDur or switchDur as appropriate.
+  //If doing a single beep, pulseDur is the number of ms it should last, or 0 for signal source's chosen output's pulse length (which will be used anyway if pulsed relay)
   signalStop();
   signalSource = sigFn;
   signalPitch = getHz(readEEPROM((sigFn==fnIsTime?41:(sigFn==fnIsTimer?40:39)),false)); //use pitch for time, timer, or (default) alarm
-  if(sigDur==0) signalBeepStart(beepDur); //single immediate beep
+  if(sigDur==0) signalPulseStart(pulseDur); //single immediate beep
   else { //long-duration signal (alarm, sleep, etc)
-    signalRemain = sigDur;
+    if(sigFn==fnIsAlarm) signalRemain = (readEEPROM(42,false)==1 && relayPin>=0 && relayMode==0 ? switchDur : signalDur);
+    else signalRemain = sigDur;
     //If it's signal style (beeps), checkRTC will handle it; if it's radio style, turn it on right now
-    if(signalType==2) { digitalWrite(signalPin,HIGH); Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalStart")); }
+    if(relayPin>=0 && relayMode==0) {
+      if(relayPin!=127) digitalWrite(relayPin,HIGH);
+      Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalStart"));
+    }
   }
 }
 void signalStop(){ //stop current signal and clear out signal timer if applicable
   signalRemain = 0; snoozeRemain = 0;
-  signalBeepStop();
-  if(signalType==2) { digitalWrite(signalPin,LOW); Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalStop")); }
+  signalPulseStop();
+  if(relayPin>=0 && relayMode==0) {
+    if(relayPin!=127) digitalWrite(relayPin,LOW);
+    Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalStop"));
+  }
 }
 //beep start and stop should only be called by signalStart/signalStop and checkRTC
-void signalBeepStart(word beepDur){
-  if(signalType==0) { tone(signalPin, signalPitch, (beepDur==0?signalBeepDur:beepDur)); }
+void signalPulseStart(word pulseDur){
+  //Stopping point: This function needs to know which pin to pulse, per the settings of the current signaling thing. That comes from eeprom so it needs to go into a var like signalPitch, or convert both to read from eeprom every time per signalSource.
+  if(signalType==0) { tone(signalPin, signalPitch, (pulseDur==0?signalPulseDur:pulseDur)); }
   else if(signalType==1) {
-    digitalWrite(signalPin,HIGH); signalBeepStopTime = millis()+(beepDur==0?signalBeepDur:beepDur);
-    Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalBeepStart"));
+    digitalWrite(signalPin,HIGH); signalPulseStopTime = millis()+(pulseDur==0?signalPulseDur:pulseDur);
+    Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalPulseStart"));
   }
   //signalType==2 do nothing
 }
-void signalBeepStop(){
+void signalPulseStop(){
   if(signalType==0) { noTone(signalPin); }
   else if(signalType==1) {
-    digitalWrite(signalPin,LOW); signalBeepStopTime = 0;
-    Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalBeepStop"));
+    digitalWrite(signalPin,LOW); signalPulseStopTime = 0;
+    Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalPulseStop"));
   }
   //signalType==2 do nothing
 }
