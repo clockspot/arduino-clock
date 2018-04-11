@@ -134,7 +134,7 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   39 Alarm beeper pitch - skipped when no piezo
   40 Timer beeper pitch - skipped when no piezo
   41 Strike beeper pitch - skipped when no piezo
-  42 Alarm signal - skipped when no relay (start=0) or no piezo (start=0)
+  42 Alarm signal, 0=beeper, 1=relay - skipped when no relay (start=0) or no piezo (start=0)
   43 Timer signal - skipped when no relay (start=0) or no piezo (start=1)
   44 Strike signal - skipped when no pulse relay (start=0) or no piezo (start=1)
 */
@@ -175,7 +175,6 @@ word signalRemain = 0; //alarm/timer signal timeout counter, seconds
 word snoozeRemain = 0; //snooze timeout counter, seconds
 word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,800 seconds - fits just inside a word)
 word timerRemain = 0; //timer actual counter
-word signalPitch = 440; //current signal pitch - set by what started the signal going
 unsigned long signalPulseStopTime = 0; //to stop beeps after a time
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night-off or day-off) timeout counter, seconds
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
@@ -1157,7 +1156,6 @@ void signalStart(byte sigFn, byte sigDur, word pulseDur){ //make some noise! or 
   //If doing a single beep, pulseDur is the number of ms it should last, or 0 for signal source's chosen output's pulse length (which will be used anyway if pulsed relay)
   signalStop();
   signalSource = sigFn;
-  signalPitch = getHz(readEEPROM((sigFn==fnIsTime?41:(sigFn==fnIsTimer?40:39)),false)); //use pitch for time, timer, or (default) alarm
   if(sigDur==0) signalPulseStart(pulseDur); //single immediate beep
   else { //long-duration signal (alarm, sleep, etc)
     if(sigFn==fnIsAlarm) signalRemain = (readEEPROM(42,false)==1 && relayPin>=0 && relayMode==0 ? switchDur : signalDur);
@@ -1179,21 +1177,28 @@ void signalStop(){ //stop current signal and clear out signal timer if applicabl
 }
 //beep start and stop should only be called by signalStart/signalStop and checkRTC
 void signalPulseStart(word pulseDur){
-  //Stopping point: This function needs to know which pin to pulse, per the settings of the current signaling thing. That comes from eeprom so it needs to go into a var like signalPitch, or convert both to read from eeprom every time per signalSource.
-  if(signalType==0) { tone(signalPin, signalPitch, (pulseDur==0?signalPulseDur:pulseDur)); }
-  else if(signalType==1) {
-    digitalWrite(signalPin,HIGH); signalPulseStopTime = millis()+(pulseDur==0?signalPulseDur:pulseDur);
+  //Only act if the signal source output is pulsable
+  char output = readEEPROM((sigFn==fnIsTime?44:(sigFn==fnIsTimer?43:42)),false); //get output for time, timer, or (default) alarm
+  if(output==0 && piezoPin>=0) { //beeper
+    word pitch = getHz(readEEPROM((sigFn==fnIsTime?41:(sigFn==fnIsTimer?40:39)),false)); //get pitch for time, timer, or (default) alarm
+    tone(piezoPin, pitch, (pulseDur==0?piezoPulse:pulseDur));
+  }
+  if(output==1 && relayPin>=0 && relayMode==1) { //pulsed relay
+    if(relayPin!=127) digitalWrite(relayPin,HIGH);
+    signalPulseStopTime = millis()+relayPulse; //(pulseDur==0?relayPulse:pulseDur); //TODO danger of a duration that's not relayPulse?
     Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalPulseStart"));
   }
-  //signalType==2 do nothing
 }
 void signalPulseStop(){
-  if(signalType==0) { noTone(signalPin); }
-  else if(signalType==1) {
-    digitalWrite(signalPin,LOW); signalPulseStopTime = 0;
-    Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalPulseStop"));
+  char output = readEEPROM((sigFn==fnIsTime?44:(sigFn==fnIsTimer?43:42)),false); //get output for time, timer, or (default) alarm
+  if(output==0 && piezoPin>=0) { //beeper
+    noTone(signalPin);
   }
-  //signalType==2 do nothing
+  if(output==1 && relayPin>=0 && relayMode==1) { //pulsed relay
+    if(relayPin!=127) digitalWrite(relayPin,LOW);
+    signalPulseStopTime = 0;
+    Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalPulseStart"));
+  }
 }
 word getHz(byte note){
   //Given a piano key note, return frequency
