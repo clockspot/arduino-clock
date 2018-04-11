@@ -37,9 +37,9 @@ const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCoun
 // A6-A7 are analog-only pins that aren't quite as responsive and require a physical pullup resistor (1K to +5V), and can't be used with rotary encoders because they don't support pin change interrupts.
 
 // What input is associated with each control?
-const byte mainSel = A1; //main select button - must be equipped
-const byte mainAdjUp = A3; //main up/down buttons or rotary encoder - must be equipped
-const byte mainAdjDn = A2;
+const byte mainSel = A2; //main select button - must be equipped
+const byte mainAdjUp = A1; //main up/down buttons or rotary encoder - must be equipped
+const byte mainAdjDn = A0;
 const byte altSel = 0; //alt select button - if unequipped, set to 0
 const byte altAdjUp = 0; //A6; //alt up/down buttons or rotary encoder - if unequipped, set to 0
 const byte altAdjDn = 0; //A3;
@@ -92,8 +92,8 @@ const word cleanSpeed = 200; //ms
 const word scrollSpeed = 100; //ms - e.g. scroll-in-and-out date at :30 - to give the illusion of a slow scroll that doesn't pause, use (timeoutTempFn*1000)/(displaySize+1) - e.g. 714 for displaySize=6 and timeoutTempFn=5
 
 // What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
-const word timeoutSet = 120; //sec
-const word timeoutTempFn = 5; //sec
+const unsigned long timeoutSet = 120; //sec
+const unsigned long timeoutTempFn = 5; //sec
 
 
 ////////// Other global consts and vars //////////
@@ -192,12 +192,15 @@ void setup(){
   initOutputs();
   initInputs();
   //Initialize EEPROM if requested
-  //if(readInput(mainSel)==LOW) initEEPROM(); TODO why is this firing so much
+  if(readInput(mainSel)==LOW) initEEPROM(); //TODO why is this firing so much
   //Some options need to be set to a fixed value per the hardware configuration
-  if(relayPin<0 || piezoPin<0) { //If no relay or no piezo, set each signal setting to [if no relay then beeper else relay]
+  if(relayPin<0 || piezoPin<0) { //If no relay or no piezo, set each signal setting to [if no relay then piezo else relay]
     writeEEPROM(42,(relayPin<0?0:1),false); //alarm
     writeEEPROM(43,(relayPin<0?0:1),false); //timer
     writeEEPROM(44,(relayPin<0?0:1),false); //strike
+  }
+  if(piezoPin>=0 && relayMode==0) { //If piezo and relay is switch
+    writeEEPROM(44,0,false); //strike forced to piezo
   }
   if(piezoPin<0 && relayMode==0) { //If no piezo and relay is switch
     writeEEPROM(21,0,false); //turn off strike
@@ -336,9 +339,9 @@ void ctrlEvt(byte ctrl, byte evt){
   //Before all else, is it a press to stop the signal? Silence it
   if(signalRemain>0 && evt==1){
     stoppingSignal = true;
-    //If we're displaying the clock (as alarm trigger does), start snooze. 0 will have no effect.
-    if(signalSource==fnIsAlarm) snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
     signalStop();
+    //If source is alarm, start snooze. 0 will have no effect.
+    if(signalSource==fnIsAlarm) snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
     return;
   }
   //After pressing to silence, short hold cancels a snooze; ignore other btn evts
@@ -698,7 +701,6 @@ void checkRTC(bool force){
       if(tod.hour()*60+tod.minute()==(readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true))) {
         cleanRemain = 11; //loop() will pick this up
       } //end cleaner check
-      //
     }
     if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0) { //At bottom of minute, maybe show date - not when unoffing
       if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = pollLast; updateDisplay(); }
@@ -827,8 +829,8 @@ void switchPower(char dir){
     }
     Serial.print(millis(),DEC);
     Serial.print(F(" Relay "));
-    if(dir==0) Serial.print(F("toggled "));
-    Serial.print(digitalRead(relayPin)==HIGH?F("on"):F("off"));
+    if(dir==0) { Serial.print(F("toggled")); if(relayPin!=127) { Serial.print(digitalRead(relayPin)==HIGH?F(" on"):F(" off")); } }
+    else Serial.print(dir==1?F("switched on"):F("switched off"));
     Serial.println(F(", switchPower"));
   }
 }
@@ -1178,9 +1180,9 @@ void signalStop(){ //stop current signal and clear out signal timer if applicabl
 //beep start and stop should only be called by signalStart/signalStop and checkRTC
 void signalPulseStart(word pulseDur){
   //Only act if the signal source output is pulsable
-  char output = readEEPROM((sigFn==fnIsTime?44:(sigFn==fnIsTimer?43:42)),false); //get output for time, timer, or (default) alarm
+  char output = readEEPROM((signalSource==fnIsTime?44:(signalSource==fnIsTimer?43:42)),false);
   if(output==0 && piezoPin>=0) { //beeper
-    word pitch = getHz(readEEPROM((sigFn==fnIsTime?41:(sigFn==fnIsTimer?40:39)),false)); //get pitch for time, timer, or (default) alarm
+    word pitch = getHz(readEEPROM((signalSource==fnIsTime?41:(signalSource==fnIsTimer?40:39)),false));
     tone(piezoPin, pitch, (pulseDur==0?piezoPulse:pulseDur));
   }
   if(output==1 && relayPin>=0 && relayMode==1) { //pulsed relay
@@ -1190,9 +1192,9 @@ void signalPulseStart(word pulseDur){
   }
 }
 void signalPulseStop(){
-  char output = readEEPROM((sigFn==fnIsTime?44:(sigFn==fnIsTimer?43:42)),false); //get output for time, timer, or (default) alarm
+  char output = readEEPROM((signalSource==fnIsTime?44:(signalSource==fnIsTimer?43:42)),false);
   if(output==0 && piezoPin>=0) { //beeper
-    noTone(signalPin);
+    noTone(piezoPin);
   }
   if(output==1 && relayPin>=0 && relayMode==1) { //pulsed relay
     if(relayPin!=127) digitalWrite(relayPin,LOW);
