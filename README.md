@@ -46,8 +46,8 @@ _Note: Many variations are possible, depending on your clock's hardware; but thi
 | 11. Timer signal | 0 = beeper<br/>1 = relay (if in switch mode, will stay on until timer runs down)</br>(Clocks with both beeper and relay only) |
 | 12. Timer interval mode | 0 = count down and stop<br/>1 = count down and restart (interval mode)<br/>(Clocks with beeper and/or pulse relay only) |
 | 13. Timer beeper pitch | Set the same way as the alarm pitch, above<br/>(Clocks with beeper only) |
-| 14. Strike | Make noise on the hour:<br/>0 = off<br/>1 = single beep<br/>2 = pips<br/>3 = strike the hour (1 to 12)<br/>4 = ship's bell (hour and half hour)<br/>Will not sound during day-off/night-off (except when off starts at top of hour)<br/>(Clocks with beeper and/or pulse relay only) |
-| 15. Strike signal | 0 = beeper<br/>1 = relay<br/>(Clocks with both beeper and relay only) |
+| 14. Strike | Make noise on the hour:<br/>0 = off<br/>1 = single beep<br/>2 = pips<br/>3 = strike the hour (1 to 12)<br/>4 = ship's bell (hour and half hour)<br/>Will not sound during day-off/night-off (except when off starts at top of hour)<br/>(Clocks with beeper or pulse relay only) |
+| 15. Strike signal | 0 = beeper<br/>1 = relay<br/>(Clocks with both beeper and pulse relay only) |
 | 16. Strike beeper pitch | Set the same way as the alarm signal pitch, above. If using the pips, 63 (987 Hz) is closest to the real BBC pips frequency (1000 Hz).<br/>(Clocks with beeper only) |
 | 17. Night-off | To save tube life and/or preserve your sleep, dim or shut off tubes nightly when you're not around or sleeping.<br/>0 = none (tubes fully on at night)<br/>1 = dim tubes at night<br/>2 = shut off tubes at night<br/>When off, you can press **Select** to illuminate the tubes briefly. |
 | 18. Night starts at | Time of day. |

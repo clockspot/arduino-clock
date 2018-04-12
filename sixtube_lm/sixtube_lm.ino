@@ -144,7 +144,7 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //Although these arrays are 0-index, the option number displayed (and listed in readme) is 1-index. (search for "fn-fnOpts+1")
 //1-index option number: 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17   18   19 20 21 22   23   24
 const byte optsLoc[] = {16,17,18,19,20,22,23,24,42,39,43,25,40,21,44,41,27,  28,  30,32,33,34,  35,  37};
-const word optsDef[] = { 2, 1, 0, 0, 0, 0, 0, 0, 0,61, 0, 0,61, 0, 0,61, 0,1320, 360, 0, 1, 5, 480,1020};
+const word optsDef[] = { 2, 1, 0, 0, 5, 0, 0, 9, 0,61, 0, 0,61, 0, 0,61, 0,1320, 360, 0, 1, 5, 480,1020};
 const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,49, 0, 0,49, 0, 0,49, 0,   0,   0, 0, 0, 0,   0,   0};
 const word optsMax[] = { 2, 5, 3, 1,20, 6, 2,60, 1,88, 1, 1,88, 4, 1,88, 2,1439,1439, 2, 6, 6,1439,1439};
 
@@ -177,10 +177,8 @@ word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,80
 word timerRemain = 0; //timer actual counter
 unsigned long signalPulseStopTime = 0; //to stop beeps after a time
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night-off or day-off) timeout counter, seconds
-byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 byte cleanRemain = 11; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
-byte scrollDisplay[6] = {15,15,15,15,15,15}; //For animating a value into displayNext from right, and out to left
 char scrollRemain = 0; //"frames" of scroll – 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change
 
 
@@ -191,21 +189,23 @@ void setup(){
   Wire.begin();
   initOutputs();
   initInputs();
-  //Initialize EEPROM if requested
-  if(readInput(mainSel)==LOW) initEEPROM(); //TODO why is this firing so much
-  //Some options need to be set to a fixed value per the hardware configuration
-  if(relayPin<0 || piezoPin<0) { //If no relay or no piezo, set each signal setting to [if no relay then piezo else relay]
+  delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
+  initEEPROM(readInput(mainSel)==LOW); //Do a hard init of EEPROM if button is held; else do a soft init to make sure vals in range
+  //Some options need to be set to a fixed value per the hardware configuration.
+  //These options will also be skipped in fnOptScroll so the user can't change them.
+  if(relayPin<0 || piezoPin<0) { //If no relay or no piezo, set each signal output to [if no relay, then piezo; else relay]  
     writeEEPROM(42,(relayPin<0?0:1),false); //alarm
     writeEEPROM(43,(relayPin<0?0:1),false); //timer
     writeEEPROM(44,(relayPin<0?0:1),false); //strike
   }
-  if(piezoPin>=0 && relayMode==0) { //If piezo and relay is switch
+  if(piezoPin>=0 && relayMode==0) { //If piezo and switched relay
     writeEEPROM(44,0,false); //strike forced to piezo
   }
-  if(piezoPin<0 && relayMode==0) { //If no piezo and relay is switch
+  if(piezoPin<0 && relayMode==0) { //If switched relay and no piezo
     writeEEPROM(21,0,false); //turn off strike
     writeEEPROM(25,0,false); //turn off timer interval mode
   }
+  if(!enableSoftAlarmSwitch) writeEEPROM(2,1,false); //force alarm on if software switch is disabled
 }
 
 unsigned long pollLast = 0; //every 50ms
@@ -229,14 +229,11 @@ void loop(){
       if(scrollRemain==0) scrollRemain=-128;
     }
   }
-  //Check the RTC and inputs every every 50ms - avoids overpolling(?) and switch bounce(?)
-  //if(pollLast+50<now) { //todo 20 vs 50
+  //Every loop cycle, check the RTC and inputs (previously polled, but works fine without and less flicker)
   pollLast=now;
   checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
   doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
-  //}
-  //Every loop cycle, cycle the display
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
 }
 
@@ -435,9 +432,11 @@ void ctrlEvt(byte ctrl, byte evt){
             case fnIsDate: //save in RTC
               switch(fnSetPg){
                 case 1: //save year, set month
+                  delay(300); //blink display to indicate save. Safe b/c we've btnStopped. See below for why
                   fnSetValDate[0]=fnSetVal;
                   startSet(fnSetValDate[1],1,12,2); break; 
                 case 2: //save month, set date
+                  delay(300); //blink display to indicate save. Needed if set month == date: without blink, nothing changes.
                   fnSetValDate[1]=fnSetVal;
                   startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
                 case 3: //write year/month/date to RTC
@@ -492,7 +491,7 @@ void ctrlEvt(byte ctrl, byte evt){
     if(evt==2 && ctrl==mainSel) { //mainSel short hold: exit options menu
       btnStop();
       //if we were setting a value, writes setting val to EEPROM if needed
-      if(fnSetPg) writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]-optsMin[opt]>255?true:false);
+      if(fnSetPg) writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
       fn = fnIsTime;
       clearSet();
       return;
@@ -500,7 +499,7 @@ void ctrlEvt(byte ctrl, byte evt){
     
     if(!fnSetPg){ //viewing option number
       if(ctrl==mainSel && evt==0) { //mainSel release: enter option value setting
-        startSet(readEEPROM(optsLoc[opt],optsMax[opt]-optsMin[opt]>255?true:false),optsMin[opt],optsMax[opt],1);
+        startSet(readEEPROM(optsLoc[opt],optsMax[opt]>255?true:false),optsMin[opt],optsMax[opt],1);
       }
       if(ctrl==mainAdjUp && evt==1) fnOptScroll(1); //next one up or cycle to beginning
       if(ctrl==mainAdjDn && evt==1) fnOptScroll(-1); //next one down or cycle to end?
@@ -510,7 +509,7 @@ void ctrlEvt(byte ctrl, byte evt){
     else { //setting option value
       if(ctrl==mainSel && evt==0) { //mainSel release: save and exit option value setting
         //Writes setting val to EEPROM if needed
-        writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]-optsMin[opt]>255?true:false);
+        writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
         clearSet();
       }
       if(ctrl==mainAdjUp && evt==1) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
@@ -575,27 +574,35 @@ void clearSet(){ //Exit set state
 
 //EEPROM values are exclusively bytes (0-255) or words (unsigned ints, 0-65535)
 //If it's a word, high byte is in loc, low byte is in loc+1
-void initEEPROM(){
+void initEEPROM(bool hard){
   //Set EEPROM and clock to defaults
   //First prevent the held button from doing anything else
   btnCur = mainSel; btnStop();
-  //Set the clock
-  ds3231.setYear(18);
-  ds3231.setMonth(1);
-  ds3231.setDate(1);
-  ds3231.setDoW(1); //2018-01-01 is Monday. DS3231 will keep count from here
-  ds3231.setHour(0);
-  ds3231.setMinute(0);
-  ds3231.setSecond(0);
+  //If a hard init, set the clock
+  if(hard) {
+    ds3231.setYear(18);
+    ds3231.setMonth(1);
+    ds3231.setDate(1);
+    ds3231.setDoW(1); //2018-01-01 is Monday. DS3231 will keep count from here
+    ds3231.setHour(0);
+    ds3231.setMinute(0);
+    ds3231.setSecond(0);
+  }
   //Set the default values that aren't part of the options menu
-  writeEEPROM(0,420,true); //7am - word
-  writeEEPROM(2,enableSoftAlarmSwitch==0?1:0,false); //off, or on if no software switch spec'd
-  writeEEPROM(3,2018,true);
-  writeEEPROM(5,1,false);
-  writeEEPROM(6,1,false);
+  //only on hard init, or if the set value is outside of range
+  if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //alarm at 7am
+  if(hard || readEEPROM(2,false)>1) writeEEPROM(2,enableSoftAlarmSwitch==0?1:0,false); //alarm is off, or on if no software switch
+  if(hard || readEEPROM(3,true)<2018) writeEEPROM(3,2018,true); //day counter target: 2018...
+  if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) writeEEPROM(5,1,false); //...January...
+  if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) writeEEPROM(6,1,false); //...first.
   //then the options menu defaults
-  for(byte opt=0; opt<sizeof(optsLoc); opt++) writeEEPROM(optsLoc[opt],optsDef[opt],optsMax[opt]-optsMin[opt]>255?true:false);
-}
+  bool isWord = false;
+  for(byte opt=0; opt<sizeof(optsLoc); opt++) {
+    isWord = (optsMax[opt]>255?true:false); //TODO shouldn't this be optsMax
+    if(hard || readEEPROM(optsLoc[opt],isWord)<optsMin[opt] || readEEPROM(optsLoc[opt],isWord)>optsMax[opt])
+      writeEEPROM(optsLoc[opt],optsDef[opt],isWord);
+  } //end for
+} //end initEEPROM()
 word readEEPROM(int loc, bool isWord){
   if(isWord) {
     //TODO why was it done this way
@@ -694,7 +701,7 @@ void checkRTC(bool force){
         if(readEEPROM(23,false)==0 || //any day of the week
           (readEEPROM(23,false)==1 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow)) || //weekday only
           (readEEPROM(23,false)==2 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow)) ) { //weekend only
-            fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0); //TODO this is a special case
+            fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0);
         } //end toddow check
       } //end alarm trigger
       //check if we should trigger the cleaner (at night end time, or alarm time if night end is 0:00)
@@ -749,13 +756,17 @@ void checkRTC(bool force){
       if(snoozeRemain>0) {
         snoozeRemain--;
         if(snoozeRemain<=0 && readEEPROM(2,false)) {
-          fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0); //TODO this is a special case
+          fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0);
         }
       }
       //If signal has time on it, decrement and make a beep (if applicable to outputs)
       if(signalRemain>0) {
         signalRemain--;
-        signalPulseStart(0);
+        if(signalRemain<=0 && relayPin>=0 && relayMode==0) {
+          signalStop();
+        } else {
+          signalPulseStart(0);
+        }
       }
       if(unoffRemain>0) {
         unoffRemain--; //updateDisplay will naturally put it back to off state if applicable
@@ -850,6 +861,10 @@ bool isDayInRange(byte dstart, byte dend, byte dtest) {
 
 ////////// Display data formatting //////////
 
+byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
+byte displayLast[6] = {11,11,11,11,11,11}; //for noticing changes to displayNext and fading the display to it
+byte scrollDisplay[6] = {15,15,15,15,15,15}; //For animating a value into displayNext from right, and out to left
+
 void updateDisplay(){
   //Run as needed to update display when the value being shown on it has changed
   //This formats the new value and puts it in displayNext[] for cycleDisplay() to pick up
@@ -862,12 +877,12 @@ void updateDisplay(){
   if(cleanRemain) { //cleaning tubes
     displayDim = 2;
     byte digit = (11-cleanRemain)%10;
-    editDisplay(digit,0,0,true);
-    editDisplay(digit,1,1,true);
-    editDisplay(digit,2,2,true);
-    editDisplay(digit,3,3,true);
-    editDisplay(digit,4,4,true);
-    editDisplay(digit,5,5,true);
+    editDisplay(digit,0,0,true,false);
+    editDisplay(digit,1,1,true,false);
+    editDisplay(digit,2,2,true,false);
+    editDisplay(digit,3,3,true,false);
+    editDisplay(digit,4,4,true,false);
+    editDisplay(digit,5,5,true,false);
   }
   /*
   Scrolling "frames" (ex. on 4-tube clock):
@@ -886,34 +901,34 @@ void updateDisplay(){
   else if(scrollRemain>0) { //scrolling display: value coming in - these don't use editDisplay as we're going array to array
     for(byte i=0; i<displaySize; i++) {
       char isrc = i-scrollRemain;
-      displayNext[i] = (isrc<0? 15: scrollDisplay[isrc]);
+      displayNext[i] = (isrc<0? 15: scrollDisplay[isrc]); //allow to fade
     }
   }
   else if(scrollRemain<0 && scrollRemain!=-128) { //scrolling display: value going out
     for(byte i=0; i<displaySize; i++) {
       char isrc = i+displaySize+scrollRemain+1;
-      displayNext[i] = (isrc>=displaySize? 15: scrollDisplay[isrc]);
+      displayNext[i] = (isrc>=displaySize? 15: scrollDisplay[isrc]); //allow to fade
     }
   }
   else if(fnSetPg) { //setting value, for either fn or option
     displayDim = 2;
-    blankDisplay(4, 5);
+    blankDisplay(4, 5, false);
     if(fnSetValMax==1439) { //Time of day (0-1439 mins, 0:00–23:59): show hrs/mins
-      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false)); //hours with leading zero
-      editDisplay(fnSetVal%60, 2, 3, true);
+      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero
+      editDisplay(fnSetVal%60, 2, 3, true, false);
     } else if(fnSetValMax==1080) { //Timer duration (0-1080 mins, up to 18:00): show hrs/mins w/minimal leading
-      if(fnSetVal>=60) editDisplay(fnSetVal/60, 0, 1, false); else blankDisplay(0,1); //hour only if present, else blank
-      editDisplay(fnSetVal%60, 2, 3, (fnSetVal>=60?true:false)); //leading zero only if hour present
-      editDisplay(0,4,5,true); //placeholder seconds
+      if(fnSetVal>=60) editDisplay(fnSetVal/60, 0, 1, false, false); else blankDisplay(0,1,false); //hour only if present, else blank
+      editDisplay(fnSetVal%60, 2, 3, (fnSetVal>=60?true:false), false); //leading zero only if hour present
+      editDisplay(0,4,5,true,false); //placeholder seconds
     } else if(fnSetValMax==88) { //A piezo pitch. Play a short demo beep.
-      editDisplay(fnSetVal, 0, 3, false);
+      editDisplay(fnSetVal, 0, 3, false, false);
       if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(fnSetVal), 100); } //One exception to using signalStart since we need to specify pitch directly
-    } else editDisplay(fnSetVal, 0, 3, false); //some other type of value
+    } else editDisplay(fnSetVal, 0, 3, false, false); //some other type of value
   }
   else if(fn >= fnOpts){ //options menu, but not setting a value
     displayDim = 2;
-    editDisplay(fn-fnOpts+1,0,1,0); //display option number (1-index) on hour tubes
-    blankDisplay(2,5);
+    editDisplay(fn-fnOpts+1,0,1,false,false); //display option number (1-index) on hour tubes
+    blankDisplay(2,5,false);
   }
   else { //fn running
     
@@ -936,22 +951,22 @@ void updateDisplay(){
       case fnIsTime:
         byte hr; hr = tod.hour();
         if(readEEPROM(16,false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
-        editDisplay(hr, 0, 1, readEEPROM(19,false));
-        editDisplay(tod.minute(), 2, 3, true);
-        if(readEEPROM(18,false)==1) editDisplay(tod.day(), 4, 5, readEEPROM(19,false)); //date
-        else editDisplay(tod.second(), 4, 5, true); //seconds
+        editDisplay(hr, 0, 1, readEEPROM(19,false), true);
+        editDisplay(tod.minute(), 2, 3, true, true);
+        if(readEEPROM(18,false)==1) editDisplay(tod.day(), 4, 5, readEEPROM(19,false), true); //date
+        else editDisplay(tod.second(), 4, 5, true, true); //seconds
         break;
       case fnIsDate:
         byte df; df = readEEPROM(17,false); //1=m/d/w, 2=d/m/w, 3=m/d/y, 4=d/m/y, 5=y/m/d
         if(df<=4) {
-          editDisplay((df==1||df==3?tod.month():tod.day()),0,1,readEEPROM(19,false)); //month or date first
-          editDisplay((df==1||df==3?tod.day():tod.month()),2,3,readEEPROM(19,false)); //date or month second
-          editDisplay((df<=2?toddow:tod.year()),4,5,(df<=2?false:true)); //dow or year third - dow never leading zero, year always
+          editDisplay((df==1||df==3?tod.month():tod.day()),0,1,readEEPROM(19,false),true); //month or date first
+          editDisplay((df==1||df==3?tod.day():tod.month()),2,3,readEEPROM(19,false),true); //date or month second
+          editDisplay((df<=2?toddow:tod.year()),4,5,(df<=2?false:true),true); //dow or year third - dow never leading zero, year always
         }
         else { //df==5
-          editDisplay(tod.year(),0,1,true); //year always has leading zero
-          editDisplay(tod.month(),2,3,readEEPROM(19,false));
-          editDisplay(tod.day(),4,5,readEEPROM(19,false));
+          editDisplay(tod.year(),0,1,true,true); //year always has leading zero
+          editDisplay(tod.month(),2,3,readEEPROM(19,false),true);
+          editDisplay(tod.day(),4,5,readEEPROM(19,false),true);
         }
         break;
       case fnIsDayCount:
@@ -961,55 +976,54 @@ void updateDisplay(){
           readEEPROM(6,false)
         );
         long currentDayCount; currentDayCount = dateToDayCount(tod.year(),tod.month(),tod.day());
-        editDisplay(abs(targetDayCount-currentDayCount),0,3,false);
+        editDisplay(abs(targetDayCount-currentDayCount),0,3,false,true);
         //TODO for now don't indicate negative. Elsewhere we use leading zeros to represent negative but I don't like how that looks here
-        blankDisplay(4,5);
+        blankDisplay(4,5,true);
         break;
       case fnIsAlarm: //alarm
         word almTime; almTime = readEEPROM(0,true);
-        editDisplay(almTime/60, 0, 1, readEEPROM(19,false)); //hours with leading zero
-        editDisplay(almTime%60, 2, 3, true);
-        editDisplay(readEEPROM(2,false),4,4,false); //status 1/0
+        editDisplay(almTime/60, 0, 1, readEEPROM(19,false), true); //hours with leading zero
+        editDisplay(almTime%60, 2, 3, true, true);
+        editDisplay(readEEPROM(2,false),4,4,false,true); //status 1/0
         displayDim = (readEEPROM(2,false)?2:1); //status bright/dim
-        blankDisplay(5,5);
+        blankDisplay(5,5,true);
         break;
       case fnIsTimer: //timer - display time left.
         //Relative unit positioning: when t <1h, display min/sec in place of hr/min on 4-tube displays
         byte mspos; mspos = (displaySize<6 && timerRemain<3600? 0 : 2);
         if(timerRemain >= 3600) { //t >=1h: display hr on first two tubes
-          editDisplay(timerRemain/3600,0,1,false);
-        } else blankDisplay(0,1);
+          editDisplay(timerRemain/3600,0,1,false,true);
+        } else blankDisplay(0,1,true);
         if(timerRemain >= 60) { //t >=1m: display minute (in relative position). Leading zero if t >=1h.
-          editDisplay((timerRemain%3600)/60,mspos,mspos+1,(timerRemain>=3600?true:false));
-        } else blankDisplay(mspos,mspos+1);
+          editDisplay((timerRemain%3600)/60,mspos,mspos+1,(timerRemain>=3600?true:false),true);
+        } else blankDisplay(mspos,mspos+1,true);
         //display second (in relative position). Leading zero if t>=1m.
-        editDisplay(timerRemain%60,mspos+2,mspos+3,(timerRemain>=60?true:false));
+        editDisplay(timerRemain%60,mspos+2,mspos+3,(timerRemain>=60?true:false),true);
         break;
       case fnIsTemp: //thermometer
         int temp; temp = ds3231.getTemperature()*100;
-        editDisplay(abs(temp)/100,1,3,(temp<0?true:false)); //leading zeros if negative
-        editDisplay(abs(temp)%100,4,5,true);
+        editDisplay(abs(temp)/100,1,3,(temp<0?true:false),true); //leading zeros if negative
+        editDisplay(abs(temp)%100,4,5,true,true);
         break;
       case fnIsTubeTester:
-        editDisplay(tod.second(),0,0,true);
-        editDisplay(tod.second(),1,1,true);
-        editDisplay(tod.second(),2,2,true);
-        editDisplay(tod.second(),3,3,true);
-        editDisplay(tod.second(),4,4,true);
-        editDisplay(tod.second(),5,5,true);
+        editDisplay(tod.second(),0,0,true,false);
+        editDisplay(tod.second(),1,1,true,false);
+        editDisplay(tod.second(),2,2,true,false);
+        editDisplay(tod.second(),3,3,true,false);
+        editDisplay(tod.second(),4,4,true,false);
+        editDisplay(tod.second(),5,5,true,false);
       default: break;
     }//end switch
   }
 } //end updateDisplay()
 
-void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros){
+void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
   //Splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
   //If there are blank places (on the left of a non-leading-zero number), uses value 15 to blank tube
   //If number has more places than posEnd-posStart, the higher places are truncated off (e.g. 10015 on 4 tubes --> 0015)
   word place;
   for(byte i=0; i<=posEnd-posStart; i++){
-    //place = int(pow(10,i)); TODO PROBLEM: int(pow(10,2))==99 and int(pow(10,3))==999. Why??????????
-    switch(i){
+    switch(i){ //because int(pow(10,1))==10 but int(pow(10,2))==99...
       case 0: place=1; break;
       case 1: place=10; break;
       case 2: place=100; break;
@@ -1017,14 +1031,15 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros){
       default: break;
     }
     displayNext[posEnd-i] = (i==0&&n==0 ? 0 : (n>=place ? (n/place)%10 : (leadingZeros?0:15)));
+    if(!fade) displayLast[posEnd-i] = displayNext[posEnd-i]; //cycleDisplay will be none the wiser
   }
 } //end editDisplay()
-void blankDisplay(byte posStart, byte posEnd){
-  for(byte i=posStart; i<=posEnd; i++) displayNext[i]=15;
+void blankDisplay(byte posStart, byte posEnd, byte fade){
+  for(byte i=posStart; i<=posEnd; i++) { displayNext[i]=15; if(!fade) displayLast[i]=15; }
 } //end blankDisplay();
 void startScroll() { //To scroll a value in, call this after calling editDisplay as normal
   for(byte i=0; i<6; i++) scrollDisplay[i] = displayNext[i]; //cache the incoming value in scrollDisplay[]
-  blankDisplay(0,5);
+  blankDisplay(0,5,true);
   scrollRemain = displaySize+1; //this will trigger updateDisplay() to start scrolling. displaySize+1 adds blank frame at front
 } //end startScroll()
 
@@ -1039,8 +1054,6 @@ byte binOutA[4] = {2,3,4,5};
 byte binOutB[4] = {6,7,8,9};
 //3 pins out to anode channel switches
 byte anodes[3] = {11,12,13};
-
-byte displayLast[6]={11,11,11,11,11,11}; //for noticing changes to displayNext and fading the display to it
 
 const int fadeDur = 5; //ms - each multiplexed pair of digits appears for this amount of time per cycle
 const int dimDur = 4; //ms - portion of fadeDur that is left dark during dim times
@@ -1073,7 +1086,6 @@ void cycleDisplay(){
   
   if(readEEPROM(20,false)==0 || dim) { //fading disabled or dim
     if(fadeStartLast) fadeStartLast = 0; //cancel any fade currently going - dim state doesn't have enough steps to fade well
-    //TODO enable updateDisplay to configurably update both arrays to prevent fades
     for(byte i=0; i<6; i++) if(displayNext[i] != displayLast[i]) displayLast[i] = displayNext[i];
   }
   else { //fading enabled
@@ -1162,8 +1174,8 @@ void signalStart(byte sigFn, byte sigDur, word pulseDur){ //make some noise! or 
   else { //long-duration signal (alarm, sleep, etc)
     if(sigFn==fnIsAlarm) signalRemain = (readEEPROM(42,false)==1 && relayPin>=0 && relayMode==0 ? switchDur : signalDur);
     else signalRemain = sigDur;
-    //If it's signal style (beeps), checkRTC will handle it; if it's radio style, turn it on right now
-    if(relayPin>=0 && relayMode==0) {
+    //piezo or pulsed relay: checkRTC will handle it
+    if(getSignalOutput()==1 && relayPin>=0 && relayMode==0) { //switched relay: turn it on now
       if(relayPin!=127) digitalWrite(relayPin,HIGH);
       Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalStart"));
     }
@@ -1171,8 +1183,8 @@ void signalStart(byte sigFn, byte sigDur, word pulseDur){ //make some noise! or 
 }
 void signalStop(){ //stop current signal and clear out signal timer if applicable
   signalRemain = 0; snoozeRemain = 0;
-  signalPulseStop();
-  if(relayPin>=0 && relayMode==0) {
+  signalPulseStop(); //piezo or pulsed relay: stop now
+  if(getSignalOutput()==1 && relayPin>=0 && relayMode==0) { //switched relay: turn it off now
     if(relayPin!=127) digitalWrite(relayPin,LOW);
     Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalStop"));
   }
@@ -1180,27 +1192,27 @@ void signalStop(){ //stop current signal and clear out signal timer if applicabl
 //beep start and stop should only be called by signalStart/signalStop and checkRTC
 void signalPulseStart(word pulseDur){
   //Only act if the signal source output is pulsable
-  char output = readEEPROM((signalSource==fnIsTime?44:(signalSource==fnIsTimer?43:42)),false);
-  if(output==0 && piezoPin>=0) { //beeper
-    word pitch = getHz(readEEPROM((signalSource==fnIsTime?41:(signalSource==fnIsTimer?40:39)),false));
-    tone(piezoPin, pitch, (pulseDur==0?piezoPulse:pulseDur));
+  if(getSignalOutput()==0 && piezoPin>=0) { //beeper
+    tone(piezoPin, getSignalPitch(), (pulseDur==0?piezoPulse:pulseDur));
   }
-  if(output==1 && relayPin>=0 && relayMode==1) { //pulsed relay
+  else if(getSignalOutput()==1 && relayPin>=0 && relayMode==1) { //pulsed relay
     if(relayPin!=127) digitalWrite(relayPin,HIGH);
-    signalPulseStopTime = millis()+relayPulse; //(pulseDur==0?relayPulse:pulseDur); //TODO danger of a duration that's not relayPulse?
+    signalPulseStopTime = millis()+relayPulse; //always use relayPulse in case timing is important for connected device
     Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalPulseStart"));
   }
 }
 void signalPulseStop(){
-  char output = readEEPROM((signalSource==fnIsTime?44:(signalSource==fnIsTimer?43:42)),false);
-  if(output==0 && piezoPin>=0) { //beeper
+  if(getSignalOutput()==0 && piezoPin>=0) { //beeper
     noTone(piezoPin);
   }
-  if(output==1 && relayPin>=0 && relayMode==1) { //pulsed relay
+  else if(getSignalOutput()==1 && relayPin>=0 && relayMode==1) { //pulsed relay
     if(relayPin!=127) digitalWrite(relayPin,LOW);
     signalPulseStopTime = 0;
     Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalPulseStart"));
   }
+}
+word getSignalPitch(){ //for current signal: time, timer, or (default) alarm
+  return getHz(readEEPROM((signalSource==fnIsTime?41:(signalSource==fnIsTimer?40:39)),false));
 }
 word getHz(byte note){
   //Given a piano key note, return frequency
@@ -1208,4 +1220,7 @@ word getHz(byte note){
   float reloct = relnote/12.0; //signed
   word mult = 440*pow(2,reloct);
   return mult;
+}
+char getSignalOutput(){ //for current signal: time, timer, or (default) alarm: 0=piezo, 1=relay
+  return readEEPROM((signalSource==fnIsTime?44:(signalSource==fnIsTimer?43:42)),false);
 }
