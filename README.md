@@ -57,6 +57,7 @@ _Note: Many variations are possible, depending on your clock's hardware; but thi
 | 22. Last day of work week | 0–6 (Sunday–Saturday) |
 | 23. Work starts at | Time of day. |
 | 24. Work ends at | Time of day. |
+| 25. LED behavior | 0 = always off<br/>1 = always on<br/>2 = on, but follow day-off and night-off if enabled<br/>3 = off, but on when alarm/timer sounds</br>4 = off, but on with switched relay (if equipped – great for radios!)<br/>(Clocks with LED control only, UNDB v5.x+) |
 
 To reset the options menu settings to "factory" defaults, hold **Select** while connecting the clock to power.
 

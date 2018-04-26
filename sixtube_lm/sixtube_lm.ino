@@ -67,6 +67,7 @@ const word switchDur = 7200; //sec - when alarm triggers switched relay, it's sw
 const word piezoPulse = 500; //ms - used with piezo via tone()
 const word relayPulse = 200; //ms - used with pulsed relay
 
+//Soft power switches
 const byte enableSoftAlarmSwitch = 1;
 // 1 = yes. Alarm can be switched on and off when clock is displaying the alarm time (fnIsAlarm).
 // 0 = no. Alarm will be permanently on. Use with switched relay if the appliance has its own switch on this relay circuit.
@@ -74,7 +75,13 @@ const byte enableSoftPowerSwitch = 1; //works with switched relay only
 // 1 = yes. Relay can be switched on and off directly when clock is displaying time of day (fnIsTime). This is useful if  connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
 // 0 = no. Use if the connected appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched.
 
-const byte unoffDur = 10; //when display is dim/off, a press will light the tubes for this many seconds
+//LED circuit control
+const char ledPin = -1;
+// If running a v5.0 board with constantly powered LEDs, leave this set to -1 (disabled).
+// If running a v5.x board, LED control pin is X. An extra menu option will appear to let end user control LEDs.
+
+//When display is dim/off, a press will light the tubes for how long?
+const byte unoffDur = 10; //sec
 
 // How long (in ms) are the button hold durations?
 const word btnShortHold = 1000; //for setting the displayed feataure
@@ -118,7 +125,7 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   23 Alarm days
   24 Alarm snooze
   25 Timer interval mode - skipped when no piezo and relay is switch (start=0)
-( 26 is available )
+  26 LED circuit behavior
   27 Night-off
   28-29 Night start, mins
   30-31 Night end, mins
@@ -138,11 +145,11 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //Options menu options' EEPROM locations and default/min/max values.
 //Options' numbers may be changed by reordering these arrays (and changing readme accordingly).
 //Although these arrays are 0-index, the option number displayed (and listed in readme) is 1-index. (search for "fn-fnOpts+1")
-//1-index option number: 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17   18   19 20 21 22   23   24
-const byte optsLoc[] = {16,17,18,19,20,22,23,24,42,39,43,25,40,21,44,41,27,  28,  30,32,33,34,  35,  37};
-const word optsDef[] = { 2, 1, 0, 0, 5, 0, 0, 9, 0,61, 0, 0,61, 0, 0,61, 0,1320, 360, 0, 1, 5, 480,1020};
-const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,49, 0, 0,49, 0, 0,49, 0,   0,   0, 0, 0, 0,   0,   0};
-const word optsMax[] = { 2, 5, 3, 1,20, 6, 2,60, 1,88, 1, 1,88, 4, 1,88, 2,1439,1439, 2, 6, 6,1439,1439};
+//1-index option number: 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17   18   19 20 21 22   23   24 25
+const byte optsLoc[] = {16,17,18,19,20,22,23,24,42,39,43,25,40,21,44,41,27,  28,  30,32,33,34,  35,  37,26};
+const word optsDef[] = { 2, 1, 0, 0, 5, 0, 0, 9, 0,61, 0, 0,61, 0, 0,61, 0,1320, 360, 0, 1, 5, 480,1020, 1};
+const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,49, 0, 0,49, 0, 0,49, 0,   0,   0, 0, 0, 0,   0,   0, 0};
+const word optsMax[] = { 2, 5, 3, 1,20, 6, 2,60, 1,88, 1, 1,88, 4, 1,88, 2,1439,1439, 2, 6, 6,1439,1439, 4};
 
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
@@ -183,7 +190,6 @@ char scrollRemain = 0; //"frames" of scroll – 0=not scrolling, >0=coming in, <
 void setup(){
   Serial.begin(9600);
   Wire.begin();
-  initOutputs();
   initInputs();
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
   initEEPROM(readInput(mainSel)==LOW); //Do a hard init of EEPROM if button is held; else do a soft init to make sure vals in range
@@ -202,6 +208,7 @@ void setup(){
     writeEEPROM(25,0,false); //turn off timer interval mode
   }
   if(!enableSoftAlarmSwitch) writeEEPROM(2,1,false); //force alarm on if software switch is disabled
+  initOutputs(); //depends on some EEPROM settings
 }
 
 unsigned long pollLast = 0; //every 50ms
@@ -449,6 +456,8 @@ void ctrlEvt(byte ctrl, byte evt){
               if(relayPin>=0 && relayMode==0 && readEEPROM(43,false)==1) { //if switched relay, and timer signal is set to it
                 if(relayPin!=127) digitalWrite(relayPin,HIGH);
                 Serial.print(millis(),DEC); Serial.println(F(" Relay on, timer set"));
+                if(readEEPROM(26,false)==4) switchLEDs(1); //LEDs following switch relay
+                //TODO will this cancel properly? especially if alarm interrupts?
               }
               clearSet(); break;
             case fnIsDayCount: //set like date, save in eeprom like finishOpt
@@ -608,23 +617,18 @@ word readEEPROM(int loc, bool isWord){
 }
 void writeEEPROM(int loc, int val, bool isWord){
   if(isWord) {
-    Serial.print(F("EEPROM write word:"));
-    Serial.print(F(" loc ")); Serial.print(loc,DEC);
-    if(EEPROM.read(loc)!=highByte(val)) {
-      EEPROM.write(loc,highByte(val));
-      Serial.print(F(" val ")); Serial.print(highByte(val),DEC);
-    } else Serial.print(F(" unchanged (no write)."));
-    Serial.print(F(" loc ")); Serial.print(loc+1,DEC);
-    if(EEPROM.read(loc+1)!=lowByte(val)) {
-      EEPROM.write(loc+1,lowByte(val));
-      Serial.print(F(" val ")); Serial.print(lowByte(val),DEC);
-    } else Serial.print(F(" unchanged (no write)."));
+    // Serial.print(F("EEPROM write word:"));
+    // Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val "));
+    // if(EEPROM.read(loc)!=highByte(val)) { Serial.print(highByte(val),DEC); } else { Serial.print(F("no change")); }
+    EEPROM.update(loc,highByte(val));
+    // Serial.print(F(" loc ")); Serial.print(loc+1,DEC); Serial.print(F(" val "));
+    // if(EEPROM.read(loc+1)!=lowByte(val)) { Serial.print(lowByte(val),DEC); } else { Serial.print(F("no change")); }
+    EEPROM.update(loc+1,lowByte(val));
   } else {
-    Serial.print(F("EEPROM write byte:"));
-    Serial.print(F(" loc ")); Serial.print(loc,DEC);
-    if(EEPROM.read(loc)!=val) { EEPROM.write(loc,val);
-      Serial.print(F(" val ")); Serial.print(val,DEC);
-    } else Serial.print(F(" unchanged (no write)."));
+    // Serial.print(F("EEPROM write byte:"));
+    // Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val "));
+    // if(EEPROM.read(loc)!=val) { Serial.print(val,DEC); } else { Serial.print(F("no change")); }
+    EEPROM.update(loc,val);
   }
   Serial.println();
 }
@@ -828,9 +832,11 @@ void switchAlarm(char dir){
 void switchPower(char dir){
   if(enableSoftPowerSwitch && relayPin>=0 && relayMode==0) { //if switched relay, and soft switch enabled
     //signalStop(); could use this instead of the below to turn the radio off
+    if(dir==0) dir = !digitalRead(relayPin);
     if(relayPin!=127) {
-      digitalWrite(relayPin,(dir==1?HIGH:(dir==-1?LOW:!digitalRead(relayPin))));
+      digitalWrite(relayPin,(dir==1?HIGH:LOW));
     }
+    if(readEEPROM(26,false)==4) switchLEDs(dir); //LEDs following switch relay
     Serial.print(millis(),DEC);
     Serial.print(F(" Relay "));
     if(dir==0) { Serial.print(F("toggled")); if(relayPin!=127) { Serial.print(digitalRead(relayPin)==HIGH?F(" on"):F(" off")); } }
@@ -1007,7 +1013,7 @@ void updateDisplay(){
         editDisplay(tod.second(),5,5,true,false);
       default: break;
     }//end switch
-  }
+  } //end if fn running  
 } //end updateDisplay()
 
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
@@ -1060,6 +1066,8 @@ void initOutputs() {
   for(byte i=0; i<3; i++) { pinMode(anodes[i],OUTPUT); }
   if(piezoPin>=0) pinMode(piezoPin, OUTPUT);
   if(relayPin>=0 && relayPin!=127) pinMode(relayPin, OUTPUT);
+  if(ledPin>=0) pinMode(ledPin, OUTPUT);
+  updateLEDs(); //set to initial value
 }
 
 void cycleDisplay(){
@@ -1171,8 +1179,10 @@ void signalStart(byte sigFn, byte sigDur, word pulseDur){ //make some noise! or 
     if(getSignalOutput()==1 && relayPin>=0 && relayMode==0) { //switched relay: turn it on now
       if(relayPin!=127) digitalWrite(relayPin,HIGH);
       Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalStart"));
+      if(readEEPROM(26,false)==4) switchLEDs(1); //LEDs following switch relay
     }
   }
+  if(readEEPROM(26,false)==3) switchLEDs(1); //LEDs following signal
 }
 void signalStop(){ //stop current signal and clear out signal timer if applicable
   signalRemain = 0; snoozeRemain = 0;
@@ -1180,7 +1190,9 @@ void signalStop(){ //stop current signal and clear out signal timer if applicabl
   if(getSignalOutput()==1 && relayPin>=0 && relayMode==0) { //switched relay: turn it off now
     if(relayPin!=127) digitalWrite(relayPin,LOW);
     Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalStop"));
+    if(readEEPROM(26,false)==4) switchLEDs(0); //LEDs following switch relay
   }
+  if(readEEPROM(26,false)==3) switchLEDs(0); //LEDs following relay
 }
 //beep start and stop should only be called by signalStart/signalStop and checkRTC
 void signalPulseStart(word pulseDur){
@@ -1217,3 +1229,21 @@ word getHz(byte note){
 char getSignalOutput(){ //for current signal: time, timer, or (default) alarm: 0=piezo, 1=relay
   return readEEPROM((signalSource==fnIsTime?44:(signalSource==fnIsTimer?43:42)),false);
 }
+
+void updateLEDs(){
+  //Run whenever something is changed that might affect the LED state
+  if(ledPin>=0) switch(readEEPROM(26,false)){
+    case 0: //always off
+      digitalWrite(ledPin,LOW); break;
+    case 1: //always on
+      digitalWrite(ledPin,HIGH); break;
+    case 2: //on, but follow day-off and night-off
+      digitalWrite(ledPin,(displayDim<2?LOW:HIGH)); break;
+    case 3: //off, but on when alarm/timer sounds
+      digitalWrite(ledPin,(signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)?HIGH:LOW)); break;
+    case 4: //off, but on with switched relay
+      if(relayPin>=0 && relayPin<127 && relayMode==0) digitalWrite(ledPin,digitalRead(relayPin)); break;
+    //Stopping place: Change all the updateLEDs to not have a polarity, add some more, and hide menu 25 when not equipped, and value 4 when not equipped
+    default: break;
+  }
+} //end updateLEDs
