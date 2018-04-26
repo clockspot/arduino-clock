@@ -41,21 +41,17 @@ const byte mainSel = A2; //main select button - must be equipped
 const byte mainAdjUp = A1; //main up/down buttons or rotary encoder - must be equipped
 const byte mainAdjDn = A0;
 const byte altSel = 0; //alt select button - if unequipped, set to 0
-const byte altAdjUp = 0; //A6; //alt up/down buttons or rotary encoder - if unequipped, set to 0
-const byte altAdjDn = 0; //A3;
 
 // What type of adj controls are equipped?
 // 1 = momentary buttons. 2 = quadrature rotary encoder.
 const byte mainAdjType = 1;
-const byte altAdjType = 0; //if unquipped, set to 0
 
 // In normal running mode, what do the controls do?
 // -1 = nothing/switch, -2 = cycle through functions, fn in fnsEnabled[] = go to that function
 // If using soft alarm/power switch per below, the control(s) set to -1 will do the switching.
 const char mainSelFn = -2;
 const char mainAdjFn = -1;
-// const byte altSelFn = -1;
-// const byte altAdjFn = -1;
+const byte altSelFn = -1;
 
 //What are the signal pin(s) connected to?
 const char piezoPin = 10;
@@ -251,7 +247,6 @@ void initInputs(){
   pinMode(A7, INPUT); digitalWrite(A7, HIGH);
   //rotary encoder init
   if(mainAdjType==2) AdaEncoder mainRot = AdaEncoder('a',mainAdjUp,mainAdjDn);
-  //if(altAdjType==2) AdaEncoder altRot = AdaEncoder('b',altAdjUp,altAdjDn);
 }
 
 void checkInputs(){
@@ -259,10 +254,9 @@ void checkInputs(){
   //TODO potential issue: if user only means to rotate or push encoder but does both?
   //check button states
   checkBtn(mainSel); //main select
-  if(mainAdjType==1) { checkBtn(mainAdjUp); checkBtn(mainAdjDn); } //main adjust buttons (if equipped)
+  if(mainAdjType==1) { checkBtn(mainAdjUp); checkBtn(mainAdjDn); } //if mainAdj is buttons
+  if(mainAdjType==2) checkRot(); //if mainAdj is rotary encoder
   if(altSel!=0) checkBtn(altSel); //alt select (if equipped)
-  if(altAdjType==1) { checkBtn(altAdjUp); checkBtn(altAdjDn); } //alt adjust buttons (if equipped)
-  if(mainAdjType==2 || altAdjType==2) checkRot(); //if main or alt rotary encoder is equipped, check for moves
 }
 
 bool readInput(byte pin){
@@ -302,9 +296,8 @@ void btnStop(){
 }
 
 void checkRot(){
-  //Changes in rotary encoders. When rotation(s) occur, will call ctrlEvt to simulate btn presses.
+  //Changes in rotary encoder. When rotation(s) occur, will call ctrlEvt to simulate btn presses.
   if(btnCur==0) {
-    //TODO does this work with more than one encoder? maybe on separate loops?
     //https://github.com/GreyGnome/AdaEncoder/blob/master/Examples/MyEncoder/MyEncoder.ino
     AdaEncoder *thisEncoder=NULL;
     thisEncoder = AdaEncoder::genie();
@@ -315,7 +308,7 @@ void checkRot(){
       byte dir = (clicks<0?0:1);
       clicks = abs(clicks);
       for(byte i=0; i<clicks; i++){ //in case of more than one click
-        ctrlEvt((thisEncoder->getID()=='a'?(dir?mainAdjUp:mainAdjDn):(dir?altAdjUp:altAdjDn)),1);
+        ctrlEvt((dir?mainAdjUp:mainAdjDn),1);
       }
       inputLast2 = inputLast; inputLast = inputThis;
     }
@@ -331,7 +324,7 @@ void ctrlEvt(byte ctrl, byte evt){
   //evt: 1=press, 2=short hold, 3=long hold, 0=release.
   //We only handle press evts for adj ctrls, as that's the only evt encoders generate.
   //But we can handle short and long holds and releases for the sel ctrls (always buttons).
-  //TODO needs alt handling
+  //TODO needs altSel
   
   //Before all else, is it a press to stop the signal? Silence it
   if(signalRemain>0 && evt==1){
@@ -558,8 +551,8 @@ void doSetHold(){
   //TODO integrate this with checkInputs?
   if(doSetHoldLast+250<millis()) {
     doSetHoldLast = millis();
-    if(fnSetPg!=0 && ((mainAdjType==1 && (btnCur==mainAdjUp || btnCur==mainAdjDn)) || (altAdjType==1 && (btnCur==altAdjUp || btnCur==altAdjDn))) ){ //if we're setting, and this is an adj input for which the type is button
-      bool dir = (btnCur==mainAdjUp || btnCur==altAdjUp ? 1 : 0);
+    if(fnSetPg!=0 && (mainAdjType==1 && (btnCur==mainAdjUp || btnCur==mainAdjDn)) ){ //if we're setting, and this is an adj btn
+      bool dir = (btnCur==mainAdjUp ? 1 : 0);
       //If short hold, or long hold but high velocity isn't supported, use low velocity (delta=1)
       if(btnCurHeld==2 || (btnCurHeld==3 && fnSetValVel==false)) doSet(dir?1:-1);
       //else if long hold, use high velocity (delta=10)
