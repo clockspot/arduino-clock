@@ -24,7 +24,8 @@ const byte fnIsDayCount = 4;
 const byte fnIsTemp = 5;
 const byte fnIsTubeTester = 6; //cycles all digits on all tubes 1/second, similar to anti-cathode-poisoning cleaner
 // functions enabled in this clock, in their display order. Only fnIsTime is required
-const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCount}; //, fnIsTemp, fnIsTubeTester
+const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCount, fnIsTemp}; //, fnIsTemp, fnIsTubeTester
+// To control which of these display persistently vs. switch back to Time after a few seconds, search "Temporary-display mode timeout"
 
 // These are the RLB board connections to Arduino analog input pins.
 // S1/PL13 = Reset
@@ -58,7 +59,7 @@ const char piezoPin = 10;
 const char relayPin = 127;
 // If running a v5.0 board with only a piezo output, leave these set to 10 and -1 (disabled) respectively - unless removing the piezo to drive a relay instead, in which case, reverse them.
 // If running a v5.x board with both piezo and relay, piezo is 10, relay is X. Extra menu options will appear to let end user decide which functions control which outputs.
-// Relay toggles are written to the serial console for testing. To test without relay present, set relayPin to 127.
+// To test without relay/load present, set relayPin to 127 to have relay commands written to console instead.
 const byte relayMode = 0; //If relay is equipped, what does it do?
 // 0 = switched mode: the relay will be switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in switchDur.
 // 1 = pulsed mode: the relay will be pulsed, like the beeper is, to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in relayPulse.
@@ -76,9 +77,10 @@ const byte enableSoftPowerSwitch = 1; //works with switched relay only
 // 0 = no. Use if the connected appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched.
 
 //LED circuit control
-const char ledPin = -1;
+const char ledPin = 127;
 // If running a v5.0 board with constantly powered LEDs, leave this set to -1 (disabled).
 // If running a v5.x board, LED control pin is X. An extra menu option will appear to let end user control LEDs.
+// To test without LED circuit present, set relayPin to 127 to have LED switch commands written to console instead.
 
 //When display is dim/off, a press will light the tubes for how long?
 const byte unoffDur = 10; //sec
@@ -125,7 +127,7 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   23 Alarm days
   24 Alarm snooze
   25 Timer interval mode - skipped when no piezo and relay is switch (start=0)
-  26 LED circuit behavior
+  26 LED circuit behavior - skipped when no led pin
   27 Night-off
   28-29 Night start, mins
   30-31 Night end, mins
@@ -140,16 +142,17 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   42 Alarm signal, 0=beeper, 1=relay - skipped when no relay (start=0) or no piezo (start=0)
   43 Timer signal - skipped when no relay (start=0) or no piezo (start=1)
   44 Strike signal - skipped when no pulse relay (start=0) or no piezo (start=1)
+  45 Temperature format - skipped when fnIsTemp is not in fnsEnabled
 */
 
 //Options menu options' EEPROM locations and default/min/max values.
 //Options' numbers may be changed by reordering these arrays (and changing readme accordingly).
 //Although these arrays are 0-index, the option number displayed (and listed in readme) is 1-index. (search for "fn-fnOpts+1")
-//1-index option number: 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17   18   19 20 21 22   23   24 25
-const byte optsLoc[] = {16,17,18,19,20,22,23,24,42,39,43,25,40,21,44,41,27,  28,  30,32,33,34,  35,  37,26};
-const word optsDef[] = { 2, 1, 0, 0, 5, 0, 0, 9, 0,61, 0, 0,61, 0, 0,61, 0,1320, 360, 0, 1, 5, 480,1020, 1};
-const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,49, 0, 0,49, 0, 0,49, 0,   0,   0, 0, 0, 0,   0,   0, 0};
-const word optsMax[] = { 2, 5, 3, 1,20, 6, 2,60, 1,88, 1, 1,88, 4, 1,88, 2,1439,1439, 2, 6, 6,1439,1439, 4};
+//1-index option number: 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17   18   19 20 21 22   23   24 25 26
+const byte optsLoc[] = {16,17,18,19,20,22,23,24,42,39,43,25,40,21,44,41,27,  28,  30,32,33,34,  35,  37,26,45};
+const word optsDef[] = { 2, 1, 0, 0, 5, 0, 0, 9, 0,61, 0, 0,61, 0, 0,61, 0,1320, 360, 0, 1, 5, 480,1020, 1, 0};
+const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,49, 0, 0,49, 0, 0,49, 0,   0,   0, 0, 0, 0,   0,   0, 0, 0};
+const word optsMax[] = { 2, 5, 3, 1,20, 6, 2,60, 1,88, 1, 1,88, 4, 1,88, 2,1439,1439, 2, 6, 6,1439,1439, 4, 1};
 
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
@@ -208,6 +211,7 @@ void setup(){
     writeEEPROM(25,0,false); //turn off timer interval mode
   }
   if(!enableSoftAlarmSwitch) writeEEPROM(2,1,false); //force alarm on if software switch is disabled
+  //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   initOutputs(); //depends on some EEPROM settings
 }
 
@@ -455,8 +459,8 @@ void ctrlEvt(byte ctrl, byte evt){
               timerRemain = timerInitial; //set actual timer going
               if(relayPin>=0 && relayMode==0 && readEEPROM(43,false)==1) { //if switched relay, and timer signal is set to it
                 if(relayPin!=127) digitalWrite(relayPin,HIGH);
-                Serial.print(millis(),DEC); Serial.println(F(" Relay on, timer set"));
-                if(readEEPROM(26,false)==4) switchLEDs(1); //LEDs following switch relay
+                else { Serial.print(millis(),DEC); Serial.println(F(" Relay on, timer set")); }
+                updateLEDs(); //LEDs following switch relay
                 //TODO will this cancel properly? especially if alarm interrupts?
               }
               clearSet(); break;
@@ -541,7 +545,15 @@ void fnOptScroll(char dir){
       || ((piezoPin<0 && relayMode==0) && (optLoc==21||optLoc==25)) //no piezo, and relay is switch: no strike or timer interval mode
       || ((relayPin<0 || piezoPin<0) && (optLoc==42||optLoc==43||optLoc==44)) //no relay or no piezo: no alarm/timer/strike signal
       || ((relayMode==0) && (optLoc==44)) //relay is switch: no strike signal
-    ) fnOptScroll(dir);
+      || ((ledPin<0) && (optLoc==26)) //no led pin: no led control
+    ) {
+    fnOptScroll(dir);
+  }
+  if(optLoc==45) { //temp not in fnsEnabled: skip temp format option (and calib if we get to it TODO)
+    bool found = 0;
+    for(byte fnct=0; fnct<sizeof(fnsEnabled); fnct++) if(fnsEnabled[fnct]==fnIsTemp) found = 1;
+    if(found==0) fnOptScroll(dir);
+  }
 }
 
 void startSet(word n, word m, word x, byte p){ //Enter set state at page p, and start setting a value
@@ -571,6 +583,7 @@ void doSetHold(){
 }
 void clearSet(){ //Exit set state
   startSet(0,0,0,0);
+  updateLEDs(); //in case LED setting was changed
   checkRTC(true); //force an update to tod and updateDisplay()
 }
 
@@ -630,7 +643,7 @@ void writeEEPROM(int loc, int val, bool isWord){
     // if(EEPROM.read(loc)!=val) { Serial.print(val,DEC); } else { Serial.print(F("no change")); }
     EEPROM.update(loc,val);
   }
-  Serial.println();
+  //Serial.println();
 }
 
 byte daysInMonth(word y, byte m){
@@ -675,8 +688,8 @@ void checkRTC(bool force){
     if(fnSetPg || fn>=fnOpts){
       if(pollLast>inputLast+(timeoutSet*1000)) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
     }
-    //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, tester, or running/signaling timer)
-    else if(fn!=fnIsTime && fn!=fnIsTubeTester && fn!=fnIsDayCount && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
+    //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, temp, tester, or running/signaling timer)
+    else if(fn!=fnIsTime && fn!=fnIsTubeTester && fn!=fnIsDayCount && fn!=fnIsTemp && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
       if(pollLast>inputLast+(timeoutTempFn*1000)) { fnSetPg = 0; fn = fnIsTime; force=true; }
     }
     //Stop a signal beep if it's time to
@@ -833,15 +846,15 @@ void switchPower(char dir){
   if(enableSoftPowerSwitch && relayPin>=0 && relayMode==0) { //if switched relay, and soft switch enabled
     //signalStop(); could use this instead of the below to turn the radio off
     if(dir==0) dir = !digitalRead(relayPin);
-    if(relayPin!=127) {
-      digitalWrite(relayPin,(dir==1?HIGH:LOW));
+    if(relayPin!=127) digitalWrite(relayPin,(dir==1?HIGH:LOW));
+    else {
+      Serial.print(millis(),DEC);
+      Serial.print(F(" Relay "));
+      if(dir==0) { Serial.print(F("toggled")); if(relayPin!=127) { Serial.print(digitalRead(relayPin)==HIGH?F(" on"):F(" off")); } }
+      else Serial.print(dir==1?F("switched on"):F("switched off"));
+      Serial.println(F(", switchPower"));
     }
-    if(readEEPROM(26,false)==4) switchLEDs(dir); //LEDs following switch relay
-    Serial.print(millis(),DEC);
-    Serial.print(F(" Relay "));
-    if(dir==0) { Serial.print(F("toggled")); if(relayPin!=127) { Serial.print(digitalRead(relayPin)==HIGH?F(" on"):F(" off")); } }
-    else Serial.print(dir==1?F("switched on"):F("switched off"));
-    Serial.println(F(", switchPower"));
+    updateLEDs(); //LEDs following switch relay
   }
 }
 
@@ -1001,6 +1014,8 @@ void updateDisplay(){
         break;
       case fnIsTemp: //thermometer
         int temp; temp = ds3231.getTemperature()*100;
+        if(readEEPROM(45,false)==1) temp = temp*1.8 + 3200;
+        //TODO another option to apply offset
         editDisplay(abs(temp)/100,1,3,(temp<0?true:false),true); //leading zeros if negative
         editDisplay(abs(temp)%100,4,5,true,true);
         break;
@@ -1013,7 +1028,26 @@ void updateDisplay(){
         editDisplay(tod.second(),5,5,true,false);
       default: break;
     }//end switch
-  } //end if fn running  
+  } //end if fn running
+  
+  if(true) { //DEBUG MODE: when display's not working, just write it to the console, with time
+    if(tod.hour()<10) Serial.print(F("0"));
+    Serial.print(tod.hour(),DEC);
+    Serial.print(F(":"));
+    if(tod.minute()<10) Serial.print(F("0"));
+    Serial.print(tod.minute(),DEC);
+    Serial.print(F(":"));
+    if(tod.second()<10) Serial.print(F("0"));
+    Serial.print(tod.second(),DEC);
+    Serial.print(F("   "));
+    for(byte i=0; i<displaySize; i++) {
+      if(i%2==0 && i!=0) Serial.print(F(" ")); //spacer between units
+      if(displayNext[i]>9) Serial.print(F("-")); //blanked tube
+      else Serial.print(displayNext[i],DEC);
+    }
+    Serial.println();
+  }
+       
 } //end updateDisplay()
 
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
@@ -1066,7 +1100,7 @@ void initOutputs() {
   for(byte i=0; i<3; i++) { pinMode(anodes[i],OUTPUT); }
   if(piezoPin>=0) pinMode(piezoPin, OUTPUT);
   if(relayPin>=0 && relayPin!=127) pinMode(relayPin, OUTPUT);
-  if(ledPin>=0) pinMode(ledPin, OUTPUT);
+  if(ledPin>=0 && ledPin!=127) pinMode(ledPin, OUTPUT);
   updateLEDs(); //set to initial value
 }
 
@@ -1178,21 +1212,19 @@ void signalStart(byte sigFn, byte sigDur, word pulseDur){ //make some noise! or 
     //piezo or pulsed relay: checkRTC will handle it
     if(getSignalOutput()==1 && relayPin>=0 && relayMode==0) { //switched relay: turn it on now
       if(relayPin!=127) digitalWrite(relayPin,HIGH);
-      Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalStart"));
-      if(readEEPROM(26,false)==4) switchLEDs(1); //LEDs following switch relay
+      else { Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalStart")); }
     }
   }
-  if(readEEPROM(26,false)==3) switchLEDs(1); //LEDs following signal
+  updateLEDs(); //LEDs following signal or relay
 }
 void signalStop(){ //stop current signal and clear out signal timer if applicable
   signalRemain = 0; snoozeRemain = 0;
   signalPulseStop(); //piezo or pulsed relay: stop now
   if(getSignalOutput()==1 && relayPin>=0 && relayMode==0) { //switched relay: turn it off now
     if(relayPin!=127) digitalWrite(relayPin,LOW);
-    Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalStop"));
-    if(readEEPROM(26,false)==4) switchLEDs(0); //LEDs following switch relay
+    else { Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalStop")); }
   }
-  if(readEEPROM(26,false)==3) switchLEDs(0); //LEDs following relay
+  updateLEDs(); //LEDs following relay
 }
 //beep start and stop should only be called by signalStart/signalStop and checkRTC
 void signalPulseStart(word pulseDur){
@@ -1202,8 +1234,8 @@ void signalPulseStart(word pulseDur){
   }
   else if(getSignalOutput()==1 && relayPin>=0 && relayMode==1) { //pulsed relay
     if(relayPin!=127) digitalWrite(relayPin,HIGH);
+    else { Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalPulseStart")); }
     signalPulseStopTime = millis()+relayPulse; //always use relayPulse in case timing is important for connected device
-    Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalPulseStart"));
   }
 }
 void signalPulseStop(){
@@ -1212,8 +1244,8 @@ void signalPulseStop(){
   }
   else if(getSignalOutput()==1 && relayPin>=0 && relayMode==1) { //pulsed relay
     if(relayPin!=127) digitalWrite(relayPin,LOW);
+    else { Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalPulseStop")); }
     signalPulseStopTime = 0;
-    Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalPulseStart"));
   }
 }
 word getSignalPitch(){ //for current signal: time, timer, or (default) alarm
@@ -1231,19 +1263,32 @@ char getSignalOutput(){ //for current signal: time, timer, or (default) alarm: 0
 }
 
 void updateLEDs(){
-  //Run whenever something is changed that might affect the LED state
-  if(ledPin>=0) switch(readEEPROM(26,false)){
-    case 0: //always off
-      digitalWrite(ledPin,LOW); break;
-    case 1: //always on
-      digitalWrite(ledPin,HIGH); break;
-    case 2: //on, but follow day-off and night-off
-      digitalWrite(ledPin,(displayDim<2?LOW:HIGH)); break;
-    case 3: //off, but on when alarm/timer sounds
-      digitalWrite(ledPin,(signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)?HIGH:LOW)); break;
-    case 4: //off, but on with switched relay
-      if(relayPin>=0 && relayPin<127 && relayMode==0) digitalWrite(ledPin,digitalRead(relayPin)); break;
-    //Stopping place: Change all the updateLEDs to not have a polarity, add some more, and hide menu 25 when not equipped, and value 4 when not equipped
-    default: break;
-  }
+  //Run whenever something is changed that might affect the LED state: initial (initOutputs), signal start/stop, relay on/off, setting change
+  if(ledPin>=0) {
+    switch(readEEPROM(26,false)){
+      case 0: //always off
+        if(ledPin!=127) digitalWrite(ledPin,LOW);
+        else { Serial.println(F("LEDs off always")); }
+        break;
+      case 1: //always on
+        if(ledPin!=127) digitalWrite(ledPin,HIGH);
+        else { Serial.println(F("LEDs on always")); }
+        break;
+      case 2: //on, but follow day-off and night-off
+        if(ledPin!=127) digitalWrite(ledPin,(displayDim<2?LOW:HIGH));
+        else { Serial.print(displayDim<2?F("LEDs off"):F("LEDs on")); Serial.println(F(" per dim state")); }
+        break;
+      case 3: //off, but on when alarm/timer sounds
+        if(ledPin!=127) digitalWrite(ledPin,(signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)?HIGH:LOW));
+        else { Serial.print(signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)?F("LEDs on"):F("LEDs off")); Serial.println(F(" per alarm/timer")); }
+        break;
+      case 4: //off, but on with switched relay
+        if(relayPin>=0 && relayMode==0) {
+          if(ledPin!=127) digitalWrite(ledPin,digitalRead(relayPin));
+          else { Serial.println(F("LEDs follow switched relay")); } //can't actually say in case relayPin is 127
+        }
+        break;
+      default: break;
+    } //end switch
+  } //if ledPin
 } //end updateLEDs

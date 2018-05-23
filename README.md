@@ -22,7 +22,7 @@ _Note: Many variations are possible, depending on your clock's hardware; but thi
 | **Alarm** | `_7 00 1_` | Shows alarm time (always in 24hr format) and on/off status on 5th tube (1=on, 0=off) and by display brightness (bright=on, dim=off). Use **Adjust** to switch on/off. Hold **Select** to set time (same way as **Time**). When alarm sounds, press **Select** to snooze, or hold for 1sec (followed by a short beep) to silence the alarm for the day. Options menu lets you restrict the alarm to your workweek or weekend only. In a power outage, the alarm will remain set, but it will not sound if power is disconnected at alarm time. |
 | **Timer** | `__ __ _0` | A countdown timer, in hours, minutes, and seconds; or `0` when stopped. Can be set to the minute, up to 18 hours. Begins running as soon as you set it, and will continue to run in the background if you change to a different function. To cancel while running, hold **Select**. When timer runs out, press **Select** to silence. If power is lost, the timer will reset to `0`. Can be configured to work as an interval timer in the options menu (10), or as an appliance timer instead ([relay in switched mode](#hardware-configuration)). |
 | **Day counter** | `_1 23 __` | Shows the number of days until/since a date you specify. Set the same way as **Date.** |
-| **Temperature** | `__ 38 25` | (Disabled by default.) Shows the temperature of the onboard DS3231 chip (e.g. 38.25°C – I think). May not be very useful as it tends to read higher than ambient temperature and its tolerance is low. |
+| **Temperature** | `__ 38 25` | Shows the temperature of the onboard DS3231 chip (e.g. 38.25°C – I think). May not be very useful as it tends to read higher than ambient temperature and its tolerance is low. Negative temperatures indicated with leading zeroes. |
 | **Tube tester** | `88 88 88` | (Disabled by default.) Cycles through all the digits on all the tubes. |
 
 ### Options Menu
@@ -58,6 +58,7 @@ _Note: Many variations are possible, depending on your clock's hardware; but thi
 | 23. Work starts at | Time of day. |
 | 24. Work ends at | Time of day. |
 | 25. LED behavior | 0 = always off<br/>1 = always on<br/>2 = on, but follow day-off and night-off if enabled<br/>3 = off, but on when alarm/timer sounds</br>4 = off, but on with switched relay (if equipped – great for radios!)<br/>(Clocks with LED control only, UNDB v5.x+) |
+| 26. Temperature format | 0 = Celsius<br/>1 = Fahrenheit<br/>(Clocks with temperature function enabled only) |
 
 To reset the options menu settings to "factory" defaults, hold **Select** while connecting the clock to power.
 
