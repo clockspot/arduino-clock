@@ -2,7 +2,7 @@
 
 ![Nixie clocks](https://i.imgur.com/FemMWax.jpg)
 
-**A digital clock with perpetual calendar, alarm, countdown timer/appliance timer, and day counter.** Written for the Arduino Nano at the heart of [RLB Designs'](http://rlb-designs.com/) Universal Nixie Driver Board (UNDB) v5.0, featuring a DS3231 real-time clock, and driving up to 6 digits multiplexed in pairs via two SN74141 driver chips.
+**A digital clock with perpetual calendar, alarm, countdown timer/appliance timer, and day counter.** Written for the Arduino Nano at the heart of [RLB Designs'](http://rlb-designs.com/) Universal Nixie Driver Board (UNDB), featuring a DS3231 real-time clock, and driving up to 6 digits multiplexed in pairs via two SN74141 driver chips.
 
 [The latest release can be downloaded here.](https://github.com/clockspot/arduino-nixie/releases/latest) Skip to [Hardware Configuration](#hardware-configuration) for details on how to tweak the sketch.
 
@@ -67,7 +67,7 @@ A number of hardware-related settings are specified in consts at the top of the 
 * **How many tubes** in the display module. Default is 6; small display adjustments are made for 4-tube clocks.
 * **Which functions** are enabled. Default is all but temperature and tube tester.
 * **Which input pins** are associated with the Select and Adjust controls.
-* **What type of Adjust controls** are equipped: pushbuttons (default) or rotary encoders.
+* **What type of Adjust controls** are equipped: pushbuttons (default) or rotary encoder (unimplemented).
 * **What type of signal outputs** are equipped: a piezo beeper (default) and/or a relay.
   * **Signal duration** (default 3min) and **piezo pulse duration** (default 500ms)
   * If relay is equipped, **relay mode**:

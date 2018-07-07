@@ -4,11 +4,9 @@
 // based on original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
 // based on http://arduinix.com/Main/Code/ANX-6Tube-Clock-Crossfade.txt
 
-#include <EEPROM.h>
-#include <DS3231.h>
-#include <Wire.h>
-#include <ooPinChangeInt.h>
-#include <AdaEncoder.h>
+#include <EEPROM.h> //Arduino - GNU LPGL
+#include <Wire.h> //Arduino - GNU LPGL
+#include <DS3231.h> //NorthernWidget - The Unlicense
 
 
 ////////// Hardware configuration consts //////////
@@ -43,7 +41,7 @@ const byte mainAdjDn = A0;
 const byte altSel = 0; //alt select button - if unequipped, set to 0
 
 // What type of adj controls are equipped?
-// 1 = momentary buttons. 2 = quadrature rotary encoder.
+// 1 = momentary buttons. 2 = quadrature rotary encoder (not supported presently)
 const byte mainAdjType = 1;
 
 // In normal running mode, what do the controls do?
@@ -246,7 +244,7 @@ void initInputs(){
   pinMode(A6, INPUT); digitalWrite(A6, HIGH);
   pinMode(A7, INPUT); digitalWrite(A7, HIGH);
   //rotary encoder init
-  if(mainAdjType==2) AdaEncoder mainRot = AdaEncoder('a',mainAdjUp,mainAdjDn);
+  //TODO encoder support
 }
 
 void checkInputs(){
@@ -255,7 +253,7 @@ void checkInputs(){
   //check button states
   checkBtn(mainSel); //main select
   if(mainAdjType==1) { checkBtn(mainAdjUp); checkBtn(mainAdjDn); } //if mainAdj is buttons
-  if(mainAdjType==2) checkRot(); //if mainAdj is rotary encoder
+  //if(mainAdjType==2) checkRot(); //if mainAdj is rotary encoder TODO encoder support
   if(altSel!=0) checkBtn(altSel); //alt select (if equipped)
 }
 
@@ -297,22 +295,7 @@ void btnStop(){
 
 void checkRot(){
   //Changes in rotary encoder. When rotation(s) occur, will call ctrlEvt to simulate btn presses.
-  if(btnCur==0) {
-    //https://github.com/GreyGnome/AdaEncoder/blob/master/Examples/MyEncoder/MyEncoder.ino
-    AdaEncoder *thisEncoder=NULL;
-    thisEncoder = AdaEncoder::genie();
-    if(thisEncoder!=NULL) {
-      unsigned long inputThis = millis();
-      if(inputThis-inputLast < 70) return; //ignore inputs that come faster than a human could rotate
-      int8_t clicks = thisEncoder->query(); //signed number of clicks it has moved
-      byte dir = (clicks<0?0:1);
-      clicks = abs(clicks);
-      for(byte i=0; i<clicks; i++){ //in case of more than one click
-        ctrlEvt((dir?mainAdjUp:mainAdjDn),1);
-      }
-      inputLast2 = inputLast; inputLast = inputThis;
-    }
-  }
+  //TODO rotary encoder support
 }//end checkRot
 
 
