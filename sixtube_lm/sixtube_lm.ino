@@ -11,7 +11,9 @@
 //#include "configs/v5-6tube.h"              //UNDB v5, 6 tubes
 //#include "configs/v5-6tube-rotary.h"       //UNDB v5, 6 tubes, rotary encoder instead of buttons
 //#include "configs/v5-4tube.h"              //UNDB v5, 4 tubes
-#include "configs/v8-6tube-relayswitch.h"  //UNDB v8, 6 tubes, switching relay
+#include "configs/v8-6tube.h"  //UNDB v8 before modification, no LED or relay support
+//#include "configs/v8a-6tube-relayswitch.h"  //UNDB v8 after modification A (Select=A1, Adj=A6/A7, Alt=A0, LED=A2, Relay=A3)
+//#include "configs/v8b-6tube-relayswitch.h"  //UNDB v8 after modification A (Select=A6, Adj=A0/A1, Alt=A7, LED=A2, Relay=A3)
 
 
 ////////// Other includes, global consts, and vars //////////
@@ -68,11 +70,11 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //Option numbers/order can be changed (though try to avoid for user convenience);
 //but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
 //                       General                    Alarm        Timer     Strike    Night-off and day-off
-const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47};
-const byte optsLoc[] = {16,17,18,19,20,22,26,45,46, 23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37};
-const word optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020};
-const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0};
-const word optsMax[] = { 2, 5, 3, 1,20, 6, 4, 1, 3,  2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439};
+const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8,    10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47}; // 9,
+const byte optsLoc[] = {16,17,18,19,20,22,26,45,    23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37}; //46,
+const word optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0,     0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020}; // 0,
+const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0,     0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0}; // 0,
+const word optsMax[] = { 2, 5, 3, 1,20, 6, 4, 1,     2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439}; // 3,
 
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
@@ -169,10 +171,10 @@ void loop(){
 
 void initInputs(){
   //TODO are there no "loose" pins left floating after this? per https://electronics.stackexchange.com/q/37696/151805
-  pinMode(A0, INPUT_PULLUP);
-  pinMode(A1, INPUT_PULLUP);
-  //pinMode(A2, INPUT_PULLUP); 
-  //pinMode(A3, INPUT_PULLUP);
+  pinMode(mainSel, INPUT_PULLUP);
+  pinMode(mainAdjUp, INPUT_PULLUP);
+  pinMode(mainAdjDn, INPUT_PULLUP);
+  pinMode(altSel, INPUT_PULLUP);
   //rotary encoder init
   if(mainAdjType==2) AdaEncoder mainRot = AdaEncoder('a',mainAdjUp,mainAdjDn);
 }

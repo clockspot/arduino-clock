@@ -36,13 +36,13 @@ _Note: Many variations are possible, depending on your clock's hardware; but thi
 |  | **General** |  |
 | 1 | Time format | 1 = 12-hour<br/>2 = 24-hour<br/>(time-of-day display only; setting times is always done in 24h) |
 | 2 | Date format | 1 = month/date/weekday<br/>2 = date/month/weekday<br/>3 = month/date/year<br/>4 = date/month/year<br/>5 = year/month/date<br/>Note that four-tube clocks will display only the first two values in each of these options. |
-| 3 | Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date (as above) every minute at :30 seconds<br/>3 = same as 2, but scrolls in and out<br/>4 = full date every 5 minutes at :30 seconds<br/>3 = same as 4, but scrolls in and out |
+| 3 | Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date (as above) every minute at :30 seconds<br/>3 = same as 2, but scrolls in and out<br/>TODO: implement options for full date every 5 minutes |
 | 4 | Leading zero in hour, date, and month? | 0 = no<br/>1 = yes |
 | 5 | Digit fade | 0–20 (in hundredths of a second) |
 | 6 | Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ) |
 | 7 | LED behavior | 0 = always off<br/>1 = always on<br/>2 = on, but follow day-off and night-off if enabled<br/>3 = off, but on when alarm/timer sounds</br>4 = off, but on with switched relay (if equipped – great for radios!)<br/>(Clocks with LED control only, UNDB v8+) |
 | 8 | Temperature format | 0 = Celsius<br/>1 = Fahrenheit<br/>(Clocks with temperature function enabled only) |
-| 9 | Anti-cathode poisoning | Briefly cycles all digits to prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm):<br/>0 = once a day, at "Night ends at" time<br/>1 = once a day, at midnight<br/>2 = every hour, at minute :01<br/>3 = every minute, at second :01 |
+| 9 | Anti-cathode poisoning | Briefly cycles all digits to prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)<br/>TODO: implement this |
 |  | **Alarm** |  |
 | 10 | Alarm days | 0 = every day<br/>1 = work week only (per settings below)<br/>2 = weekend only |
 | 11 | Alarm signal | 0 = beeper<br/>1 = relay (if in switch mode, will stay on for 2 hours)<br/>(Clocks with both beeper and relay only) |
@@ -59,7 +59,7 @@ _Note: Many variations are possible, depending on your clock's hardware; but thi
 |  | **Night-off and day-off** |  |
 | 40 | Night-off | To save tube life and/or preserve your sleep, dim or shut off tubes nightly when you're not around or sleeping.<br/>0 = none (tubes fully on at night)<br/>1 = dim tubes at night<br/>2 = shut off tubes at night<br/>When off, you can press **Select** to illuminate the tubes briefly. |
 | 41 | Night starts at | Time of day. |
-| 42 | Night ends at | Time of day. Set to 0:00 to use the alarm time. At this time (whether night-off/alarm is enabled or not), all tubes will briefly cycle through all digits at full brightness to help prevent . |
+| 42 | Night ends at | Time of day. Set to 0:00 to use the alarm time. |
 | 43 | Day-off | To further save tube life, shut off tubes during the day when you're not around.<br/>0 = none (tubes fully on during the day)<br/>1 = clock at work (shut off all day on weekends)<br/>2 = clock at home (shut off during work hours)<br/>When off, you can press **Select** to illuminuate the tubes briefly. |
 | 44 | First day of work week | 0–6 (Sunday–Saturday) |
 | 45 | Last day of work week | 0–6 (Sunday–Saturday) |
