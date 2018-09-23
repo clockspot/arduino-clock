@@ -9,11 +9,13 @@
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
 //#include "configs/v5-6tube.h"              //UNDB v5, 6 tubes
+//#include "configs/v5-6tube-red.h"              //UNDB v5, 6 tubes, red case (weird buttons)
 //#include "configs/v5-6tube-rotary.h"       //UNDB v5, 6 tubes, rotary encoder instead of buttons
 //#include "configs/v5-4tube.h"              //UNDB v5, 4 tubes
-#include "configs/v8-6tube.h"  //UNDB v8 before modification, no LED or relay support
-//#include "configs/v8a-6tube-relayswitch.h"  //UNDB v8 after modification A (Select=A1, Adj=A6/A7, Alt=A0, LED=A2, Relay=A3)
-//#include "configs/v8b-6tube-relayswitch.h"  //UNDB v8 after modification A (Select=A6, Adj=A0/A1, Alt=A7, LED=A2, Relay=A3)
+//#include "configs/v8-6tube.h"  //UNDB v8 before modification, no LED or relay support
+//#include "configs/v8-4tube.h"  //UNDB v8 before modification, no LED or relay support
+#include "configs/v8a-6tube-relayswitch.h"  //UNDB v8 after modification A (Select=A1, Adj=A6/A7, Alt=A0, LED=A2, Relay=A3)
+//#include "configs/v8b-6tube-relayswitch.h"  //UNDB v8 after modification B (Select=A6, Adj=A0/A1, Alt=A7, LED=A2, Relay=A3)
 
 
 ////////// Other includes, global consts, and vars //////////
@@ -928,6 +930,8 @@ void updateDisplay(){
         } else blankDisplay(mspos,mspos+1,true);
         //display second (in relative position). Leading zero if t>=1m.
         editDisplay(timerRemain%60,mspos+2,mspos+3,(timerRemain>=60?true:false),true);
+        //just in case 4-digit code is run on a 6-digit clock
+        if(displaySize<6) blankDisplay(4,5,false);
         break;
       case fnIsTemp: //thermometer
         int temp; temp = ds3231.getTemperature()*100;

@@ -23,9 +23,9 @@ const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCoun
 // A6-A7 are analog-only pins that aren't quite as responsive and require a physical pullup resistor (1K to +5V), and can't be used with rotary encoders because they don't support pin change interrupts.
 
 // What input is associated with each control?
-const byte mainSel = A2; //main select button - must be equipped
-const byte mainAdjUp = A1; //main up/down buttons or rotary encoder - must be equipped
-const byte mainAdjDn = A0;
+const byte mainSel = A1; //main select button - must be equipped
+const byte mainAdjUp = A6; //main up/down buttons or rotary encoder - must be equipped
+const byte mainAdjDn = A2;
 const byte altSel = 0; //alt select button - if unequipped, set to 0
 
 // What type of adj controls are equipped?

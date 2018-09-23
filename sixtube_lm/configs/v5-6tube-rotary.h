@@ -30,7 +30,7 @@ const byte altSel = 0; //alt select button - if unequipped, set to 0
 
 // What type of adj controls are equipped?
 // 1 = momentary buttons. 2 = quadrature rotary encoder.
-const byte mainAdjType = 1;
+const byte mainAdjType = 2;
 
 // In normal running mode, what do the controls do?
 // -1 = nothing/switch, -2 = cycle through functions, fn in fnsEnabled[] = go to that function
