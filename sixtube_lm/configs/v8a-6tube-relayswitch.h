@@ -59,9 +59,9 @@ const byte enableSoftPowerSwitch = 1; //works with switched relay only
 // 1 = yes. Relay can be switched on and off directly when clock is displaying time of day (fnIsTime). This is useful if  connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
 // 0 = no. Use if the connected appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched.
 
-//LED circuit control
-const char ledPin = A2;
-// -1 to disable feature; A2 if equipped (UNDB v8)
+//LED circuit control with PWM
+const char ledPin = 11;
+// -1 to disable feature; 11 if equipped (UNDB v8 modded)
 
 //When display is dim/off, a press will light the tubes for how long?
 const byte unoffDur = 10; //sec
@@ -80,3 +80,20 @@ const word scrollSpeed = 100; //ms - e.g. scroll-in-and-out date at :30 - to giv
 // What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
 const unsigned long timeoutSet = 120; //sec
 const unsigned long timeoutTempFn = 5; //sec
+
+//This clock is 2x3 multiplexed: two tubes powered at a time.
+//The anode channel determines which two tubes are powered,
+//and the two SN74141 cathode driver chips determine which digits are lit.
+//4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
+const char outA1 = 2;
+const char outA2 = 3;
+const char outA3 = 4;
+const char outA4 = 5;
+const char outB1 = 6;
+const char outB2 = 7;
+const char outB3 = 8;
+const char outB4 = 9;
+//3 pins out to anode channel switches
+const char anode1 = 16; //A2
+const char anode2 = 12;
+const char anode3 = 13;

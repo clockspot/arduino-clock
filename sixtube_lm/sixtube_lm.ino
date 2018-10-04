@@ -1004,10 +1004,10 @@ void startScroll() { //To scroll a value in, call this after calling editDisplay
 //The anode channel determines which two tubes are powered,
 //and the two SN74141 cathode driver chips determine which digits are lit.
 //4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
-byte binOutA[4] = {2,3,4,5};
-byte binOutB[4] = {6,7,8,9};
+byte binOutA[4] = {outA1,outA2,outA3,outA4};
+byte binOutB[4] = {outB1,outB2,outB3,outB4};
 //3 pins out to anode channel switches
-byte anodes[3] = {11,12,13};
+byte anodes[3] = {anode1,anode2,anode3};
 
 const int fadeDur = 5; //ms - each multiplexed pair of digits appears for this amount of time per cycle
 const int dimDur = 4; //ms - portion of fadeDur that is left dark during dim times

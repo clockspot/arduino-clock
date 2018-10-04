@@ -74,3 +74,20 @@ const word scrollSpeed = 100; //ms - e.g. scroll-in-and-out date at :30 - to giv
 // What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
 const unsigned long timeoutSet = 120; //sec
 const unsigned long timeoutTempFn = 5; //sec
+
+//This clock is 2x3 multiplexed: two tubes powered at a time.
+//The anode channel determines which two tubes are powered,
+//and the two SN74141 cathode driver chips determine which digits are lit.
+//4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
+const char outA1 = 2;
+const char outA2 = 3;
+const char outA3 = 4;
+const char outA4 = 5;
+const char outB1 = 6;
+const char outB2 = 7;
+const char outB3 = 8;
+const char outB4 = 9;
+//3 pins out to anode channel switches
+const char anode1 = 11;
+const char anode2 = 12;
+const char anode3 = 13;
