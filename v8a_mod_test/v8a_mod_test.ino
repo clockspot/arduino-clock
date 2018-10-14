@@ -108,6 +108,22 @@ void checkBtn(byte btn){
   } //end if button presed
   //If the button has just been released...
   if(btnCur==btn && bnow==HIGH) {
+    Serial.println();
+    switch(btn){
+      case btnSel:
+        Serial.println(F("btnSel released"));
+        break;
+      case btnAlt:
+        Serial.println(F("btnAlt released"));
+        break;
+      case btnUp:
+        Serial.println(F("btnUp released"));
+        break;
+      case btnDn:
+        Serial.println(F("btnDn released"));
+        break;
+      default: break;
+    }
     btnCur = 0;
   }
 }
