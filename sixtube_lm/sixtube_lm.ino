@@ -8,14 +8,7 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-//#include "configs/v5-6tube.h"              //UNDB v5, 6 tubes
-//#include "configs/v5-6tube-red.h"              //UNDB v5, 6 tubes, red case (weird buttons)
-//#include "configs/v5-6tube-rotary.h"       //UNDB v5, 6 tubes, rotary encoder instead of buttons
-//#include "configs/v5-4tube.h"              //UNDB v5, 4 tubes
-//#include "configs/v8-6tube.h"  //UNDB v8 before modification, no LED or relay support
-//#include "configs/v8-4tube.h"  //UNDB v8 before modification, no LED or relay support
-#include "configs/v8a-6tube-relayswitch.h"  //UNDB v8 after modification A (Select=A1, Adj=A6/A7, Alt=A0, LED=A2, Relay=A3)
-//#include "configs/v8b-6tube-relayswitch.h"  //UNDB v8 after modification B (Select=A6, Adj=A0/A1, Alt=A7, LED=A2, Relay=A3)
+#include "configs/v8b-6tube-relayswitch-pwm-top.h"
 
 
 ////////// Other includes, global consts, and vars //////////
@@ -271,7 +264,12 @@ void ctrlEvt(byte ctrl, byte evt){
     stoppingSignal = false;
     if(evt==2 && snoozeRemain>0) {
       snoozeRemain = 0;
-      signalStart(fnIsAlarm,0,100); //Short beep at alarm pitch
+      //Short signal to indicate the snooze has cancelled //TODO write these edge cases into the signal generating stuff
+      if(getSignalOutput()==1 && relayMode==0) { //if the output is relay, but switched
+        if(piezoPin>=0) { tone(piezoPin, getSignalPitch(), 100); } //use the beeper anyway
+      } else {
+        signalStart(fnIsAlarm,0,100);
+      }
     }
     btnStop();
     return;
