@@ -4,11 +4,15 @@
 // based on original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
 // based on http://arduinix.com/Main/Code/ANX-6Tube-Clock-Crossfade.txt
 
+//TODO: implement options for full date every 5 minutes
+//TODO: see other TODOs throughout
+//TODO: cathode anti-poisoning
+//TODO: is it possible to trip the chime *after* determining if we're in night mode or not
 
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/v8b-6tube-relayswitch-pwm-top.h"
+#include "configs/v8c-6tube-relayswitch-pwm-top.h"
 
 
 ////////// Other includes, global consts, and vars //////////
@@ -43,10 +47,10 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   24 Alarm snooze
   25 Timer interval mode - skipped when no piezo and relay is switch (start=0)
   26 LED circuit behavior - skipped when no led pin
-  27 Night-off
+  27 Night mode
   28-29 Night start, mins
   30-31 Night end, mins
-  32 Day-off
+  32 Away mode
   33 First day of workweek
   34 Last day of workweek
   35-36 Work starts at, mins
@@ -64,7 +68,7 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //Options menu numbers (displayed in UI and readme), EEPROM locations, and default/min/max values.
 //Option numbers/order can be changed (though try to avoid for user convenience);
 //but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
-//                       General                    Alarm        Timer     Strike    Night-off and day-off
+//                       General                    Alarm        Timer     Strike    Night and away mode
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8,    10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47}; // 9,
 const byte optsLoc[] = {16,17,18,19,20,22,26,45,    23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37}; //46,
 const word optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0,     0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020}; // 0,
@@ -99,7 +103,7 @@ word snoozeRemain = 0; //snooze timeout counter, seconds
 word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,800 seconds - fits just inside a word)
 word timerRemain = 0; //timer actual counter
 unsigned long signalPulseStopTime = 0; //to stop beeps after a time
-word unoffRemain = 0; //un-off (briefly turn on tubes during full night-off or day-off) timeout counter, seconds
+word unoffRemain = 0; //un-off (briefly turn on tubes during full night or away modes) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 byte cleanRemain = 11; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
 char scrollRemain = 0; //"frames" of scroll – 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change
@@ -159,6 +163,7 @@ void loop(){
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
   doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
+  cycleLEDs();
 }
 
 
@@ -249,14 +254,21 @@ void ctrlEvt(byte ctrl, byte evt){
   //evt: 1=press, 2=short hold, 3=long hold, 0=release.
   //We only handle press evts for adj ctrls, as that's the only evt encoders generate.
   //But we can handle short and long holds and releases for the sel ctrls (always buttons).
-  //TODO needs altSel
   
   //Before all else, is it a press to stop the signal? Silence it
   if(signalRemain>0 && evt==1){
     stoppingSignal = true;
     signalStop();
-    //If source is alarm, start snooze. 0 will have no effect.
-    if(signalSource==fnIsAlarm) snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
+    if(signalSource==fnIsAlarm) { //If this was the alarm
+      //If the alarm is using the switched relay and this is the Alt button, don't set the snooze
+      if(relayMode==0 && readEEPROM(42,false)==1 && altSel!=0 && ctrl==altSel) {
+        //Short signal to indicate the alarm has been silenced until tomorrow - on beeper if relay is switched
+        if(getSignalOutput()==1 && relayMode==0) { if(piezoPin>=0) { tone(piezoPin, getSignalPitch(), 100); }}
+        else signalStart(fnIsAlarm,0,100);
+      } else { //start snooze
+        snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
+      }
+    }
     return;
   }
   //After pressing to silence, short hold cancels a snooze; ignore other btn evts
@@ -264,20 +276,17 @@ void ctrlEvt(byte ctrl, byte evt){
     stoppingSignal = false;
     if(evt==2 && snoozeRemain>0) {
       snoozeRemain = 0;
-      //Short signal to indicate the snooze has cancelled //TODO write these edge cases into the signal generating stuff
-      if(getSignalOutput()==1 && relayMode==0) { //if the output is relay, but switched
-        if(piezoPin>=0) { tone(piezoPin, getSignalPitch(), 100); } //use the beeper anyway
-      } else {
-        signalStart(fnIsAlarm,0,100);
-      }
+      //Short signal to indicate the alarm has been silenced until tomorrow - on beeper if relay is switched
+      if(getSignalOutput()==1 && relayMode==0) { if(piezoPin>=0) { tone(piezoPin, getSignalPitch(), 100); }}
+      else signalStart(fnIsAlarm,0,100);
     }
     btnStop();
     return;
   }
   
   //Is it a press for an un-off?
+  unoffRemain = unoffDur; //always do this so continued button presses during an unoff keep it alive
   if(displayDim==0 && evt==1) {
-    unoffRemain = unoffDur;
     updateDisplay();
     btnStop();
     return;
@@ -312,27 +321,21 @@ void ctrlEvt(byte ctrl, byte evt){
         }
         return;
       }
-      else if((ctrl==mainSel && evt==0) || ((ctrl==mainAdjUp || ctrl==mainAdjDn) && evt==1)) { //sel release or adj press - switch fn, depending on config
-        //-1 = nothing, -2 = cycle through functions, other = go to specific function (see fn)
+      else if((ctrl==mainSel && evt==0) || ((ctrl==mainAdjUp || ctrl==mainAdjDn) && evt==1)) { //sel release or adj press
         //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
         if(ctrl==mainSel){
-          if(mainSelFn!=-1) { //do a function switch
-            if(mainSelFn==-2) fnScroll(1); //Go to next fn in the cycle
-            else fn = mainSelFn;
-            checkRTC(true); //updates display
-          }
-          else if(fn==fnIsAlarm) switchAlarm(0); //switch alarm
-          else if(fn==fnIsTime) switchPower(0); //switch power
+          fnScroll(1); //Go to next fn in the cycle
+          checkRTC(true); //updates display
         }
         else if(ctrl==mainAdjUp || ctrl==mainAdjDn) {
-          if(mainAdjFn!=-1) { //do a function switch
-            if(mainAdjFn==-2) fnScroll(ctrl==mainAdjUp?1:-1); //Go to next or previous fn in the cycle
-            else fn = mainAdjFn;
-            checkRTC(true); //updates display
-          }
-          else if(fn==fnIsAlarm) switchAlarm(ctrl==mainAdjUp?1:-1); //switch alarm
-          else if(fn==fnIsTime) switchPower(ctrl==mainAdjUp?1:-1); //switch power
+          if(fn==fnIsAlarm) switchAlarm(ctrl==mainAdjUp?1:-1); //switch alarm
+          //if(fn==fnIsTime) TODO volume in I2C radio
         }
+      }
+      else if(altSel!=0 && ctrl==altSel) { //alt sel press
+        //TODO switch I2C radio
+        switchPower(0);
+        btnStop();
       }
     } //end fn running
 
@@ -377,8 +380,8 @@ void ctrlEvt(byte ctrl, byte evt){
               timerInitial = fnSetVal*60; //timerRemain is seconds, but timer is set by minute
               timerRemain = timerInitial; //set actual timer going
               if(relayPin>=0 && relayMode==0 && readEEPROM(43,false)==1) { //if switched relay, and timer signal is set to it
-                digitalWrite(relayPin,HIGH);
-                Serial.print(millis(),DEC); Serial.println(F(" Relay on, timer set"));
+                digitalWrite(relayPin,LOW); //LOW = device on
+                //Serial.print(millis(),DEC); Serial.println(F(" Relay on, timer set"));
                 updateLEDs(); //LEDs following switch relay
                 //TODO will this cancel properly? especially if alarm interrupts?
               }
@@ -643,7 +646,7 @@ void checkRTC(bool force){
       if(readEEPROM(18,false)==3) { startScroll(); }
     }
     
-    //Strikes - only if fn=clock, not setting, not night-off/day-off. Setting 21 will be off if signal type is no good
+    //Strikes - only if fn=clock, not setting, not night/away. Setting 21 will be off if signal type is no good
     //Short pips before the top of the hour
     if(tod.minute()==59 && tod.second()>=55 && readEEPROM(21,false)==2 && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {
       signalStart(fnIsTime,0,100);
@@ -671,7 +674,7 @@ void checkRTC(bool force){
         timerRemain--;
         if(timerRemain<=0) { //timer has elasped
           if(relayPin>=0 && relayMode==0 && readEEPROM(43,false)==1) { //if switched relay, and timer signal is set to it
-            signalStop();
+            signalStop(); //interval timer setting is ignored (unlike below)
           } else { //not switched relay: turn on signal
             if(readEEPROM(25,false)) { //interval timer: a short signal and restart; don't change to timer fn
               signalStart(fnIsTimer,0,0); timerRemain = timerInitial;
@@ -703,7 +706,7 @@ void checkRTC(bool force){
     } //end natural second
     
     //Finally, update the display, whether natural tick or not, as long as we're not setting or on a scrolled display (unless forced eg. fn change)
-    //This also determines night-off/day-off, which is why strikes will happen if we go into off at top of hour TODO find a way to fix this
+    //This also determines night/away mode, which is why strikes will happen if we go into off at top of hour, and not when we come into on at the top of the hour TODO find a way to fix this
     if(fnSetPg==0 && (scrollRemain==0 || force)) updateDisplay();
     
     rtcSecLast = tod.second();
@@ -763,14 +766,23 @@ void switchAlarm(char dir){
 }
 void switchPower(char dir){
   if(enableSoftPowerSwitch && relayPin>=0 && relayMode==0) { //if switched relay, and soft switch enabled
-    //signalStop(); could use this instead of the below to turn the radio off
-    if(dir==0) dir = !digitalRead(relayPin);
-    digitalWrite(relayPin,(dir==1?HIGH:LOW));
-    Serial.print(millis(),DEC);
-    Serial.print(F(" Relay "));
-    if(dir==0) { Serial.print(F("toggled")); Serial.print(digitalRead(relayPin)==HIGH?F(" on"):F(" off")); }
-    else Serial.print(dir==1?F("switched on"):F("switched off"));
-    Serial.println(F(", switchPower"));
+    signalRemain = 0; snoozeRemain = 0; //in case alarm is going now - alternatively use signalStop()?
+    //If the timer is running and is using the switched relay, this instruction conflicts with it, so cancel it
+    if(timerRemain>0 && readEEPROM(43,false)==1) {
+      timerRemain=0;
+      updateDisplay();
+    }
+    //relayPin state is the reverse of the appliance state: LOW = device on, HIGH = device off
+    //Serial.print(millis(),DEC);
+    //Serial.print(F(" Relay requested to "));
+    if(dir==0) { //toggle
+      dir = (digitalRead(relayPin)?1:-1); //LOW = device on, so this effectively does our dir reversion for us
+      //Serial.print(dir==1?F("toggle on"):F("toggle off"));
+    } else {
+      //Serial.print(dir==1?F("switch on"):F("switch off"));
+    }
+    digitalWrite(relayPin,(dir==1?0:1)); //LOW = device on
+    //Serial.println(F(", switchPower"));
     updateLEDs(); //LEDs following switch relay
   }
 }
@@ -861,20 +873,21 @@ void updateDisplay(){
   }
   else { //fn running
     
-    //Set displayDim per night-off and day-off settings - fnIsAlarm may override this
+    //Set displayDim per night/away settings - fnIsAlarm may override this
     //issue: moving from off alarm to next fn briefly shows alarm in full brightness. I think because of the display delays. TODO
     word todmins = tod.hour()*60+tod.minute();
     //In order of precedence:
     //temporary unoff
-    if(unoffRemain > 0) displayDim = 2;
-    //day-off on weekends, all day
+    if(unoffRemain > 0) displayDim = 2; //TODO can we fade between dim states?
+    //clock at work: away on weekends, all day
     else if( readEEPROM(32,false)==1 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) ) displayDim = 0;
-    //day-off on weekdays, during office hours only
+    //clock at home: away on weekdays, during office hours only
     else if( readEEPROM(32,false)==2 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) && isTimeInRange(readEEPROM(35,true), readEEPROM(37,true), todmins) ) displayDim = 0;
-    //night-off - if night end is 0:00, use alarm time instead
+    //night mode - if night end is 0:00, use alarm time instead
     else if( readEEPROM(27,false) && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins) ) displayDim = (readEEPROM(27,false)==1?1:0); //dim or off
     //normal
     else displayDim = 2;
+    updateLEDs();
     
     switch(fn){
       case fnIsTime:
@@ -1018,7 +1031,7 @@ void initOutputs() {
   for(byte i=0; i<4; i++) { pinMode(binOutA[i],OUTPUT); pinMode(binOutB[i],OUTPUT); }
   for(byte i=0; i<3; i++) { pinMode(anodes[i],OUTPUT); }
   if(piezoPin>=0) pinMode(piezoPin, OUTPUT);
-  if(relayPin>=0) pinMode(relayPin, OUTPUT);
+  if(relayPin>=0) pinMode(relayPin, OUTPUT); digitalWrite(relayPin, HIGH); //LOW = device on
   if(ledPin>=0) pinMode(ledPin, OUTPUT);
   updateLEDs(); //set to initial value
 }
@@ -1122,16 +1135,16 @@ void signalStart(byte sigFn, byte sigDur, word pulseDur){ //make some noise! or 
   //sigDur is the number of seconds to put on signalRemain, or 0 for a single immediate beep (skipped in radio mode).
   //Special case: if sigFn==fnIsAlarm, and sigDur>0, we'll use signalDur or switchDur as appropriate.
   //If doing a single beep, pulseDur is the number of ms it should last, or 0 for signal source's chosen output's pulse length (which will be used anyway if pulsed relay)
+  signalSource = sigFn; //Set this first so signalStop won't inadvertently turn off a switched relay started by something else
   signalStop();
-  signalSource = sigFn;
   if(sigDur==0) signalPulseStart(pulseDur); //single immediate beep
   else { //long-duration signal (alarm, sleep, etc)
     if(sigFn==fnIsAlarm) signalRemain = (readEEPROM(42,false)==1 && relayPin>=0 && relayMode==0 ? switchDur : signalDur);
     else signalRemain = sigDur;
     //piezo or pulsed relay: checkRTC will handle it
     if(getSignalOutput()==1 && relayPin>=0 && relayMode==0) { //switched relay: turn it on now
-      digitalWrite(relayPin,HIGH);
-      Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalStart"));
+      digitalWrite(relayPin,LOW); //LOW = device on
+      //Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalStart"));
     }
   }
   updateLEDs(); //LEDs following signal or relay
@@ -1140,8 +1153,8 @@ void signalStop(){ //stop current signal and clear out signal timer if applicabl
   signalRemain = 0; snoozeRemain = 0;
   signalPulseStop(); //piezo or pulsed relay: stop now
   if(getSignalOutput()==1 && relayPin>=0 && relayMode==0) { //switched relay: turn it off now
-    digitalWrite(relayPin,LOW);
-    Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalStop"));
+    digitalWrite(relayPin,HIGH); //LOW = device on
+    //Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalStop"));
   }
   updateLEDs(); //LEDs following relay
 }
@@ -1152,8 +1165,8 @@ void signalPulseStart(word pulseDur){
     tone(piezoPin, getSignalPitch(), (pulseDur==0?piezoPulse:pulseDur));
   }
   else if(getSignalOutput()==1 && relayPin>=0 && relayMode==1) { //pulsed relay
-    digitalWrite(relayPin,HIGH);
-    Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalPulseStart"));
+    digitalWrite(relayPin,LOW); //LOW = device on
+    //Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalPulseStart"));
     signalPulseStopTime = millis()+relayPulse; //always use relayPulse in case timing is important for connected device
   }
 }
@@ -1162,8 +1175,8 @@ void signalPulseStop(){
     noTone(piezoPin);
   }
   else if(getSignalOutput()==1 && relayPin>=0 && relayMode==1) { //pulsed relay
-    digitalWrite(relayPin,LOW);
-    Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalPulseStop"));
+    digitalWrite(relayPin,HIGH); //LOW = device on
+    //Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalPulseStop"));
     signalPulseStopTime = 0;
   }
 }
@@ -1181,35 +1194,51 @@ char getSignalOutput(){ //for current signal: time, timer, or (default) alarm: 0
   return readEEPROM((signalSource==fnIsTime?44:(signalSource==fnIsTimer?43:42)),false);
 }
 
+const byte ledFadeStep = 10; //fade speed – with every loop() we'll increment/decrement the LED brightness (between 0-255) by this amount
+byte ledStateNow = 0;
+byte ledStateTarget = 0;
 void updateLEDs(){
   //Run whenever something is changed that might affect the LED state: initial (initOutputs), signal start/stop, relay on/off, setting change
   if(ledPin>=0) {
     switch(readEEPROM(26,false)){
       case 0: //always off
-        digitalWrite(ledPin,LOW);
-        Serial.println(F("LEDs off always"));
+        ledStateTarget = 0;
+        //Serial.println(F("LEDs off always"));
         break;
       case 1: //always on
-        digitalWrite(ledPin,HIGH);
-        Serial.println(F("LEDs on always"));
+        ledStateTarget = 255;
+        //Serial.println(F("LEDs on always"));
         break;
-      case 2: //on, but follow day-off and night-off
-        digitalWrite(ledPin,(displayDim<2?LOW:HIGH));
-        Serial.print(displayDim<2?F("LEDs off"):F("LEDs on")); Serial.println(F(" per dim state"));
+      case 2: //on, but follow night/away modes
+        ledStateTarget = (displayDim==2? 255: (displayDim==1? 127: 0));
+        //Serial.print(displayDim==2? F("LEDs on"): (displayDim==1? F("LEDs dim"): F("LEDs off"))); Serial.println(F(" per dim state"));
         break;
       case 3: //off, but on when alarm/timer sounds
-        digitalWrite(ledPin,(signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)?HIGH:LOW));
-        Serial.print(signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)?F("LEDs on"):F("LEDs off")); Serial.println(F(" per alarm/timer"));
+        ledStateTarget = (signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)? 255: 0);
+        //Serial.print(signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)?F("LEDs on"):F("LEDs off")); Serial.println(F(" per alarm/timer"));
         break;
       case 4: //off, but on with switched relay
         if(relayPin>=0 && relayMode==0) {
-          digitalWrite(ledPin,digitalRead(relayPin));
-          Serial.print(F("LEDs "));
-          if(digitalRead(ledPin)==HIGH) Serial.print(F("on")); else Serial.print(F("off"));
-          Serial.println(F(" per switched relay"));
+          ledStateTarget = (!digitalRead(relayPin)? 255: 0); //LOW = device on
+          //Serial.print(!digitalRead(relayPin)? F("LEDs on"): F("LEDs off")); Serial.println(F(" per switched relay"));
         }
         break;
       default: break;
     } //end switch
   } //if ledPin
 } //end updateLEDs
+void cycleLEDs() {
+  //Allows us to fade the LEDs to ledStateTarget by stepping via ledFadeStep
+  //TODO: it appears setting analogWrite(pin,0) does not completely turn the LEDs off. Anything else we could do?
+  if(ledStateNow != ledStateTarget) {
+    if(ledStateNow < ledStateTarget) {
+      ledStateNow = (ledStateTarget-ledStateNow <= ledFadeStep? ledStateTarget: ledStateNow+ledFadeStep);
+    } else {
+      ledStateNow = (ledStateNow-ledStateTarget <= ledFadeStep? ledStateTarget: ledStateNow-ledFadeStep);
+    }
+    // Serial.print(ledStateNow,DEC);
+    // Serial.print(F(" => "));
+    // Serial.println(ledStateTarget,DEC);
+    analogWrite(ledPin,ledStateNow);
+  }
+}
