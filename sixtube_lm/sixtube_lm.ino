@@ -69,11 +69,11 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //Option numbers/order can be changed (though try to avoid for user convenience);
 //but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
 //                       General                    Alarm        Timer     Strike    Night and away mode
-const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8,    10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47}; // 9,
-const byte optsLoc[] = {16,17,18,19,20,22,26,45,    23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37}; //46,
-const word optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0,     0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020}; // 0,
-const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0,     0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0}; // 0,
-const word optsMax[] = { 2, 5, 3, 1,20, 6, 4, 1,     2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439}; // 3,
+const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47};
+const byte optsLoc[] = {16,17,18,19,20,22,26,45,46, 23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37};
+const word optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020};
+const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0};
+const word optsMax[] = { 2, 5, 3, 1,20, 6, 4, 1, 3,  2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439};
 
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
@@ -86,6 +86,7 @@ byte btnCur = 0; //Momentary button currently in use - only one allowed at a tim
 byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=set by btnStop()
 unsigned long inputLast = 0; //When a button was last pressed
 unsigned long inputLast2 = 0; //Second-to-last of above
+//TODO the math between these two may fail very rarely due to millis() rolling over while setting. Need to find a fix. I think it only applies to the rotary encoder though.
 
 const byte fnOpts = 201; //fn values from here to 255 correspond to options in the options menu
 byte fn = fnIsTime; //currently displayed fn (per fnsEnabled)
@@ -102,7 +103,7 @@ word signalRemain = 0; //alarm/timer signal timeout counter, seconds
 word snoozeRemain = 0; //snooze timeout counter, seconds
 word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,800 seconds - fits just inside a word)
 word timerRemain = 0; //timer actual counter
-unsigned long signalPulseStopTime = 0; //to stop beeps after a time
+unsigned long signalPulseStartTime = 0; //to keep track of individual pulses so we can stop them
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night or away modes) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 byte cleanRemain = 11; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
@@ -136,19 +137,18 @@ void setup(){
   initOutputs(); //depends on some EEPROM settings
 }
 
-unsigned long pollLast = 0; //every 50ms
 unsigned long pollCleanLast = 0; //every cleanSpeed ms
 unsigned long pollScrollLast = 0; //every scrollSpeed ms
 void loop(){
   unsigned long now = millis();
   //If we're running a tube cleaning, advance it every cleanSpeed ms.
-  if(cleanRemain && pollCleanLast+cleanSpeed<now) {
+  if(cleanRemain && (unsigned long)(now-pollCleanLast)>=cleanSpeed) { //account for rollover
     pollCleanLast=now;
     cleanRemain--;
     updateDisplay();
   }
   //If we're scrolling an animation, advance it every scrollSpeed ms.
-  else if(scrollRemain!=0 && scrollRemain!=-128 && pollScrollLast+scrollSpeed<now) {
+  else if(scrollRemain!=0 && scrollRemain!=-128 && (unsigned long)(now-pollScrollLast)>=scrollSpeed) {
     pollScrollLast=now;
     if(scrollRemain<0) {
       scrollRemain++; updateDisplay();
@@ -158,7 +158,6 @@ void loop(){
     }
   }
   //Every loop cycle, check the RTC and inputs (previously polled, but works fine without and less flicker)
-  pollLast=now;
   checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
   doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
@@ -197,6 +196,7 @@ void checkBtn(byte btn){
   //Changes in momentary buttons, LOW = pressed.
   //When a button event has occurred, will call ctrlEvt
   bool bnow = readInput(btn);
+  unsigned long now = millis();
   //If the button has just been pressed, and no other buttons are in use...
   if(btnCur==0 && bnow==LOW) {
     btnCur = btn; btnCurHeld = 0; inputLast2 = inputLast; inputLast = millis();
@@ -204,11 +204,11 @@ void checkBtn(byte btn){
   }
   //If the button is being held...
   if(btnCur==btn && bnow==LOW) {
-    if(millis() >= inputLast+btnLongHold && btnCurHeld < 3) {
+    if((unsigned long)(now-inputLast)>=btnLongHold && btnCurHeld < 3) { //account for rollover
       btnCurHeld = 3;
       ctrlEvt(btn,3); //hey, the button has been long-held
     }
-    else if(millis() >= inputLast+btnShortHold && btnCurHeld < 2) {
+    else if((unsigned long)(now-inputLast)>=btnShortHold && btnCurHeld < 2) {
       btnCurHeld = 2;
       ctrlEvt(btn,2); //hey, the button has been short-held
     }
@@ -232,15 +232,15 @@ void checkRot(){
     AdaEncoder *thisEncoder=NULL;
     thisEncoder = AdaEncoder::genie();
     if(thisEncoder!=NULL) {
-      unsigned long inputThis = millis();
-      if(inputThis-inputLast < 70) return; //ignore inputs that come faster than a human could rotate
+      unsigned long now = millis();
+      if((unsigned long)(now-inputLast)<70) return; //ignore inputs that come faster than a human could rotate
       int8_t clicks = thisEncoder->query(); //signed number of clicks it has moved
       byte dir = (clicks<0?0:1);
       clicks = abs(clicks);
       for(byte i=0; i<clicks; i++){ //in case of more than one click
         ctrlEvt((dir?mainAdjUp:mainAdjDn),1);
       }
-      inputLast2 = inputLast; inputLast = inputThis;
+      inputLast2 = inputLast; inputLast = now;
     }
   }
 }//end checkRot
@@ -492,8 +492,9 @@ unsigned long doSetHoldLast;
 void doSetHold(){
   //When we're setting via an adj button that's passed a hold point, fire off doSet commands at intervals
   //TODO integrate this with checkInputs?
-  if(doSetHoldLast+250<millis()) {
-    doSetHoldLast = millis();
+  unsigned long now = millis();
+  if((unsigned long)(now-doSetHoldLast)>=250) {
+    doSetHoldLast = now;
     if(fnSetPg!=0 && (mainAdjType==1 && (btnCur==mainAdjUp || btnCur==mainAdjDn)) ){ //if we're setting, and this is an adj btn
       bool dir = (btnCur==mainAdjUp ? 1 : 0);
       //If short hold, or long hold but high velocity isn't supported, use low velocity (delta=1)
@@ -603,20 +604,21 @@ void checkRTC(bool force){
   //Checks display timeouts;
   //checks for new time-of-day second -> decrements timers and checks for timed events;
   //updates display for "running" functions.
+  unsigned long now = millis();
   
   //Things to do every time this is called: timeouts to reset display. These may force a tick.
-  if(pollLast > inputLast){ //don't bother if the last input (which may have called checkRTC) was more recent than poll
-    //Option/setting timeout: if we're in the options menu, or we're setting a value
-    if(fnSetPg || fn>=fnOpts){
-      if(pollLast>inputLast+(timeoutSet*1000)) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
-    }
-    //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, temp, tester, or running/signaling timer)
-    else if(fn!=fnIsTime && fn!=fnIsTubeTester && fn!=fnIsDayCount && fn!=fnIsTemp && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
-      if(pollLast>inputLast+(timeoutTempFn*1000)) { fnSetPg = 0; fn = fnIsTime; force=true; }
-    }
-    //Stop a signal beep if it's time to
-    if(signalPulseStopTime && signalPulseStopTime<millis()) { signalPulseStop(); signalPulseStopTime = 0; }
+  //Option/setting timeout: if we're in the options menu, or we're setting a value
+  if(fnSetPg || fn>=fnOpts){
+    if((unsigned long)(now-inputLast)>=timeoutSet*1000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
   }
+  //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, temp, tester, or running/signaling timer)
+  else if(fn!=fnIsTime && fn!=fnIsTubeTester && fn!=fnIsDayCount && fn!=fnIsTemp && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
+    if((unsigned long)(now-inputLast)>=timeoutTempFn*1000) { fnSetPg = 0; fn = fnIsTime; force=true; }
+  }
+  //Stop a signal pulse if it's time to
+  //This is only used for relay pulses, since beeper beep durations are done via tone()
+  //So we can safely assume the length of the pulse should be relayPulse
+  if(signalPulseStartTime && (unsigned long)(now-signalPulseStartTime)>=relayPulse) { signalPulseStop(); signalPulseStartTime = 0; }
   
   //Update things based on RTC
   tod = rtc.now();
@@ -636,14 +638,28 @@ void checkRTC(bool force){
             fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0);
         } //end toddow check
       } //end alarm trigger
-      //check if we should trigger the cleaner (at night end time, or alarm time if night end is 0:00)
-      if(tod.hour()*60+tod.minute()==(readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true))) {
+      //If cleaner is set to option value 0 (at night end time, or alarm time if night end is 0:00), run it at that time
+      if(readEEPROM(46,false)==0 && tod.hour()*60+tod.minute()==(readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true))) {
         cleanRemain = 11; //loop() will pick this up
-      } //end cleaner check
+      }
     }
     if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0) { //At bottom of minute, maybe show date - not when unoffing
-      if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = pollLast; updateDisplay(); }
+      if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = now; updateDisplay(); }
       if(readEEPROM(18,false)==3) { startScroll(); }
+    }
+    if(tod.second()==1) { //If cleaner is set to option value >0, run the cleaner at second :01 as applicable
+      switch(readEEPROM(46,false)) {
+        case 1: //at 00:00:01
+          if(tod.hour()==0 && tod.minute()==0) cleanRemain = 11;
+          break;
+        case 2: //at :00:01
+          if(tod.minute()==0) cleanRemain = 11;
+          break;
+        case 3: //at :01
+          cleanRemain = 11;
+          break;
+        default: break; //case 0 is handled at top of minute
+      }
     }
     
     //Strikes - only if fn=clock, not setting, not night/away. Setting 21 will be off if signal type is no good
@@ -679,7 +695,7 @@ void checkRTC(bool force){
             if(readEEPROM(25,false)) { //interval timer: a short signal and restart; don't change to timer fn
               signalStart(fnIsTimer,0,0); timerRemain = timerInitial;
             } else {
-              fnSetPg = 0; fn = fnIsTimer; inputLast = pollLast; signalStart(fnIsTimer,signalDur,0);
+              fnSetPg = 0; fn = fnIsTimer; inputLast = now; signalStart(fnIsTimer,signalDur,0);
             }
           } //end not switched relay
         } //end timer elapsed
@@ -1044,7 +1060,7 @@ void cycleDisplay(){
   //But if we're setting, decide here to dim for every other 500ms since we started setting
   if(fnSetPg>0) {
     if(setStartLast==0) setStartLast = mils;
-    dim = 1-(((mils-setStartLast)/500)%2);
+    dim = 1-(((unsigned long)(mils-setStartLast)/500)%2);
   } else {
     if(setStartLast>0) setStartLast=0;
   }
@@ -1065,8 +1081,9 @@ void cycleDisplay(){
       // at  0ms, next = (( 0*(6-1))/20)+1 = 1; last = (6-nextDur) = 5;
       // at 10ms, next = ((10*(6-1))/20)+1 = 3; last = (6-nextDur) = 3; ...
       // at 20ms, next = ((20*(6-1))/20)+1 = 6; next = total, so fade is over!
-      //TODO facilitate longer fades by writing a tweening function that smooths the frames, i.e. 111121222
-      fadeNextDur = (((mils-fadeStartLast)*(fadeDur-1))/(readEEPROM(20,false)*10))+1;
+      //TODO facilitate longer fades by writing a tweening function that smooths the frames, i.e. 111121222 - or use delayMicroseconds as below
+      //TODO does this have more problems with the mils rollover issue?
+      fadeNextDur = (((unsigned long)(mils-fadeStartLast)*(fadeDur-1))/(readEEPROM(20,false)*10))+1;
       if(fadeNextDur >= fadeLastDur) { //fade is over
         fadeStartLast = 0;
         fadeNextDur = 0;
@@ -1079,6 +1096,7 @@ void cycleDisplay(){
     } //end curently fading
   } //end fading enabled
   
+  //TODO consider using delayMicroseconds() which, with its tighter resolution, may give better control over fades and dim levels
   if(displayDim>0) { //if other display code says to shut off entirely, skip this part
     //Anode channel 0: tubes #2 (min x10) and #5 (sec x1)
     setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
@@ -1167,7 +1185,7 @@ void signalPulseStart(word pulseDur){
   else if(getSignalOutput()==1 && relayPin>=0 && relayMode==1) { //pulsed relay
     digitalWrite(relayPin,LOW); //LOW = device on
     //Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalPulseStart"));
-    signalPulseStopTime = millis()+relayPulse; //always use relayPulse in case timing is important for connected device
+    signalPulseStartTime = millis();
   }
 }
 void signalPulseStop(){
@@ -1177,7 +1195,7 @@ void signalPulseStop(){
   else if(getSignalOutput()==1 && relayPin>=0 && relayMode==1) { //pulsed relay
     digitalWrite(relayPin,HIGH); //LOW = device on
     //Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalPulseStop"));
-    signalPulseStopTime = 0;
+    signalPulseStartTime = 0;
   }
 }
 word getSignalPitch(){ //for current signal: time, timer, or (default) alarm

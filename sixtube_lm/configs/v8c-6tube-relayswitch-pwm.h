@@ -1,4 +1,4 @@
-//v8 with C style modification and flipped Sel and Alt buttons so Sel is in the front when buttons are mounted display-side with IN-8-A display
+//v8 with C style modification
 
 const byte displaySize = 6; //number of tubes in display module. Small display adjustments are made for 4-tube clocks
 
@@ -25,10 +25,10 @@ const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCoun
 // A6-A7 are analog-only pins that aren't quite as responsive and require a physical pullup resistor (1K to +5V), and can't be used with rotary encoders because they don't support pin change interrupts.
 
 // What input is associated with each control?
-const byte mainSel = A7;
+const byte mainSel = A6;
 const byte mainAdjUp = A0;
 const byte mainAdjDn = A1;
-const byte altSel = A6; //if not equipped, set to 0
+const byte altSel = A7; //if not equipped, set to 0
 
 // What type of adj controls are equipped?
 // 1 = momentary buttons. 2 = quadrature rotary encoder.
