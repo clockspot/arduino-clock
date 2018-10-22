@@ -623,7 +623,7 @@ void checkRTC(bool force){
       } //end alarm trigger
       //If cleaner is set to option value 0 (at night end time, or alarm time if night end is 0:00), run it at that time
       if(readEEPROM(46,false)==0 && tod.hour()*60+tod.minute()==(readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true))) {
-        cleanRemain = 11; //loop() will pick this up
+        cleanRemain = 51; //five cycles. loop() will pick this up
       }
     }
     if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0) { //At bottom of minute, maybe show date - not when unoffing
@@ -633,13 +633,13 @@ void checkRTC(bool force){
     if(tod.second()==1) { //If cleaner is set to option value >0, run the cleaner at second :01 as applicable
       switch(readEEPROM(46,false)) {
         case 1: //at 00:00:01
-          if(tod.hour()==0 && tod.minute()==0) cleanRemain = 11;
+          if(tod.hour()==0 && tod.minute()==0) cleanRemain = 51; //five cycles
           break;
         case 2: //at :00:01
-          if(tod.minute()==0) cleanRemain = 11;
+          if(tod.minute()==0) cleanRemain = 51; //five cycles
           break;
         case 3: //at :01
-          cleanRemain = 11;
+          cleanRemain = 11; //one cycle
           break;
         default: break; //case 0 is handled at top of minute
       }
