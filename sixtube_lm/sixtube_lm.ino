@@ -197,7 +197,7 @@ void checkBtn(byte btn){
   unsigned long now = millis();
   //If the button has just been pressed, and no other buttons are in use...
   if(btnCur==0 && bnow==LOW) {
-    btnCur = btn; btnCurHeld = 0; inputLast2 = inputLast; inputLast = millis();
+    btnCur = btn; btnCurHeld = 0; inputLast2 = inputLast; inputLast = now;
     ctrlEvt(btn,1); //hey, the button has been pressed
   }
   //If the button is being held...
@@ -816,7 +816,7 @@ void updateDisplay(){
   
   if(cleanRemain) { //cleaning tubes
     displayDim = 2;
-    byte digit = (11-cleanRemain)%10;
+    byte digit = 10-((cleanRemain-1)%10); //(11-cleanRemain)%10;
     editDisplay(digit,0,0,true,false);
     editDisplay(digit,1,1,true,false);
     editDisplay(digit,2,2,true,false);
@@ -1036,14 +1036,14 @@ void initOutputs() {
 }
 
 void cycleDisplay(){
-  unsigned long mils = millis();
+  unsigned long now = millis();
   
   //Other display code decides whether we should dim per function or time of day
   bool dim = (displayDim==1?1:0);
   //But if we're setting, decide here to dim for every other 500ms since we started setting
   if(fnSetPg>0) {
-    if(setStartLast==0) setStartLast = mils;
-    dim = 1-(((unsigned long)(mils-setStartLast)/500)%2);
+    if(setStartLast==0) setStartLast = now;
+    dim = 1-(((unsigned long)(now-setStartLast)/500)%2);
   } else {
     if(setStartLast>0) setStartLast=0;
   }
@@ -1056,7 +1056,7 @@ void cycleDisplay(){
   }
   else { //fading enabled
     if(fadeStartLast==0) { //not fading - time to fade?
-      for(byte i=0; i<6; i++) if(displayNext[i] != displayLast[i]) { fadeStartLast = mils; break; }
+      for(byte i=0; i<6; i++) if(displayNext[i] != displayLast[i]) { fadeStartLast = now; break; }
     }
     if(fadeStartLast!=0) { //currently fading
       //let the next digit steal some display time from the last digit
@@ -1065,8 +1065,8 @@ void cycleDisplay(){
       // at 10ms, next = ((10*(6-1))/20)+1 = 3; last = (6-nextDur) = 3; ...
       // at 20ms, next = ((20*(6-1))/20)+1 = 6; next = total, so fade is over!
       //TODO facilitate longer fades by writing a tweening function that smooths the frames, i.e. 111121222 - or use delayMicroseconds as below
-      //TODO does this have more problems with the mils rollover issue?
-      fadeNextDur = (((unsigned long)(mils-fadeStartLast)*(fadeDur-1))/(readEEPROM(20,false)*10))+1;
+      //TODO does this have more problems with the millis rollover issue?
+      fadeNextDur = (((unsigned long)(now-fadeStartLast)*(fadeDur-1))/(readEEPROM(20,false)*10))+1;
       if(fadeNextDur >= fadeLastDur) { //fade is over
         fadeStartLast = 0;
         fadeNextDur = 0;
