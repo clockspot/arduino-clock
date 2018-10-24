@@ -52,8 +52,8 @@ Later UNDBs (v8 with mods, or v9+) are equipped with controllable LEDs, as well 
 | 5 | Digit fade | 0–20 (in hundredths of a second) |
 | 6 | Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ) |
 | 7 | LED behavior | 0 = always off<br/>1 = always on<br/>2 = on, but follow night/away modes if enabled<br/>3 = off, but on when alarm/timer sounds</br>4 = off, but on with switched relay (if equipped)<br/>(Clocks with LED control only, UNDB v8+) |
-| 8 | Temperature format | 0 = Celsius<br/>1 = Fahrenheit<br/>(Clocks with temperature function enabled only) |
-| 9 | Anti-cathode poisoning | Briefly cycles all digits to prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)<br/>0 = once a day, at "Night ends at" time (or alarm time if applicable)<br/>1 = at midnight<br/>2 = at the top of every hour<br/>3 = at the top of every minute |
+| 8 | Anti-cathode poisoning | Briefly cycles all digits to prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)<br/>0 = once a day, either at midnight or at night mode start time (if enabled)<br/>1 = at the top of every hour<br/>2 = at the top of every minute<br/>(Will not trigger during night/away modes) |
+| 9 | Temperature format | 0 = Celsius<br/>1 = Fahrenheit<br/>(Clocks with temperature function enabled only) |
 |  | **Alarm** |  |
 | 10 | Alarm days | 0 = every day<br/>1 = work week only (per settings below)<br/>2 = weekend only |
 | 11 | Alarm signal | 0 = beeper<br/>1 = relay (if in switch mode, will stay on for 2 hours)<br/>(Clocks with both beeper and relay only) |

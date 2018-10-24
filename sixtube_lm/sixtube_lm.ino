@@ -68,10 +68,10 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
 //                       General                    Alarm        Timer     Strike    Night and away mode
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47};
-const byte optsLoc[] = {16,17,18,19,20,22,26,45,46, 23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37};
+const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37};
 const word optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020};
 const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0};
-const word optsMax[] = { 2, 5, 3, 1,20, 6, 4, 1, 3,  2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439};
+const word optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439};
 
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
@@ -621,27 +621,30 @@ void checkRTC(bool force){
             fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0);
         } //end toddow check
       } //end alarm trigger
-      //If cleaner is set to option value 0 (at night end time, or alarm time if night end is 0:00), run it at that time
-      if(readEEPROM(46,false)==0 && tod.hour()*60+tod.minute()==(readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true))) {
-        cleanRemain = 51; //five cycles. loop() will pick this up
-      }
     }
-    if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0) { //At bottom of minute, maybe show date - not when unoffing
+    //At bottom of minute, see if we should show the date
+    if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0) {
       if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = now; updateDisplay(); }
       if(readEEPROM(18,false)==3) { startScroll(); }
     }
-    if(tod.second()==1) { //If cleaner is set to option value >0, run the cleaner at second :01 as applicable
-      switch(readEEPROM(46,false)) {
-        case 1: //at 00:00:01
-          if(tod.hour()==0 && tod.minute()==0) cleanRemain = 51; //five cycles
+    //Anti-poisoning routine triggering: start when applicable, and not at night, during setting, or after a button press (unoff)
+    if(tod.second()<2 && displayDim==2 && fnSetPg==0 && unoffRemain==0) {
+      switch(readEEPROM(46,false)) { //how often should the routine run?
+        case 0: //every day
+          if(readEEPROM(27,false)>0? //is night mode enabled?
+            tod.second()==0 && tod.hour()*60+tod.minute()==readEEPROM(28,true): //if so, at start of night mode (at second :00 before dim is in effect)
+            tod.second()==1 && tod.hour()*60+tod.minute()==0) //if not, at 00:00:01
+              cleanRemain = 51; //run routine for five cycles
           break;
-        case 2: //at :00:01
-          if(tod.minute()==0) cleanRemain = 51; //five cycles
+        case 1: //every hour
+          if(tod.second()==1 && tod.minute()==0) //at min/sec :00:01
+            cleanRemain = 51; //run routine for five cycles
           break;
-        case 3: //at :01
-          cleanRemain = 11; //one cycle
+        case 2: //every minute
+          if(tod.second()==1) //at second :01
+            cleanRemain = 11; //run routine for one cycle
           break;
-        default: break; //case 0 is handled at top of minute
+        default: break;
       }
     }
     
@@ -876,8 +879,8 @@ void updateDisplay(){
     //issue: moving from off alarm to next fn briefly shows alarm in full brightness. I think because of the display delays. TODO
     word todmins = tod.hour()*60+tod.minute();
     //In order of precedence:
-    //temporary unoff
-    if(unoffRemain > 0) displayDim = 2; //TODO can we fade between dim states?
+    //temporary unoff, if off (not dim)
+    if(unoffRemain>0 && displayDim==0) displayDim = 2; //TODO can we fade between dim states?
     //clock at work: away on weekends, all day
     else if( readEEPROM(32,false)==1 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) ) displayDim = 0;
     //clock at home: away on weekdays, during office hours only
