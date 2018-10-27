@@ -134,7 +134,6 @@ void setup(){
   if(!enableSoftAlarmSwitch) writeEEPROM(2,1,false); //force alarm on if software switch is disabled
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   initOutputs(); //depends on some EEPROM settings
-  quickBeep(); //primes the beeper I think
 }
 
 unsigned long pollCleanLast = 0; //every cleanSpeed ms
@@ -787,6 +786,10 @@ void switchPower(char dir){
     digitalWrite(relayPin,(dir==1?0:1)); //LOW = device on
     //Serial.println(F(", switchPower"));
     updateLEDs(); //LEDs following switch relay
+  } else {
+    //If we can't switch power (no switched relay, or no soft power switch), toggle to altSelFn instead
+    if(fn==altSelFn && altSelFn>-1) fn=fnIsTime; else fn=altSelFn;
+    updateDisplay();
   }
 }
 
@@ -1037,7 +1040,10 @@ void initOutputs() {
   for(byte i=0; i<4; i++) { pinMode(binOutA[i],OUTPUT); pinMode(binOutB[i],OUTPUT); }
   for(byte i=0; i<3; i++) { pinMode(anodes[i],OUTPUT); }
   if(piezoPin>=0) pinMode(piezoPin, OUTPUT);
-  if(relayPin>=0) pinMode(relayPin, OUTPUT); digitalWrite(relayPin, HIGH); //LOW = device on
+  if(relayPin>=0) {
+    pinMode(relayPin, OUTPUT); digitalWrite(relayPin, HIGH); //LOW = device on
+    quickBeep(); //"primes" the beeper, seems necessary when relay pin is spec'd, otherwise first intentional beep doesn't happen
+  }
   if(ledPin>=0) pinMode(ledPin, OUTPUT);
   updateLEDs(); //set to initial value
 }

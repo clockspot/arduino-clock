@@ -1,3 +1,5 @@
+//Unmodified UNDB v8 with LED and relay disabled, and buttons as labeled, with 4-digit display.
+
 const byte displaySize = 4; //number of tubes in display module. Small display adjustments are made for 4-tube clocks
 
 // available clock functions, and unique IDs (between 0 and 200)
@@ -56,8 +58,9 @@ const byte enableSoftAlarmSwitch = 1;
 // 1 = yes. Alarm can be switched on and off when clock is displaying the alarm time (fnIsAlarm).
 // 0 = no. Alarm will be permanently on. Use with switched relay if the appliance has its own switch on this relay circuit.
 const byte enableSoftPowerSwitch = 1; //works with switched relay only
-// 1 = yes. Relay can be switched on and off directly when clock is displaying time of day (fnIsTime). This is useful if  connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
+// 1 = yes. Relay can be switched on and off directly with Alt button at any time (except in options menu). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
 // 0 = no. Use if the connected appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched.
+const byte altSelFn = fnIsAlarm; //If no switched relay or no soft power switch, pressing Alt will jump straight to this function (or back to Time).
 
 //LED circuit control
 const char ledPin = -1;

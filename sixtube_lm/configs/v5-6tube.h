@@ -1,3 +1,5 @@
+//UNDB v5, 6-tube display
+
 const byte displaySize = 6; //number of tubes in display module. Small display adjustments are made for 4-tube clocks
 
 // available clock functions, and unique IDs (between 0 and 200)
