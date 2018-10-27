@@ -13,6 +13,7 @@
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
 #include "configs/v8c-6tube-relayswitch-pwm-top.h"
+// #include "configs/v5-6tube-red.h"
 
 
 ////////// Other includes, global consts, and vars //////////
@@ -133,6 +134,7 @@ void setup(){
   if(!enableSoftAlarmSwitch) writeEEPROM(2,1,false); //force alarm on if software switch is disabled
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   initOutputs(); //depends on some EEPROM settings
+  quickBeep(); //primes the beeper I think
 }
 
 unsigned long pollCleanLast = 0; //every cleanSpeed ms
@@ -245,9 +247,7 @@ void ctrlEvt(byte ctrl, byte evt){
     if(signalSource==fnIsAlarm) { //If this was the alarm
       //If the alarm is using the switched relay and this is the Alt button, don't set the snooze
       if(relayMode==0 && readEEPROM(42,false)==1 && altSel!=0 && ctrl==altSel) {
-        //Short signal to indicate the alarm has been silenced until tomorrow - on beeper if relay is switched
-        if(getSignalOutput()==1 && relayMode==0) { if(piezoPin>=0) { tone(piezoPin, getSignalPitch(), 100); }}
-        else signalStart(fnIsAlarm,0,100);
+        quickBeep(); //Short signal to indicate the alarm has been silenced until tomorrow
       } else { //start snooze
         snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
       }
@@ -259,9 +259,7 @@ void ctrlEvt(byte ctrl, byte evt){
     stoppingSignal = false;
     if(evt==2 && snoozeRemain>0) {
       snoozeRemain = 0;
-      //Short signal to indicate the alarm has been silenced until tomorrow - on beeper if relay is switched
-      if(getSignalOutput()==1 && relayMode==0) { if(piezoPin>=0) { tone(piezoPin, getSignalPitch(), 100); }}
-      else signalStart(fnIsAlarm,0,100);
+      quickBeep(); //Short signal to indicate the alarm has been silenced until tomorrow
     }
     btnStop();
     return;
@@ -372,9 +370,11 @@ void ctrlEvt(byte ctrl, byte evt){
             case fnIsDayCount: //set like date, save in eeprom like finishOpt
               switch(fnSetPg){
                 case 1: //save year, set month
+                  delay(300); //blink display to indicate save. Safe b/c we've btnStopped. See below for why
                   writeEEPROM(3,fnSetVal,true);
                   startSet(readEEPROM(5,false),1,12,2); break;
                 case 2: //save month, set date
+                  delay(300); //blink display to indicate save. Needed if set month == date: without blink, nothing changes.
                   writeEEPROM(5,fnSetVal,false);
                   startSet(readEEPROM(6,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
                 case 3: //save date
@@ -759,10 +759,11 @@ void setDST(char dir){
 void switchAlarm(char dir){
   if(enableSoftAlarmSwitch){
     signalStop(); //snoozeRemain = 0;
+    byte itWas = readEEPROM(2,false);
     if(dir==1) writeEEPROM(2,1,false);
     if(dir==-1) writeEEPROM(2,0,false);
     if(dir==0) writeEEPROM(2,!readEEPROM(2,false),false);
-    if(readEEPROM(2,false)) signalStart(fnIsAlarm,0,100); //Short beep at alarm pitch
+    if(readEEPROM(2,false) && itWas==false) quickBeep(); //Short signal to indicate we just turned the alarm on
     updateDisplay();
   }
 }
@@ -878,15 +879,14 @@ void updateDisplay(){
     //Set displayDim per night/away settings - fnIsAlarm may override this
     //issue: moving from off alarm to next fn briefly shows alarm in full brightness. I think because of the display delays. TODO
     word todmins = tod.hour()*60+tod.minute();
-    //In order of precedence:
-    //temporary unoff, if off (not dim)
-    if(unoffRemain>0 && displayDim==0) displayDim = 2; //TODO can we fade between dim states?
+    //In order of precedence: //TODO can we fade between dim states? 
     //clock at work: away on weekends, all day
-    else if( readEEPROM(32,false)==1 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) ) displayDim = 0;
+    if( readEEPROM(32,false)==1 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) )
+      displayDim = (unoffRemain>0? 2: 0); //unoff overrides this
     //clock at home: away on weekdays, during office hours only
-    else if( readEEPROM(32,false)==2 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) && isTimeInRange(readEEPROM(35,true), readEEPROM(37,true), todmins) ) displayDim = 0;
+    else if( readEEPROM(32,false)==2 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) && isTimeInRange(readEEPROM(35,true), readEEPROM(37,true), todmins) ) displayDim = (unoffRemain>0? 2: 0);
     //night mode - if night end is 0:00, use alarm time instead
-    else if( readEEPROM(27,false) && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins) ) displayDim = (readEEPROM(27,false)==1?1:0); //dim or off
+    else if( readEEPROM(27,false) && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins) ) displayDim = (readEEPROM(27,false)==1?1:(unoffRemain>0?2:0)); //dim or (unoff? bright: off)
     //normal
     else displayDim = 2;
     updateLEDs();
@@ -981,6 +981,10 @@ void updateDisplay(){
     }
     Serial.println();
   }
+  
+  //Write display changes to console
+  //for(byte w=0; w<6; w++) { if(displayNext[w]>9) Serial.print(F("-")); else Serial.print(displayNext[w],DEC); }
+  //Serial.println();
        
 } //end updateDisplay()
 
@@ -1196,6 +1200,11 @@ word getHz(byte note){
 }
 char getSignalOutput(){ //for current signal: time, timer, or (default) alarm: 0=piezo, 1=relay
   return readEEPROM((signalSource==fnIsTime?44:(signalSource==fnIsTimer?43:42)),false);
+}
+void quickBeep(){
+  //Short beeper signal at alarm pitch (if equipped), even if relay is switched. Used when silencing snooze or switching alarm on.
+  if(getSignalOutput()==1 && relayMode==0) { if(piezoPin>=0) { signalSource=fnIsAlarm; tone(piezoPin, getSignalPitch(), 100); }}
+  else signalStart(fnIsAlarm,0,100);
 }
 
 const byte ledFadeStep = 10; //fade speed – with every loop() we'll increment/decrement the LED brightness (between 0-255) by this amount
