@@ -1,19 +1,13 @@
-// Digital clock code for the Arduino Nano in RLB Designs' Universal Nixie Driver Board v5.0
+// Digital clock code for the Arduino Nano in RLB Designs' Universal Nixie Driver Board
 // featuring timekeeping by DS3231 RTC, driving up to six digits multiplexed 3x2 via two SN74141 driver chips
-// An alternate sketch by Luke McKenzie (luke@theclockspot.com) - https://github.com/clockspot/arduino-nixie
-// based on original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
-// based on http://arduinix.com/Main/Code/ANX-6Tube-Clock-Crossfade.txt
-
-//TODO: implement options for full date every 5 minutes
-//TODO: see other TODOs throughout
-//TODO: is it possible to trip the chime *after* determining if we're in night mode or not
-//TODO: reenable rotary encoder with libraries with workable licenses
+// Sketch by Luke McKenzie (luke@theclockspot.com) - https://github.com/clockspot/arduino-nixie
+// Inspired by original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
+// Display cycling code derived from http://arduinix.com/Main/Code/ANX-6Tube-Clock-Crossfade.txt
 
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
 #include "configs/v8c-6tube-relayswitch-pwm-top.h"
-// #include "configs/v5-6tube-red.h"
 
 
 ////////// Other includes, global consts, and vars //////////
@@ -31,8 +25,8 @@ These ones are set outside the options menu (defaults defined in initEEPROM()):
   3-4 Day count year
   5 Day count month
   6 Day count date
-  7 Alt function (if not power switching)
-( 7-15 are available )
+  7 Function preset (done by Alt when not power-switching)
+( 8-15 are available )
 
 These ones are set inside the options menu (defaults defined in arrays below).
 Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
@@ -298,7 +292,7 @@ void ctrlEvt(byte ctrl, byte evt){
             startSet(timerInitial/60,0,1080,1); break;
           case fnIsDayCount: //set year like date, but from eeprom like startOpt
             startSet(readEEPROM(3,true),2000,9999,1); break;
-          case fnIsTemp: //is this where we do the calibration? TODO
+          case fnIsTemp: //could do calibration here if so inclined
           case fnIsTubeTester:
           default: break;
         }

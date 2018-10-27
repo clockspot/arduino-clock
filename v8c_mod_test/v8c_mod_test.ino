@@ -1,4 +1,4 @@
-//For testing mods to the v8.0 board, style B, with LED PWM
+//For testing mods to the v8.0 board to bring it up to v9 spec, per v8c config files
 
 const byte btnSel = A6; //was A1
 const byte btnAlt = A7; //was A0
