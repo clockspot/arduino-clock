@@ -31,6 +31,7 @@ These ones are set outside the options menu (defaults defined in initEEPROM()):
   3-4 Day count year
   5 Day count month
   6 Day count date
+  7 Alt function (if not power switching)
 ( 7-15 are available )
 
 These ones are set inside the options menu (defaults defined in arrays below).
@@ -312,10 +313,29 @@ void ctrlEvt(byte ctrl, byte evt){
           //if(fn==fnIsTime) TODO volume in I2C radio
         }
       }
-      else if(altSel!=0 && ctrl==altSel) { //alt sel press
+      else if(altSel>0 && ctrl==altSel) { //alt sel press
         //TODO switch I2C radio
-        switchPower(0);
-        btnStop();
+        //if switched relay, and soft switch enabled, we'll switch power.
+        if(enableSoftPowerSwitch && relayPin>=0 && relayMode==0) switchPower(0);
+        //Otherwise, this becomes our function preset.
+        else {
+          //On long hold, if this is not currently the preset, we'll set it, double beep, and btnStop.
+          //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
+          if(evt==2) {
+            if(readEEPROM(7,false)!=fn) {
+              writeEEPROM(7,fn,false);
+              quickBeep();
+              delay(250);
+              quickBeep();
+            }
+          }
+          //On short release, toggle between fnIsTime and the preset fn.
+          else if(evt==0) {
+            if(fn==readEEPROM(7,false)) fn=fnIsTime; else fn=readEEPROM(7,false);
+            updateDisplay();
+          }
+        }
+        btnStop(); //In any case, this button should only do one action at a time
       }
     } //end fn running
 
@@ -515,6 +535,29 @@ void initEEPROM(bool hard){
   if(hard || readEEPROM(3,true)<2018) writeEEPROM(3,2018,true); //day counter target: 2018...
   if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) writeEEPROM(5,1,false); //...January...
   if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) writeEEPROM(6,1,false); //...first.
+  Serial.println(F("Hello world"));
+  Serial.println(F("Hello world"));
+  Serial.println(F("Hello world"));
+  Serial.print(F("Alt preset is currently "));
+  Serial.println(readEEPROM(7,false),DEC);
+  bool foundAltFn = false;
+  for(byte fni=0; fni<sizeof(fnsEnabled); fni++) {
+    Serial.print(F("Let's see if fnsEnabled["));
+    Serial.print(fni,DEC);
+    Serial.print(F("] (which is "));
+    Serial.print(fnsEnabled[fni],DEC);
+    Serial.print(F(") is "));
+    Serial.print(readEEPROM(7,false));
+    if(fnsEnabled[fni]==readEEPROM(7,false)) { foundAltFn = true; Serial.println(F("...it is!")); break; }
+    else Serial.println(F("...it is not"));
+  }
+  Serial.print(F("foundAltFn is "));
+  Serial.println(foundAltFn?F("true"):F("false"));
+  if(hard || !foundAltFn) writeEEPROM(7,0,false); //Alt function preset – make sure it is not set to a function that isn't enabled in this clock
+  Serial.print(F("Alt preset is now "));
+  Serial.println(readEEPROM(7,false),DEC);
+  Serial.println();
+  
   //then the options menu defaults
   bool isWord = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
@@ -593,8 +636,8 @@ void checkRTC(bool force){
   if(fnSetPg || fn>=fnOpts){
     if((unsigned long)(now-inputLast)>=timeoutSet*1000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
   }
-  //Temporary-display mode timeout: if we're *not* in a permanent one (time, day counter, temp, tester, or running/signaling timer)
-  else if(fn!=fnIsTime && fn!=fnIsTubeTester && fn!=fnIsDayCount && fn!=fnIsTemp && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
+  //Temporary-display mode timeout: if we're *not* in a permanent one (time, Alt preset, or running/signaling timer)
+  else if(fn!=fnIsTime && fn!=readEEPROM(7,false) && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
     if((unsigned long)(now-inputLast)>=timeoutTempFn*1000) { fnSetPg = 0; fn = fnIsTime; force=true; }
   }
   //Stop a signal pulse if it's time to
@@ -767,30 +810,24 @@ void switchAlarm(char dir){
   }
 }
 void switchPower(char dir){
-  if(enableSoftPowerSwitch && relayPin>=0 && relayMode==0) { //if switched relay, and soft switch enabled
-    signalRemain = 0; snoozeRemain = 0; //in case alarm is going now - alternatively use signalStop()?
-    //If the timer is running and is using the switched relay, this instruction conflicts with it, so cancel it
-    if(timerRemain>0 && readEEPROM(43,false)==1) {
-      timerRemain=0;
-      updateDisplay();
-    }
-    //relayPin state is the reverse of the appliance state: LOW = device on, HIGH = device off
-    //Serial.print(millis(),DEC);
-    //Serial.print(F(" Relay requested to "));
-    if(dir==0) { //toggle
-      dir = (digitalRead(relayPin)?1:-1); //LOW = device on, so this effectively does our dir reversion for us
-      //Serial.print(dir==1?F("toggle on"):F("toggle off"));
-    } else {
-      //Serial.print(dir==1?F("switch on"):F("switch off"));
-    }
-    digitalWrite(relayPin,(dir==1?0:1)); //LOW = device on
-    //Serial.println(F(", switchPower"));
-    updateLEDs(); //LEDs following switch relay
-  } else {
-    //If we can't switch power (no switched relay, or no soft power switch), toggle to altSelFn instead
-    if(fn==altSelFn && altSelFn>-1) fn=fnIsTime; else fn=altSelFn;
+  signalRemain = 0; snoozeRemain = 0; //in case alarm is going now - alternatively use signalStop()?
+  //If the timer is running and is using the switched relay, this instruction conflicts with it, so cancel it
+  if(timerRemain>0 && readEEPROM(43,false)==1) {
+    timerRemain=0;
     updateDisplay();
   }
+  //relayPin state is the reverse of the appliance state: LOW = device on, HIGH = device off
+  //Serial.print(millis(),DEC);
+  //Serial.print(F(" Relay requested to "));
+  if(dir==0) { //toggle
+    dir = (digitalRead(relayPin)?1:-1); //LOW = device on, so this effectively does our dir reversion for us
+    //Serial.print(dir==1?F("toggle on"):F("toggle off"));
+  } else {
+    //Serial.print(dir==1?F("switch on"):F("switch off"));
+  }
+  digitalWrite(relayPin,(dir==1?0:1)); //LOW = device on
+  //Serial.println(F(", switchPower"));
+  updateLEDs(); //LEDs following switch relay
 }
 
 bool isTimeInRange(word tstart, word tend, word ttest) {
