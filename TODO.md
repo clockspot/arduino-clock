@@ -1,6 +1,7 @@
 # To-dos
 
 * Option to display weekdays as Sun=0 or Sun=1 (per Portuguese!)
+* When setting times of day, make 1439 (minutes) roll over to 0 and vice versa
 * Implement options for full date every 5 minutes
 * Is it possible to trip the chime *after* determining if we're in night mode or not
 * Reenable rotary encoder with libraries with workable licenses
