@@ -34,13 +34,6 @@ const byte altSel = 0; //alt select button - if unequipped, set to 0
 // 1 = momentary buttons. 2 = quadrature rotary encoder.
 const byte mainAdjType = 1;
 
-// In normal running mode, what do the controls do?
-// -1 = nothing/switch, -2 = cycle through functions, fn in fnsEnabled[] = go to that function
-// If using soft alarm/power switch per below, the control(s) set to -1 will do the switching.
-const char mainSelFn = -2;
-const char mainAdjFn = -1;
-const byte altSelFn = -1;
-
 //What are the signal pin(s) connected to?
 const char piezoPin = 10;
 const char relayPin = -1; //don't change - not available until UNDB v8

@@ -52,8 +52,7 @@ const byte enableSoftAlarmSwitch = 1;
 // 0 = no. Alarm will be permanently on. Use with switched relay if the appliance has its own switch on this relay circuit.
 const byte enableSoftPowerSwitch = 1; //works with switched relay only
 // 1 = yes. Relay can be switched on and off directly with Alt button at any time (except in options menu). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
-// 0 = no. Use if the connected appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched.
-const byte altSelFn = fnIsAlarm; //If no switched relay or no soft power switch, pressing Alt will jump straight to this function (or back to Time).
+// 0 = no. Use if the connected appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched. In this case (and/or if there is no switched relay) Alt will act as a function preset.
 
 //LED circuit control with PWM
 const char ledPin = 9;

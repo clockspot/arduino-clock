@@ -248,6 +248,7 @@ void ctrlEvt(byte ctrl, byte evt){
       //If the alarm is using the switched relay and this is the Alt button, don't set the snooze
       if(relayMode==0 && readEEPROM(42,false)==1 && altSel!=0 && ctrl==altSel) {
         quickBeep(); //Short signal to indicate the alarm has been silenced until tomorrow
+        delay(250); //to flash the display to indicate this as well
       } else { //start snooze
         snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
       }
@@ -260,6 +261,7 @@ void ctrlEvt(byte ctrl, byte evt){
     if(evt==2 && snoozeRemain>0) {
       snoozeRemain = 0;
       quickBeep(); //Short signal to indicate the alarm has been silenced until tomorrow
+      delay(250); //to flash the display
     }
     btnStop();
     return;
@@ -316,26 +318,27 @@ void ctrlEvt(byte ctrl, byte evt){
       else if(altSel>0 && ctrl==altSel) { //alt sel press
         //TODO switch I2C radio
         //if switched relay, and soft switch enabled, we'll switch power.
-        if(enableSoftPowerSwitch && relayPin>=0 && relayMode==0) switchPower(0);
+        if(enableSoftPowerSwitch && relayPin>=0 && relayMode==0) { switchPower(0); btnStop(); }
         //Otherwise, this becomes our function preset.
         else {
           //On long hold, if this is not currently the preset, we'll set it, double beep, and btnStop.
           //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
           if(evt==2) {
             if(readEEPROM(7,false)!=fn) {
+              btnStop();
               writeEEPROM(7,fn,false);
-              quickBeep();
-              delay(250);
-              quickBeep();
+              quickBeep(); //beep 1
+              delay(250); //to flash the display and delay beep 2
+              quickBeep(); //beep 2
             }
           }
           //On short release, toggle between fnIsTime and the preset fn.
           else if(evt==0) {
+            btnStop();
             if(fn==readEEPROM(7,false)) fn=fnIsTime; else fn=readEEPROM(7,false);
             updateDisplay();
           }
         }
-        btnStop(); //In any case, this button should only do one action at a time
       }
     } //end fn running
 
@@ -535,29 +538,9 @@ void initEEPROM(bool hard){
   if(hard || readEEPROM(3,true)<2018) writeEEPROM(3,2018,true); //day counter target: 2018...
   if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) writeEEPROM(5,1,false); //...January...
   if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) writeEEPROM(6,1,false); //...first.
-  Serial.println(F("Hello world"));
-  Serial.println(F("Hello world"));
-  Serial.println(F("Hello world"));
-  Serial.print(F("Alt preset is currently "));
-  Serial.println(readEEPROM(7,false),DEC);
   bool foundAltFn = false;
-  for(byte fni=0; fni<sizeof(fnsEnabled); fni++) {
-    Serial.print(F("Let's see if fnsEnabled["));
-    Serial.print(fni,DEC);
-    Serial.print(F("] (which is "));
-    Serial.print(fnsEnabled[fni],DEC);
-    Serial.print(F(") is "));
-    Serial.print(readEEPROM(7,false));
-    if(fnsEnabled[fni]==readEEPROM(7,false)) { foundAltFn = true; Serial.println(F("...it is!")); break; }
-    else Serial.println(F("...it is not"));
-  }
-  Serial.print(F("foundAltFn is "));
-  Serial.println(foundAltFn?F("true"):F("false"));
-  if(hard || !foundAltFn) writeEEPROM(7,0,false); //Alt function preset – make sure it is not set to a function that isn't enabled in this clock
-  Serial.print(F("Alt preset is now "));
-  Serial.println(readEEPROM(7,false),DEC);
-  Serial.println();
-  
+  for(byte fni=0; fni<sizeof(fnsEnabled); fni++) { if(fnsEnabled[fni]==readEEPROM(7,false)) { foundAltFn = true; break; }}
+  if(hard || !foundAltFn) writeEEPROM(7,0,false); //Alt function preset – make sure it is not set to a function that isn't enabled in this clock  
   //then the options menu defaults
   bool isWord = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
