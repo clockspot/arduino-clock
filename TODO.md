@@ -1,5 +1,8 @@
 # To-dos
 
+* Timer count up, ending options - maybe separate chrono and timer à la Timex?
+* Different setting option for pushbutton (à la Timex) vs. rotary (à la microwave ovens) - external file?
+* Set current DST state in EEPROM so when the clock is connected to power, it can determine whether correction is needed
 * Option to display weekdays as Sun=0 or Sun=1 (per Portuguese!)
 * When setting times of day, make 1439 (minutes) roll over to 0 and vice versa
 * Implement options for full date every 5 minutes
