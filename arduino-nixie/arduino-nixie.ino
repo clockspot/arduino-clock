@@ -9,6 +9,18 @@
 
 #include "configs/v8c-6tube-relayswitch-pwm-top.h"
 
+#include "song.h"
+
+// Song woody(0); //declare a Song object called woody
+//
+// void setup(){
+//   woody.play();
+// }
+//
+// void loop(){
+//   woody.check(false);
+// }
+
 
 ////////// Other includes, global consts, and vars //////////
 #include <EEPROM.h> //Arduino - GNU LPGL

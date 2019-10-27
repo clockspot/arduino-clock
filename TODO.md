@@ -11,5 +11,15 @@
 * In display code, consider using `delayMicroseconds()` which, with its tighter resolution, may give better control over fades and dim levels
 * in `checkInputs()`, can all this if/else business be defined at load instead of evaluated every sample? OR is it compiled that way? maybe use `#ifdef`
 * in `ctrlEvt()`, could we do release/shorthold on mainSel so we can exit without making changes?
+* Should functions be called modes?
+* Should functions be modular in the code, and have a reserved memory location / 100 per each?
+* Should functions have their own options menu?
+* I2C display to help with setting?
+* I2C multicolor LED to indicate which function we're in?
+* Display firmware version, correlating to release on github
+* Metronome function
+* Alarm option should be beeping patterns, including a slow wake which defeats the 2 minute delay
+* Alarm should have a way to override the auto-setting for the next wake time – maybe press the dedicated alarm button!
+* Signalstart should create a situation where there's time on the counter, but doesn't make sound since the rtc can do that. Other beepable actions would probably cancel that counter anyway
 
 See other TODOs throughout code.
