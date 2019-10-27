@@ -104,12 +104,13 @@ bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
 word fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
 
 // Volatile running values used throughout the code. (Others are defined right above the method that uses them)
+Song song(0); //Song object for alerts //porp
 byte signalSource = 0;
 word signalRemain = 0; //alarm/timer signal timeout counter, seconds
 word snoozeRemain = 0; //snooze timeout counter, seconds
 word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,800 seconds - fits just inside a word)
 word timerRemain = 0; //timer actual counter
-unsigned long signalPulseStartTime = 0; //to keep track of individual pulses so we can stop them
+//unsigned long signalPulseStartTime = 0; //to keep track of individual pulses so we can stop them //porp
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night or away modes) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 byte cleanRemain = 11; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
