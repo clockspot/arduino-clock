@@ -49,24 +49,12 @@ void SongPlayer::check(bool start){ if(curplays){ //if song playing
     if(start) { //starting song
       cureventstart = mils;
       curevent = 0; //first event
-      Serial.print(F("Starting song ")); Serial.print(cursong,DEC); //Serial.print(F(" at ")); Serial.println(cureventstart,DEC);
-      Serial.print(F(" with curplays=")); Serial.print(curplays,DEC);
     } else { //continuing song
       cureventstart = cureventstart + neweventdiff; //set start of event relative to start of last, for better timekeeping
       curevent++; //next event
-      //Serial.print(F("Event ")); Serial.print(curevent,DEC); Serial.print(F(" at ")); Serial.println(cureventstart,DEC);
     }
-    Serial.print(F("curevent now ")); Serial.println(curevent,DEC);
     if(curevent+1 == songSize[cursong]){ //If this is the last event in the song
-      curplays--;
-      Serial.print(F("curplays now ")); Serial.println(curplays,DEC);
-      if(curplays>0) {
-        curevent=0;
-        //Serial.println(F("Starting over"));
-      } else {
-        //Serial.println(F("Stopping"));
-        stop();
-      }
+      curplays--; if(curplays>0) curevent=0; else stop(); //really it'll stop itself
     }
     if(curplays){ //if song is still playing
       if(songPitches[cursong][curevent]>0) tone(PIEZO_PIN, getHz(songPitches[cursong][curevent]), DUR); //note start
