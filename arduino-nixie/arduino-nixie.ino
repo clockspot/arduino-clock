@@ -9,23 +9,12 @@
 
 #include "configs/v8c-6tube-relayswitch-pwm-top.h"
 
-#include "song.h"
-
-// Song woody(0); //declare a Song object called woody
-//
-// void setup(){
-//   woody.play();
-// }
-//
-// void loop(){
-//   woody.check(false);
-// }
-
 
 ////////// Other includes, global consts, and vars //////////
 #include <EEPROM.h> //Arduino - GNU LPGL
 #include <DS3231.h> //Arduino - GNU LPGL
 #include <Wire.h> //NorthernWidget - The Unlicense
+#include <SongPlayer.h>
 
 /*EEPROM locations for non-volatile clock settings
 Don't change which location is associated with which setting; they should remain permanent to avoid the need for EEPROM initializations after code upgrades; and they are used directly in code.
@@ -61,12 +50,12 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   34 Last day of workweek
   35-36 Work starts at, mins
   37-38 Work ends at, mins
-  39 Alarm beeper pitch - skipped when no piezo
-  40 Timer beeper pitch - skipped when no piezo
-  41 Strike beeper pitch - skipped when no piezo
+  39 Alarm beeper sound - skipped when no piezo
+  40 Timer beeper sound - skipped when no piezo
+  41 Strike beeper sound - skipped when no piezo
   42 Alarm signal, 0=beeper, 1=relay - skipped when no relay (start=0) or no piezo (start=0)
-  43 Timer signal - skipped when no relay (start=0) or no piezo (start=1)
-  44 Strike signal - skipped when no pulse relay (start=0) or no piezo (start=1)
+  43 Timer signal, 0=beeper, 1=relay - skipped when no relay (start=0) or no piezo (start=1)
+  44 Strike signal, 0=beeper, 1=relay - skipped when no pulse relay (start=0) or no piezo (start=1)
   45 Temperature format - skipped when fnIsTemp is not in fnsEnabled
   46 Anti-cathode poisoning
 */
@@ -74,18 +63,20 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //Options menu numbers (displayed in UI and readme), EEPROM locations, and default/min/max values.
 //Option numbers/order can be changed (though try to avoid for user convenience);
 //but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
-//                       General                    Alarm        Timer     Strike    Night and away mode
+//Asterisked options are ranges derived from song lists in SongPlayer.cpp
+//                       General                    Alarm  *     Timer  *  Strike *  Night and away mode
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47};
 const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37};
-const word optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020};
-const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0};
-const word optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439};
+const word optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0, 4, 9,  0, 0, 2,  0, 0, 1,  0,1320, 360, 0, 1, 5, 480,1020};
+const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0,  0, 0, 0,  0, 0, 0,  0,   0,   0, 0, 0, 0,   0,   0};
+const word optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1, 5,60,  1, 1, 5,  4, 1, 2,  2,1439,1439, 2, 6, 6,1439,1439};
 
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
 RTClib rtc; //an object to access a snapshot of the ds3231 rtc via now()
 DateTime tod; //stores the now() snapshot for several functions to use
 byte toddow; //stores the day of week (read separately from ds3231 dow counter)
+if(piezoPin>=0) SongPlayer piezo(piezoPin);
 
 // Hardware inputs and value setting
 byte btnCur = 0; //Momentary button currently in use - only one allowed at a time
@@ -104,13 +95,12 @@ bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
 word fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
 
 // Volatile running values used throughout the code. (Others are defined right above the method that uses them)
-Song song(0); //Song object for alerts //porp
 byte signalSource = 0;
 word signalRemain = 0; //alarm/timer signal timeout counter, seconds
 word snoozeRemain = 0; //snooze timeout counter, seconds
 word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,800 seconds - fits just inside a word)
 word timerRemain = 0; //timer actual counter
-//unsigned long signalPulseStartTime = 0; //to keep track of individual pulses so we can stop them //porp
+//deleted: unsigned long signalPulseStartTime = 0; //to keep track of individual pulses so we can stop them
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night or away modes) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 byte cleanRemain = 11; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
@@ -170,6 +160,7 @@ void loop(){
   doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
   cycleLEDs();
+  if(piezoPin>=0) piezo.check();
 }
 
 
@@ -255,7 +246,7 @@ void ctrlEvt(byte ctrl, byte evt){
       //If the alarm is using the switched relay and this is the Alt button, don't set the snooze
       if(relayMode==0 && readEEPROM(42,false)==1 && altSel!=0 && ctrl==altSel) {
         quickBeep(); //Short signal to indicate the alarm has been silenced until tomorrow
-        delay(250); //to flash the display to indicate this as well
+        //delay(250); //to flash the display to indicate this as well
       } else { //start snooze
         snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
       }
@@ -268,7 +259,7 @@ void ctrlEvt(byte ctrl, byte evt){
     if(evt==2 && snoozeRemain>0) {
       snoozeRemain = 0;
       quickBeep(); //Short signal to indicate the alarm has been silenced until tomorrow
-      delay(250); //to flash the display
+      //delay(250); //to flash the display
     }
     btnStop();
     return;
@@ -334,9 +325,10 @@ void ctrlEvt(byte ctrl, byte evt){
             if(readEEPROM(7,false)!=fn) {
               btnStop();
               writeEEPROM(7,fn,false);
-              quickBeep(); //beep 1
-              delay(250); //to flash the display and delay beep 2
-              quickBeep(); //beep 2
+              doubleBeep();
+              // quickBeep(); //beep 1
+              // delay(250); //to flash the display and delay beep 2
+              // quickBeep(); //beep 2
             }
           }
           //On short release, toggle between fnIsTime and the preset fn.
@@ -1178,12 +1170,18 @@ void signalStart(byte sigFn, byte sigDur, word pulseDur){ //make some noise! or 
   //If doing a single beep, pulseDur is the number of ms it should last, or 0 for signal source's chosen output's pulse length (which will be used anyway if pulsed relay)
   signalSource = sigFn; //Set this first so signalStop won't inadvertently turn off a switched relay started by something else
   signalStop();
-  if(sigDur==0) signalPulseStart(pulseDur); //single immediate beep
+  if(sigDur==0) { if(piezoPin>=0) piezo.play(0); else signalPulseStart(pulseDur); } //single immediate beep
   else { //long-duration signal (alarm, sleep, etc)
     if(sigFn==fnIsAlarm) signalRemain = (readEEPROM(42,false)==1 && relayPin>=0 && relayMode==0 ? switchDur : signalDur);
     else signalRemain = sigDur;
-    //piezo or pulsed relay: checkRTC will handle it
-    if(getSignalOutput()==1 && relayPin>=0 && relayMode==0) { //switched relay: turn it on now
+    //piezo or pulsed relay: // checkRTC will handle it
+    if(getSignalOutput()==0 && piezoPin>=0) piezo.play(
+      //Which song is it?
+      //What type is it?
+      //How many repetitions?
+      //Stopping place: song needs to be streamlined and converted to signal? or is this whole idea dumb?
+      );
+    else if(getSignalOutput()==1 && relayPin>=0 && relayMode==0) { //switched relay: turn it on now
       digitalWrite(relayPin,LOW); //LOW = device on
       //Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalStart"));
     }
@@ -1192,7 +1190,8 @@ void signalStart(byte sigFn, byte sigDur, word pulseDur){ //make some noise! or 
 }
 void signalStop(){ //stop current signal and clear out signal timer if applicable
   signalRemain = 0; snoozeRemain = 0;
-  signalPulseStop(); //piezo or pulsed relay: stop now
+  if(piezoPin>=0) piezo.stop();
+  signalPulseStop(); //pulsed relay: stop now
   if(getSignalOutput()==1 && relayPin>=0 && relayMode==0) { //switched relay: turn it off now
     digitalWrite(relayPin,HIGH); //LOW = device on
     //Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalStop"));
@@ -1212,10 +1211,11 @@ void signalPulseStart(word pulseDur){
   }
 }
 void signalPulseStop(){
-  if(getSignalOutput()==0 && piezoPin>=0) { //beeper
-    noTone(piezoPin);
-  }
-  else if(getSignalOutput()==1 && relayPin>=0 && relayMode==1) { //pulsed relay
+  // if(getSignalOutput()==0 && piezoPin>=0) { //beeper
+  //   noTone(piezoPin);
+  // }
+  // else
+  if(getSignalOutput()==1 && relayPin>=0 && relayMode==1) { //pulsed relay
     digitalWrite(relayPin,HIGH); //LOW = device on
     //Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalPulseStop"));
     signalPulseStartTime = 0;
@@ -1236,8 +1236,12 @@ char getSignalOutput(){ //for current signal: time, timer, or (default) alarm: 0
 }
 void quickBeep(){
   //Short beeper signal at alarm pitch (if equipped), even if relay is switched. Used when silencing snooze or switching alarm on.
-  if(getSignalOutput()==1 && relayMode==0) { if(piezoPin>=0) { signalSource=fnIsAlarm; tone(piezoPin, getSignalPitch(), 100); }}
-  else signalStart(fnIsAlarm,0,100);
+  //if(getSignalOutput()==1 && relayMode==0) { if(piezoPin>=0) { signalSource=fnIsAlarm; tone(piezoPin, getSignalPitch(), 100); }}
+  //else signalStart(fnIsAlarm,0,100);
+  if(piezoPin>=0) piezo.play(0);
+}
+void doubleBeep(){
+  if(piezoPin>=0) piezo.play(2);
 }
 
 const byte ledFadeStep = 10; //fade speed – with every loop() we'll increment/decrement the LED brightness (between 0-255) by this amount

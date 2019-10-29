@@ -59,23 +59,23 @@ If you are not using a switched relay and/or the soft power switch is not enable
 | 3 | Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date (as above) every minute at :30 seconds<br/>3 = same as 2, but scrolls in and out |
 | 4 | Leading zero in hour, date, and month? | 0 = no<br/>1 = yes |
 | 5 | Digit fade | 0–20 (in hundredths of a second) |
-| 6 | Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ) |
+| 6 | Auto DST | Set forward/backward one hour on these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March / first Sunday in November (US/CA)<br/>2 = last Sunday in March / last Sunday in October (UK/EU)<br/>3 = first Sunday in April / last Sunday in October (MX)<br/>4 = last Sunday in September / first Sunday in April (NZ)<br/>5 = first Sunday in October / first Sunday in April (AU)<br/>6 = third Sunday in October / third Sunday in February (BZ) |
 | 7 | LED behavior | 0 = always off<br/>1 = always on<br/>2 = on, but follow night/away modes if enabled<br/>3 = off, but on when alarm/timer sounds</br>4 = off, but on with switched relay (if equipped)<br/>(Clocks with LED control only, UNDB v8+) |
 | 8 | Anti-cathode poisoning | Briefly cycles all digits to prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)<br/>0 = once a day, either at midnight or at night mode start time (if enabled)<br/>1 = at the top of every hour<br/>2 = at the top of every minute<br/>(Will not trigger during night/away modes) |
 | 9 | Temperature format | 0 = Celsius<br/>1 = Fahrenheit<br/>(Clocks with temperature function enabled only) |
 |  | **Alarm** |  |
 | 10 | Alarm days | 0 = every day<br/>1 = work week only (per settings below)<br/>2 = weekend only |
 | 11 | Alarm signal | 0 = beeper<br/>1 = relay (if in switch mode, will stay on for 2 hours)<br/>(Clocks with both beeper and relay only) |
-| 12 | Alarm beeper pitch | [Note number on a piano keyboard](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8). Some are louder than others!<br/>(Clocks with beeper only) |
+| 12 | Alarm beeper sound | <br/>0 = single short beeps<br/>1 = single long beeps<br/>2 = double beeps<br/>3 = triple beeps<br/>4 = quadruple beeps<br/>5 = Vulfpeck “1612”<br/>(Clocks with beeper only) |
 | 13 | Alarm snooze | 0–60 minutes. 0 disables snooze. |
 |  | **Timer** |  |
 | 20 | Timer interval mode | 0 = count down and stop<br/>1 = count down and restart (interval mode)<br/>(Clocks with beeper and/or pulse relay only) |
 | 21 | Timer signal | 0 = beeper<br/>1 = relay (if in switch mode, will stay on until timer runs down)</br>(Clocks with both beeper and relay only) |
-| 22 | Timer beeper pitch | Set the same way as the alarm pitch, above<br/>(Clocks with beeper only) |
+| 22 | Timer beeper sound | See alarm beeper sound, above<br/>(Clocks with beeper only) |
 |  | **Strike** |  |
-| 30 | Strike | Make noise on the hour:<br/>0 = off<br/>1 = single beep<br/>2 = pips<br/>3 = strike the hour (1 to 12)<br/>4 = ship's bell (hour and half hour)<br/>Will not sound during night/away modes (except when off starts at top of hour)<br/>(Clocks with beeper or pulse relay only) |
+| 30 | Strike | Make noise on the hour:<br/>0 = off<br/>1 = on<br/>Will not sound during night/away modes (except when off starts at top of hour)<br/>(Clocks with beeper or pulse relay only) |
 | 31 | Strike signal | 0 = beeper<br/>1 = relay<br/>(Clocks with both beeper and pulse relay only) |
-| 32 | Strike beeper pitch | Set the same way as the alarm signal pitch, above. If using the pips, 63 (987 Hz) is closest to the real BBC pips frequency (1000 Hz).<br/>(Clocks with beeper only) |
+| 32 | Strike beeper sound | <br/>0 = strike the hour<br/>1 = double beep<br/>2 = pips<br/>(Clocks with beeper only) |
 |  | **Night mode and away mode** |  |
 | 40 | Night mode | To save tube life and/or preserve your sleep, dim or shut off tubes nightly when you're not around or sleeping.<br/>0 = none (tubes fully on at night)<br/>1 = dim tubes at night<br/>2 = shut off tubes at night<br/>When off, you can press **Select** to illuminate the tubes briefly. |
 | 41 | Night starts at | Time of day. |
