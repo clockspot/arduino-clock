@@ -626,8 +626,8 @@ void checkRTC(bool force){
   if(fnSetPg || fn>=fnOpts){
     if((unsigned long)(now-inputLast)>=timeoutSet*1000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
   }
-  //Temporary-display mode timeout: if we're *not* in a permanent one (time, Alt preset, or running/signaling timer)
-  else if(fn!=fnIsTime && fn!=readEEPROM(7,false) && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
+  //Temporary-display mode timeout: if we're *not* in a permanent one (time, or running/signaling timer)
+  else if(fn!=fnIsTime && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){ // && fn!=readEEPROM(7,false)
     if((unsigned long)(now-inputLast)>=timeoutTempFn*1000) { fnSetPg = 0; fn = fnIsTime; force=true; }
   }
   //Stop a signal pulse if it's time to
