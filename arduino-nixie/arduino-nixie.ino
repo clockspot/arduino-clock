@@ -614,6 +614,7 @@ byte dayOfWeek(word y, byte m, byte d){
 ////////// Clock ticking and timed event triggering //////////
 
 byte rtcSecLast = 61;
+bool alarmSkip = 0;
 void checkRTC(bool force){
   //Checks display timeouts;
   //checks for new time-of-day second -> decrements timers and checks for timed events;
@@ -645,12 +646,17 @@ void checkRTC(bool force){
       //at 2am, check for DST change
       if(tod.minute()==0 && tod.hour()==2) autoDST();
       //check if we should trigger the alarm - if the time is right and the alarm is on...
-      if(tod.hour()*60+tod.minute()==readEEPROM(0,true) && readEEPROM(2,false)) {
-        if(readEEPROM(23,false)==0 || //any day of the week
-          (readEEPROM(23,false)==1 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow)) || //weekday only
-          (readEEPROM(23,false)==2 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow)) ) { //weekend only
-            fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0);
-        } //end toddow check
+      if(tod.hour()*60+tod.minute()==readEEPROM(0,true) && readEEPROM(2,false) && !alarmSkip) {
+        fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0);
+        //set alarmSkip for the next instance of the alarm
+        alarmSkip =
+          //if alarm is any day of the week
+          (readEEPROM(23,false)==0 ||
+          //or if alarm is weekday only, and tomorrow is a weekday
+          (readEEPROM(23,false)==1 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),(toddow==6?0:toddow))) ||
+          //or if alarm is weekend only, and tomorrow is a weekend
+          (readEEPROM(23,false)==2 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),(toddow==6?0:toddow)))
+          ? 0: 1); //then don't skip the next alarm; else skip it
       } //end alarm trigger
     }
     //At bottom of minute, see if we should show the date
@@ -718,6 +724,7 @@ void checkRTC(bool force){
         } //end timer elapsed
       }
       //If alarm snooze has time on it, decrement and trigger signal if we reach zero (and alarm is still on)
+      //Won't check alarm skip status here, as it reflects tomorrow
       if(snoozeRemain>0) {
         snoozeRemain--;
         if(snoozeRemain<=0 && readEEPROM(2,false)) {
@@ -790,11 +797,22 @@ void setDST(char dir){
 void switchAlarm(char dir){
   if(enableSoftAlarmSwitch){
     signalStop(); //snoozeRemain = 0;
-    byte itWas = readEEPROM(2,false);
-    if(dir==1) writeEEPROM(2,1,false);
-    if(dir==-1) writeEEPROM(2,0,false);
-    if(dir==0) writeEEPROM(2,!readEEPROM(2,false),false);
-    if(readEEPROM(2,false) && itWas==false) quickBeep(); //Short signal to indicate we just turned the alarm on
+    //There are three alarm states - on, on with skip (skips the next alarm trigger), and off.
+    //Currently we use up/down buttons or a rotary control, rather than a binary switch, so we can cycle up/down through these states.
+    //On/off is stored in EEPROM to survive power loss; skip is volatile, not least because it can change automatically and I don't like making automated writes to EEPROM if I can help it. Skip state doesn't matter when alarm is off.
+    //Using tone() instead of quickBeep since we need to set the pitch. TODO replace with the Song class.
+    if(dir==0) dir=(readEEPROM(2,false)==0?1:-1); //If alarm is off, cycle button goes up; otherwise down.
+    if(dir==1){
+      if(readEEPROM(2,false)==0){ //if off, go straight to on, no skip
+        writeEEPROM(2,1,false); alarmSkip=0; if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(76), 100); }} //C7
+      else if(alarmSkip){ //else if skip, go to on
+        alarmSkip=0; if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(76), 100); }}} //C7
+    if(dir==-1){
+      if(readEEPROM(2,false)==1){ //if on
+        if(!alarmSkip){ //if not skip, go to skip
+          alarmSkip=1; if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(71), 100); }} //G6
+        else { //if skip, go to off
+          writeEEPROM(2,0,false); if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(64), 100); }}}} //C6
     updateDisplay();
   }
 }
@@ -957,7 +975,12 @@ void updateDisplay(){
         word almTime; almTime = readEEPROM(0,true);
         editDisplay(almTime/60, 0, 1, readEEPROM(19,false), true); //hours with leading zero
         editDisplay(almTime%60, 2, 3, true, true);
-        editDisplay(readEEPROM(2,false),4,4,false,true); //status 1/0
+        if(readEEPROM(2,false) && alarmSkip){ //alarm on+skip
+          editDisplay(1,4,5,true,true); //01 to indicate off now, on maybe later
+        } else { //alarm fully on or off
+          editDisplay(readEEPROM(2,false),4,4,false,true);
+          blankDisplay(5,5,true);
+        }
         displayDim = (readEEPROM(2,false)?2:1); //status bright/dim
         blankDisplay(5,5,true);
         break;
@@ -1086,6 +1109,7 @@ void cycleDisplay(){
   } else {
     if(setStartLast>0) setStartLast=0;
   }
+  //TODO if we want to flash certain elements, we might do it similarly here
   
   fadeLastDur = fadeDur-(dim?dimDur:0); //by default, last digit displays for entire fadeDur minus dim time
   
