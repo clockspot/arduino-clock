@@ -96,6 +96,7 @@ unsigned long inputLast2 = 0; //Second-to-last of above
 
 const byte fnOpts = 201; //fn values from here to 255 correspond to options in the options menu
 byte fn = fnIsTime; //currently displayed fn (per fnsEnabled)
+byte fnPg = 0; //allows a function to have multiple pages
 byte fnSetPg = 0; //whether this function is currently being set, and which option/page it's on
 word fnSetVal; //the value currently being set, if any - unsigned int 0-65535
 word fnSetValMin; //min possible - unsigned int
@@ -626,6 +627,15 @@ void checkRTC(bool force){
   if(fnSetPg || fn>=fnOpts){
     if((unsigned long)(now-inputLast)>=timeoutSet*1000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
   }
+  //Paged-display mode timeout //TODO change fnIsDate to consts? //TODO timeoutPageFn var
+  else if(fn==fnIsDate && (unsigned long)(now-inputLast)>=2500) {
+    //Calendar pages: date, [counter], [sunlast], [weathernow], [sunnext], [weathernext]
+    //Here we just have to increment the page and decide when to reset. updateDisplay() will 
+    fnPg++;
+    //        date  counter     sun         weather
+    if(fnPg >    1+(false?1:0)+(false?2:0)+(false?1:0)){ fnPg = 0; fn = fnIsTime; }
+    force=true;
+  }
   //Temporary-display mode timeout: if we're *not* in a permanent one (time, or running/signaling timer)
   else if(fn!=fnIsTime && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){ // && fn!=readEEPROM(7,false)
     if((unsigned long)(now-inputLast)>=timeoutTempFn*1000) { fnSetPg = 0; fn = fnIsTime; force=true; }
@@ -947,19 +957,55 @@ void updateDisplay(){
         if(readEEPROM(18,false)==1) editDisplay(tod.day(), 4, 5, readEEPROM(19,false), true); //date
         else editDisplay(tod.second(), 4, 5, true, true); //seconds
         break;
-      case fnIsDate:
-        byte df; df = readEEPROM(17,false); //1=m/d/w, 2=d/m/w, 3=m/d/y, 4=d/m/y, 5=y/m/d
-        if(df<=4) {
-          editDisplay((df==1||df==3?tod.month():tod.day()),0,1,readEEPROM(19,false),true); //month or date first
-          editDisplay((df==1||df==3?tod.day():tod.month()),2,3,readEEPROM(19,false),true); //date or month second
-          editDisplay((df<=2?toddow:tod.year()),4,5,(df<=2?false:true),true); //dow or year third - dow never leading zero, year always
-        }
-        else { //df==5
-          editDisplay(tod.year(),0,1,true,true); //year always has leading zero
-          editDisplay(tod.month(),2,3,readEEPROM(19,false),true);
-          editDisplay(tod.day(),4,5,readEEPROM(19,false),true);
-        }
-        break;
+      case fnIsDate: //a paged display
+        //figure out the numbers for each page, depending on which ones are enabled. 255 will keep it from showing at all.
+        byte fnDatePgsFound = 0;
+        byte fnDateCounter = 255; if(false){ fnDatePgsFound++; fnDateCounter=fnDatePgsFound; }
+        byte fnDateSunlast = 255; if(false){ fnDatePgsFound++; fnDateSunlast=fnDatePgsFound; }
+        byte fnDateWeathernow = 255; if(false){ fnDatePgsFound++; fnDateWeathernow=fnDatePgsFound; }
+        byte fnDateSunnext = 255; if(false){ fnDatePgsFound++; fnDateSunnext=fnDatePgsFound; }
+        byte fnDateWeathernext = 255; if(false){ fnDatePgsFound++; fnDateWeathernext=fnDatePgsFound; }
+        switch(fnPg){
+          case 0: //plain ol' date
+            byte df; df = readEEPROM(17,false); //1=m/d/w, 2=d/m/w, 3=m/d/y, 4=d/m/y, 5=y/m/d
+            if(df<=4) {
+              editDisplay((df==1||df==3?tod.month():tod.day()),0,1,readEEPROM(19,false),true); //month or date first
+              editDisplay((df==1||df==3?tod.day():tod.month()),2,3,readEEPROM(19,false),true); //date or month second
+              editDisplay((df<=2?toddow:tod.year()),4,5,(df<=2?false:true),true); //dow or year third - dow never leading zero, year always
+            }
+            else { //df==5
+              editDisplay(tod.year(),0,1,true,true); //year always has leading zero
+              editDisplay(tod.month(),2,3,readEEPROM(19,false),true);
+              editDisplay(tod.day(),4,5,readEEPROM(19,false),true);
+            }
+            break;
+          case fnDateCounter:
+            //TODO how to set this
+            long targetDayCount; targetDayCount = dateToDayCount(
+              readEEPROM(3,true),
+              readEEPROM(5,false),
+              readEEPROM(6,false)
+            );
+            long currentDayCount; currentDayCount = dateToDayCount(tod.year(),tod.month(),tod.day());
+            editDisplay(abs(targetDayCount-currentDayCount),0,3,false,true);
+            //TODO for now don't indicate negative. Elsewhere we use leading zeros to represent negative but I don't like how that looks here
+            blankDisplay(4,5,true);
+            break;
+          case fnDateSunlast:
+            //TODO fnDateSunlast
+            break;
+          case fnDateWeathernow:
+            //TODO fnDateWeathernow
+            break;
+          case fnDateSunnext:
+            //TODO fnDateSunnext
+            break;
+          case fnDateWeathernext:
+            //TODO fnDateWeathernext
+            break;
+          default: break;
+        } //end switch fnPg
+        break; //end fnIsDate
       case fnIsDayCount:
         long targetDayCount; targetDayCount = dateToDayCount(
           readEEPROM(3,true),
