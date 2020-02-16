@@ -7,11 +7,10 @@ const byte fnIsTime = 0;
 const byte fnIsDate = 1;
 const byte fnIsAlarm = 2;
 const byte fnIsTimer = 3;
-const byte fnIsDayCount = 4;
 const byte fnIsTemp = 5;
 const byte fnIsTubeTester = 6; //cycles all digits on all tubes 1/second, similar to anti-cathode-poisoning cleaner
 // functions enabled in this clock, in their display order. Only fnIsTime is required
-const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCount}; //, fnIsTemp, fnIsTubeTester
+const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer}; //, fnIsTemp, fnIsTubeTester
 // To control which of these display persistently vs. switch back to Time after a few seconds, search "Temporary-display mode timeout"
 
 // These are the UNDB v5 board connections to Arduino analog input pins.

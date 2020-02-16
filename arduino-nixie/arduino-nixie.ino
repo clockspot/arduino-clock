@@ -7,7 +7,7 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/v8c-6tube-relayswitch-pwm-top.h"
+#include "configs/v8c-6tube-relayswitch-pwm.h"
 
 #include "song.h"
 
@@ -34,17 +34,25 @@ Most values in the clock are 1-byte; if 2-byte, high byte is loc, low byte is lo
 These ones are set outside the options menu (defaults defined in initEEPROM()):
   0-1 Alarm time, mins
   2 Alarm on
-  3-4 Day count year
+  3-4 Day count year TODO free up
   5 Day count month
   6 Day count date
   7 Function preset (done by Alt when not power-switching)
-( 8-15 are available )
+  8 Functions/pages enabled (bitmask, dynamic) TODO
+    const unsigned int FN_TIMER = 1<<0; //1
+    const unsigned int FN_DAYCOUNT = 1<<1; //2
+    const unsigned int FN_SUN = 1<<2; //4
+    const unsigned int FN_WEATHER = 1<<3; //8
+  9 Day count orientation (count down, count up) TODO
+  10-11 Latitude TODO
+  12-13 Longitude TODO
+( 14-15 are available )
 
 These ones are set inside the options menu (defaults defined in arrays below).
 Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
   16 Time format
   17 Date format 
-  18 Display date during time
+  18 Display date during time TODO only the one page
   19 Leading zero in hour, date, and month
   20 Digit fade duration
   21 Strike - skipped when no piezo and relay is switch (start=0)
@@ -104,6 +112,14 @@ word fnSetValMax; //max possible - unsigned int
 bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
 word fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
 
+//the calendar function page numbers, depending on which ones are enabled. See findFnAndPageNumbers
+byte fnDatePages = 1;
+byte fnDateCounter = 255;
+byte fnDateSunlast = 255;
+byte fnDateWeathernow = 255;
+byte fnDateSunnext = 255;
+byte fnDateWeathernext = 255;
+
 // Volatile running values used throughout the code. (Others are defined right above the method that uses them)
 byte signalSource = 0;
 word signalRemain = 0; //alarm/timer signal timeout counter, seconds
@@ -141,6 +157,7 @@ void setup(){
   }
   if(!enableSoftAlarmSwitch) writeEEPROM(2,1,false); //force alarm on if software switch is disabled
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
+  findFnAndPageNumbers(); //initial values
   initOutputs(); //depends on some EEPROM settings
 }
 
@@ -246,7 +263,7 @@ void ctrlEvt(byte ctrl, byte evt){
   //evt: 1=press, 2=short hold, 3=long hold, 0=release.
   //We only handle press evts for adj ctrls, as that's the only evt encoders generate.
   //But we can handle short and long holds and releases for the sel ctrls (always buttons).
-  
+
   //Before all else, is it a press to stop the signal? Silence it
   if(signalRemain>0 && evt==1){
     stoppingSignal = true;
@@ -296,15 +313,22 @@ void ctrlEvt(byte ctrl, byte evt){
         switch(fn){
           case fnIsTime: //set mins
             startSet((tod.hour()*60)+tod.minute(),0,1439,1); break;
-          case fnIsDate: //set year
-            fnSetValDate[1]=tod.month(), fnSetValDate[2]=tod.day(); startSet(tod.year(),0,9999,1); break;
+          case fnIsDate: //depends what page we're on
+            if(fnPg==0){ //regular date display: set year
+              fnSetValDate[1]=tod.month(), fnSetValDate[2]=tod.day(); startSet(tod.year(),0,9999,1);
+            } else if(fnPg==fnDateCounter){ //set year like date, but from eeprom like startOpt
+              startSet(readEEPROM(3,true),2000,9999,1);
+            } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
+              //TODO
+            } else if(fnPg==fnDateWeathernow || fnDateWeathernext){ //temperature units??
+              //TODO
+            } break;
           case fnIsAlarm: //set mins
             startSet(readEEPROM(0,true),0,1439,1); break;
           case fnIsTimer: //set mins, up to 18 hours (64,800 seconds - fits just inside a word)
             if(timerRemain>0) { timerRemain = 0; btnStop(); updateDisplay(); break; } //If the timer is running, zero it out.
             startSet(timerInitial/60,0,1080,1); break;
-          case fnIsDayCount: //set year like date, but from eeprom like startOpt
-            startSet(readEEPROM(3,true),2000,9999,1); break;
+          //fnIsDayCount removed in favor of paginated calendar
           case fnIsTemp: //could do calibration here if so inclined
           case fnIsTubeTester:
           default: break;
@@ -315,6 +339,7 @@ void ctrlEvt(byte ctrl, byte evt){
         //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
         if(ctrl==mainSel){
           fnScroll(1); //Go to next fn in the cycle
+          fnPg = 0; //reset page counter in case we were in a paged display
           checkRTC(true); //updates display
         }
         else if(ctrl==mainAdjUp || ctrl==mainAdjDn) {
@@ -343,6 +368,7 @@ void ctrlEvt(byte ctrl, byte evt){
           else if(evt==0) {
             btnStop();
             if(fn==readEEPROM(7,false)) fn=fnIsTime; else fn=readEEPROM(7,false);
+            fnPg = 0; //reset page counter in case we were in a paged display
             updateDisplay();
           }
         }
@@ -365,24 +391,46 @@ void ctrlEvt(byte ctrl, byte evt){
               ds3231.setMinute(fnSetVal%60);
               ds3231.setSecond(0);
               clearSet(); break;
-            case fnIsDate: //save in RTC
-              switch(fnSetPg){
-                case 1: //save year, set month
-                  delay(300); //blink display to indicate save. Safe b/c we've btnStopped. See below for why
-                  fnSetValDate[0]=fnSetVal;
-                  startSet(fnSetValDate[1],1,12,2); break; 
-                case 2: //save month, set date
-                  delay(300); //blink display to indicate save. Needed if set month == date: without blink, nothing changes.
-                  fnSetValDate[1]=fnSetVal;
-                  startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
-                case 3: //write year/month/date to RTC
-                  ds3231.setYear(fnSetValDate[0]%100); //TODO: do we store century on our end? Per ds3231 docs, "The century bit (bit 7 of the month register) is toggled when the years register overflows from 99 to 00."
-                  ds3231.setMonth(fnSetValDate[1]);
-                  ds3231.setDate(fnSetVal);
-                  ds3231.setDoW(dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal)+1); //ds3231 weekday is 1-index
-                  clearSet(); break;
-                default: break;
-              } break;
+            case fnIsDate: //depends what page we're on
+              if(fnPg==0){ //regular date display: save in RTC
+                switch(fnSetPg){
+                  case 1: //save year, set month
+                    delay(300); //blink display to indicate save. Safe b/c we've btnStopped. See below for why
+                    fnSetValDate[0]=fnSetVal;
+                    startSet(fnSetValDate[1],1,12,2); break; 
+                  case 2: //save month, set date
+                    delay(300); //blink display to indicate save. Needed if set month == date: without blink, nothing changes.
+                    fnSetValDate[1]=fnSetVal;
+                    startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
+                  case 3: //write year/month/date to RTC
+                    ds3231.setYear(fnSetValDate[0]%100); //TODO: do we store century on our end? Per ds3231 docs, "The century bit (bit 7 of the month register) is toggled when the years register overflows from 99 to 00."
+                    ds3231.setMonth(fnSetValDate[1]);
+                    ds3231.setDate(fnSetVal);
+                    ds3231.setDoW(dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal)+1); //ds3231 weekday is 1-index
+                    clearSet(); break;
+                  default: break;
+                }
+              } else if(fnPg==fnDateCounter){ //set like date, save in eeprom like finishOpt
+                switch(fnSetPg){
+                  case 1: //save year, set month
+                    delay(300); //blink display to indicate save. Safe b/c we've btnStopped. See below for why
+                    writeEEPROM(3,fnSetVal,true);
+                    startSet(readEEPROM(5,false),1,12,2); break;
+                  case 2: //save month, set date
+                    delay(300); //blink display to indicate save. Needed if set month == date: without blink, nothing changes.
+                    writeEEPROM(5,fnSetVal,false);
+                    startSet(readEEPROM(6,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
+                  case 3: //save date
+                    writeEEPROM(6,fnSetVal,false);
+                    clearSet(); break;
+                  default: break;
+                }
+              } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
+                //TODO
+              } else if(fnPg==fnDateWeathernow || fnPg==fnDateWeathernext){ //temperature units??
+                //TODO
+              }
+              break;
             case fnIsAlarm:
               writeEEPROM(0,fnSetVal,true);
               clearSet(); break;
@@ -396,22 +444,7 @@ void ctrlEvt(byte ctrl, byte evt){
                 //TODO will this cancel properly? especially if alarm interrupts?
               }
               clearSet(); break;
-            case fnIsDayCount: //set like date, save in eeprom like finishOpt
-              switch(fnSetPg){
-                case 1: //save year, set month
-                  delay(300); //blink display to indicate save. Safe b/c we've btnStopped. See below for why
-                  writeEEPROM(3,fnSetVal,true);
-                  startSet(readEEPROM(5,false),1,12,2); break;
-                case 2: //save month, set date
-                  delay(300); //blink display to indicate save. Needed if set month == date: without blink, nothing changes.
-                  writeEEPROM(5,fnSetVal,false);
-                  startSet(readEEPROM(6,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
-                case 3: //save date
-                  writeEEPROM(6,fnSetVal,false);
-                  clearSet(); break;
-                default: break;
-              } break;
-              break;
+            //fnIsDayCount removed in favor of paginated calendar
             case fnIsTemp:
               break;
             default: break;
@@ -584,6 +617,15 @@ void writeEEPROM(int loc, int val, bool isWord){
   //Serial.println();
 }
 
+void findFnAndPageNumbers(){
+  //Each function, and each page in a paged function, has a number. //TODO should pull from EEPROM 8
+  fnDatePages = 1; //date function always has a page for the date itself
+  if(true){ fnDatePages++; fnDateCounter=fnDatePages-1; }
+  if(false){ fnDatePages++; fnDateSunlast=fnDatePages-1; }
+  if(false){ fnDatePages++; fnDateWeathernow=fnDatePages-1; }
+  if(false){ fnDatePages++; fnDateSunnext=fnDatePages-1; }
+  if(false){ fnDatePages++; fnDateWeathernext=fnDatePages-1; }
+}
 byte daysInMonth(word y, byte m){
   if(m==2) return (y%4==0 && (y%100!=0 || y%400==0) ? 29 : 28);
   //https://cmcenroe.me/2014/12/05/days-in-month-formula.html
@@ -629,11 +671,9 @@ void checkRTC(bool force){
   }
   //Paged-display mode timeout //TODO change fnIsDate to consts? //TODO timeoutPageFn var
   else if(fn==fnIsDate && (unsigned long)(now-inputLast)>=2500) {
-    //Calendar pages: date, [counter], [sunlast], [weathernow], [sunnext], [weathernext]
-    //Here we just have to increment the page and decide when to reset. updateDisplay() will 
-    fnPg++;
-    //        date  counter     sun         weather
-    if(fnPg >    1+(false?1:0)+(false?2:0)+(false?1:0)){ fnPg = 0; fn = fnIsTime; }
+    //Here we just have to increment the page and decide when to reset. updateDisplay() will do the rendering
+    fnPg++; inputLast+=2500;
+    if(fnPg >= fnDatePages){ fnPg = 0; fn = fnIsTime; }
     force=true;
   }
   //Temporary-display mode timeout: if we're *not* in a permanent one (time, or running/signaling timer)
@@ -655,23 +695,25 @@ void checkRTC(bool force){
     if(tod.second()==0) { //at top of minute
       //at 2am, check for DST change
       if(tod.minute()==0 && tod.hour()==2) autoDST();
-      //check if we should trigger the alarm - if the time is right and the alarm is on...
-      if(tod.hour()*60+tod.minute()==readEEPROM(0,true) && readEEPROM(2,false) && !alarmSkip) {
-        fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0);
+      //at the alarm trigger time
+      if(tod.hour()*60+tod.minute()==readEEPROM(0,true)){
+        if(readEEPROM(2,false) && !alarmSkip) { //if the alarm is on and not skipped, sound it!
+          fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0);
+        }
         //set alarmSkip for the next instance of the alarm
         alarmSkip =
           //if alarm is any day of the week
           (readEEPROM(23,false)==0 ||
           //or if alarm is weekday only, and tomorrow is a weekday
-          (readEEPROM(23,false)==1 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),(toddow==6?0:toddow))) ||
+          (readEEPROM(23,false)==1 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),(toddow==6?0:toddow+1))) ||
           //or if alarm is weekend only, and tomorrow is a weekend
-          (readEEPROM(23,false)==2 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),(toddow==6?0:toddow)))
+          (readEEPROM(23,false)==2 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),(toddow==6?0:toddow+1)))
           ? 0: 1); //then don't skip the next alarm; else skip it
       } //end alarm trigger
     }
     //At bottom of minute, see if we should show the date
     if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0) {
-      if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = now; updateDisplay(); }
+      if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = now; fnPg = 254; updateDisplay(); }
       if(readEEPROM(18,false)==3) { startScroll(); }
     }
     //Anti-poisoning routine triggering: start when applicable, and not at night, during setting, or after a button press (unoff)
@@ -958,65 +1000,39 @@ void updateDisplay(){
         else editDisplay(tod.second(), 4, 5, true, true); //seconds
         break;
       case fnIsDate: //a paged display
-        //figure out the numbers for each page, depending on which ones are enabled. 255 will keep it from showing at all.
-        byte fnDatePgsFound = 0;
-        byte fnDateCounter = 255; if(false){ fnDatePgsFound++; fnDateCounter=fnDatePgsFound; }
-        byte fnDateSunlast = 255; if(false){ fnDatePgsFound++; fnDateSunlast=fnDatePgsFound; }
-        byte fnDateWeathernow = 255; if(false){ fnDatePgsFound++; fnDateWeathernow=fnDatePgsFound; }
-        byte fnDateSunnext = 255; if(false){ fnDatePgsFound++; fnDateSunnext=fnDatePgsFound; }
-        byte fnDateWeathernext = 255; if(false){ fnDatePgsFound++; fnDateWeathernext=fnDatePgsFound; }
-        switch(fnPg){
-          case 0: //plain ol' date
-            byte df; df = readEEPROM(17,false); //1=m/d/w, 2=d/m/w, 3=m/d/y, 4=d/m/y, 5=y/m/d
-            if(df<=4) {
-              editDisplay((df==1||df==3?tod.month():tod.day()),0,1,readEEPROM(19,false),true); //month or date first
-              editDisplay((df==1||df==3?tod.day():tod.month()),2,3,readEEPROM(19,false),true); //date or month second
-              editDisplay((df<=2?toddow:tod.year()),4,5,(df<=2?false:true),true); //dow or year third - dow never leading zero, year always
-            }
-            else { //df==5
-              editDisplay(tod.year(),0,1,true,true); //year always has leading zero
-              editDisplay(tod.month(),2,3,readEEPROM(19,false),true);
-              editDisplay(tod.day(),4,5,readEEPROM(19,false),true);
-            }
-            break;
-          case fnDateCounter:
-            //TODO how to set this
-            long targetDayCount; targetDayCount = dateToDayCount(
-              readEEPROM(3,true),
-              readEEPROM(5,false),
-              readEEPROM(6,false)
-            );
-            long currentDayCount; currentDayCount = dateToDayCount(tod.year(),tod.month(),tod.day());
-            editDisplay(abs(targetDayCount-currentDayCount),0,3,false,true);
-            //TODO for now don't indicate negative. Elsewhere we use leading zeros to represent negative but I don't like how that looks here
-            blankDisplay(4,5,true);
-            break;
-          case fnDateSunlast:
-            //TODO fnDateSunlast
-            break;
-          case fnDateWeathernow:
-            //TODO fnDateWeathernow
-            break;
-          case fnDateSunnext:
-            //TODO fnDateSunnext
-            break;
-          case fnDateWeathernext:
-            //TODO fnDateWeathernext
-            break;
-          default: break;
-        } //end switch fnPg
+        if(fnPg==0 || fnPg==254){ //plain ol' date - 0 will continue to other pages, 254 will only display date then return to time (e.g. at half minute)
+          byte df; df = readEEPROM(17,false); //1=m/d/w, 2=d/m/w, 3=m/d/y, 4=d/m/y, 5=y/m/d
+          if(df<=4) {
+            editDisplay((df==1||df==3?tod.month():tod.day()),0,1,readEEPROM(19,false),true); //month or date first
+            editDisplay((df==1||df==3?tod.day():tod.month()),2,3,readEEPROM(19,false),true); //date or month second
+            editDisplay((df<=2?toddow:tod.year()),4,5,(df<=2?false:true),true); //dow or year third - dow never leading zero, year always
+          }
+          else { //df==5
+            editDisplay(tod.year(),0,1,true,true); //year always has leading zero
+            editDisplay(tod.month(),2,3,readEEPROM(19,false),true);
+            editDisplay(tod.day(),4,5,readEEPROM(19,false),true);
+          }
+        } else if(fnPg==fnDateCounter){
+          long targetDayCount; targetDayCount = dateToDayCount(
+            readEEPROM(3,true),
+            readEEPROM(5,false),
+            readEEPROM(6,false)
+          );
+          long currentDayCount; currentDayCount = dateToDayCount(tod.year(),tod.month(),tod.day());
+          editDisplay(abs(targetDayCount-currentDayCount),0,3,false,true);
+          //TODO for now don't indicate negative. Elsewhere we use leading zeros to represent negative but I don't like how that looks here
+          blankDisplay(4,5,true);
+        } else if(fnPg==fnDateSunlast){
+          //TODO
+        } else if(fnPg==fnDateWeathernow){
+          //TODO fnDateWeathernow
+        } else if(fnPg==fnDateSunnext){
+          //TODO fnDateSunnext
+        } else if(fnPg==fnDateWeathernext){
+          //TODO fnDateWeathernext
+        }
         break; //end fnIsDate
-      case fnIsDayCount:
-        long targetDayCount; targetDayCount = dateToDayCount(
-          readEEPROM(3,true),
-          readEEPROM(5,false),
-          readEEPROM(6,false)
-        );
-        long currentDayCount; currentDayCount = dateToDayCount(tod.year(),tod.month(),tod.day());
-        editDisplay(abs(targetDayCount-currentDayCount),0,3,false,true);
-        //TODO for now don't indicate negative. Elsewhere we use leading zeros to represent negative but I don't like how that looks here
-        blankDisplay(4,5,true);
-        break;
+      //fnIsDayCount removed in favor of paginated calendar
       case fnIsAlarm: //alarm
         word almTime; almTime = readEEPROM(0,true);
         editDisplay(almTime/60, 0, 1, readEEPROM(19,false), true); //hours with leading zero
@@ -1028,7 +1044,6 @@ void updateDisplay(){
           blankDisplay(5,5,true);
         }
         displayDim = (readEEPROM(2,false)?2:1); //status bright/dim
-        blankDisplay(5,5,true);
         break;
       case fnIsTimer: //timer - display time left.
         //Relative unit positioning: when t <1h, display min/sec in place of hr/min on 4-tube displays
@@ -1137,7 +1152,7 @@ void initOutputs() {
   if(piezoPin>=0) pinMode(piezoPin, OUTPUT);
   if(relayPin>=0) {
     pinMode(relayPin, OUTPUT); digitalWrite(relayPin, HIGH); //LOW = device on
-    quickBeep(); //"primes" the beeper, seems necessary when relay pin is spec'd, otherwise first intentional beep doesn't happen
+    quickBeep(); //"primes" the beeper, seems necessary when relay pin is spec'd, otherwise first intentional beep doesn't happen TODO still true?
   }
   if(ledPin>=0) pinMode(ledPin, OUTPUT);
   updateLEDs(); //set to initial value
