@@ -35,7 +35,7 @@ In updateDisplay(), special setting formats are deduced from the option max valu
 
 These ones are set outside the options menu (defaults defined in initEEPROM()):
   0-1 Alarm time, mins
-  2 Alarm on
+  2 Alarm on (mirrors volatile var)
   3-4 Day count year TODO free up
   5 Day count month
   6 Day count date
@@ -49,7 +49,7 @@ These ones are set outside the options menu (defaults defined in initEEPROM()):
   10-11 Latitude
   12-13 Longitude
   14 UTC offset in quarter-hours (signed byte int8_t) - range is -48 (-12h, US Minor Outlying Islands) to +56 (+14h, Kiribati)
-( 15 is available )
+  15 DST on (mirrors volatile var)
 
 These ones are set inside the options menu (defaults defined in arrays below).
 Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
@@ -125,6 +125,7 @@ byte fnDateSunnext = 255;
 byte fnDateWeathernext = 255;
 
 // Volatile running values used throughout the code. (Others are defined right above the method that uses them)
+bool dstOn = 0; //this is stored in EEPROM too, but only for correction after power loss – this var hedges against EEPROM failure in normal use
 bool alarmOn = 0; //this is stored in EEPROM too, but only for power loss recovery – this var hedges against EEPROM failure in normal use
 bool alarmSkip = 0;
 byte signalSource = 0;
@@ -163,6 +164,7 @@ void setup(){
   }
   if(!enableSoftAlarmSwitch) alarmOn = 1; //force alarm on if software switch is disabled
   else alarmOn = (readEEPROM(2,false)>0); //otherwise set alarm per EEPROM backup
+  dstOn = (readEEPROM(15,false)>0); //set last known DST state per EEPROM backup
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   findFnAndPageNumbers(); //initial values
   initOutputs(); //depends on some EEPROM settings
@@ -699,8 +701,8 @@ void checkRTC(bool force){
     
     //Things to do at specific times
     if(tod.second()==0) { //at top of minute
-      //at 2am, check for DST change
-      if(tod.minute()==0 && tod.hour()==2) autoDST();
+      //at 2am, or if this is first run, check for DST change
+      if((tod.minute()==0 && tod.hour()==2) || rtcSecLast==61) autoDST();
       //at the alarm trigger time
       if(tod.hour()*60+tod.minute()==readEEPROM(0,true)){
         if(alarmOn && !alarmSkip) { //if the alarm is on and not skipped, sound it!
@@ -812,80 +814,34 @@ void checkRTC(bool force){
   } //end if force or new second
 } //end checkRTC()
 
-bool fellBack = false;
 void autoDST(){
-  //Call daily when clock reaches 2am.
-  //If rule matches, will set to 3am in spring, 1am in fall (and set fellBack so it only happens once)
-  if(fellBack) { fellBack=false; return; } //If we fell back at last 2am, do nothing.
-  if(toddow==0) { //is it sunday? currently all these rules fire on Sundays only
-    //TODO: change DST changing strategy by using the below lines and ditch the duplication with isDST
-    //bool dstNow = isDST(tod.year(),tod.month(),tod.day());
-    //if(dstNow!==dstCur) setDST(dstNow>dstCur? 1: -1);
-    switch(readEEPROM(22,false)){
-      case 1: //second Sunday in March to first Sunday in November (US/CA)
-        if(tod.month()==3 && tod.day()>=8 && tod.day()<=14) setDST(1);
-        if(tod.month()==11 && tod.day()<=7) setDST(-1);
-        break;
-      case 2: //last Sunday in March to last Sunday in October (UK/EU)
-        if(tod.month()==3 && tod.day()>=25) setDST(1);
-        if(tod.month()==10 && tod.day()>=25) setDST(-1);
-        break;
-      case 3: //first Sunday in April to last Sunday in October (MX)
-        if(tod.month()==4 && tod.day()<=7) setDST(1);
-        if(tod.month()==10 && tod.day()>=25) setDST(-1);
-        break;
-      case 4: //last Sunday in September to first Sunday in April (NZ)
-        if(tod.month()==9 && tod.day()>=24) setDST(1); //30 days hath September: last Sun will be 24-30
-        if(tod.month()==4 && tod.day()<=7) setDST(-1);
-        break;
-      case 5: //first Sunday in October to first Sunday in April (AU)
-        if(tod.month()==10 && tod.day()<=7) setDST(1);
-        if(tod.month()==4 && tod.day()<=7) setDST(-1);
-        break;
-      case 6: //third Sunday in October to third Sunday in February (BZ)
-        if(tod.month()==10 && tod.day()>=15 && tod.day()<=21) setDST(1);
-        if(tod.month()==2 && tod.day()>=15 && tod.day()<=21) setDST(-1);
-        break;
-      default: break;
-    } //end setting switch
-  } //end is it sunday
+  //Call daily when clock reaches 2am, and at first run.
+  bool dstNow = isDST(tod.year(),tod.month(),tod.day());
+  if(dstNow!==dstOn){ ds3231.setHour(dstNow>dstOn? 3: 1); dstOn = dstNow; writeEEPROM(15,dstOn,false); }
 }
 bool isDST(int y, char m, char d){
   //returns whether DST is in effect on this date (after 2am shift)
-  switch(readEEPROM(22,false)){
+  switch(readEEPROM(22,false)){ //local DST ruleset
     case 1: //second Sunday in March to first Sunday in November (US/CA)
       return (m==3 && d>=nthSunday(y,3,2)) || (m>3 && m<11) || (m==11 && d<nthSunday(y,11,1)); break;
     case 2: //last Sunday in March to last Sunday in October (UK/EU)
       return (m==3 && d>=nthSunday(y,3,-1)) || (m>3 && m<10) || (m==10 && d<nthSunday(y,10,-1)); break;
     case 3: //first Sunday in April to last Sunday in October (MX)
-      //stopping place: finish this and rewrite autoDST per todo above
-      if(m==4 && d<=7) return 1;
-      if(m==10 && d>=25) return -1;
-      break;
+      return (m==4 && d>=nthSunday(y,4,1)) || (m>4 && m<10) || (m==10 && d<nthSunday(y,10,-1)); break;
     case 4: //last Sunday in September to first Sunday in April (NZ)
-      if(m==9 && d>=24) return 1; //30 days hath September: last Sun will be 24-30
-      if(m==4 && d<=7) return -1;
-      break;
+      return (m==9 && d>=nthSunday(y,9,-1)) || (m>9 || m<4) || (m==4 && d<nthSunday(y,4,1)); break;
     case 5: //first Sunday in October to first Sunday in April (AU)
-      if(m==10 && d<=7) return 1;
-      if(m==4 && d<=7) return -1;
-      break;
+      return (m==10 && d>=nthSunday(y,10,1)) || (m>10 || m<4) || (m==4 && d<nthSunday(y,4,1)); break;
     case 6: //third Sunday in October to third Sunday in February (BZ)
-      if(m==10 && d>=15 && d<=21) return 1;
-      if(m==2 && d>=15 && d<=21) return -1;
-      break;
+      return (m==10 && d>=nthSunday(y,10,3)) || (m>10 || m<2) || (m==2 && d<nthSunday(y,2,3)); break;
     default: break;
-  } //end setting switch
+  }
   return 0;
 }
 char nthSunday(int y, char m, char nth){
   if(nth>0) return (((7-dayOfWeek(y,m,1))%7)+1+((nth-1)*7));
   if(nth<0) return (dayOfWeek(y,m,1)==0 && daysInMonth(y,m)>28? 29: nthSunday(y,m,1)+21+((nth+1)*7));
   return 0;
-}
-void setDST(char dir){
-  if(dir==1) ds3231.setHour(3); //could set relatively if we move away from 2am-only sets
-  if(dir==-1 && !fellBack) { ds3231.setHour(1); fellBack=true; }
 }
 
 void switchAlarm(char dir){
