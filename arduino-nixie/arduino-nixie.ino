@@ -48,7 +48,7 @@ These ones are set outside the options menu (defaults defined in initEEPROM()):
   9 Day count orientation (count down, count up) TODO
   10-11 Latitude
   12-13 Longitude
-  14 UTC offset in quarter-hours (signed byte int8_t) - range is -48 (-12h, US Minor Outlying Islands) to +56 (+14h, Kiribati)
+  14 UTC offset in quarter-hours plus 100 - range is 52 (-12h or -48qh, US Minor Outlying Islands) to 156 (+14h or +56qh, Kiribati)
   15 DST on (mirrors volatile var)
 
 These ones are set inside the options menu (defaults defined in arrays below).
@@ -1102,9 +1102,8 @@ void updateDisplay(){
 void displaySun(char which){
   //which==0: display last sun event: yesterday's sunset, today's sunrise, or today's sunset
   //which==1: display next sun event: today's sunrise, today's sunset, or tomorrow's sunrise
-  Dusk2Dawn here(readEEPROM(10,true), readEEPROM(12,true), float(readEEPROM(14,true))/4);
-  int rise = here.sunrise(tod.year(),tod.month(),tod.day(),
-  //int8_t 
+  Dusk2Dawn here(readEEPROM(10,true), readEEPROM(12,true), (float(readEEPROM(14,true))-100)/4);
+  int rise = here.sunrise(tod.year(),tod.month(),tod.day(),isDST(tod.year(),tod.month(),tod.day())); //TODO unreliable if sun event is around 2am
   //inputLastTODMins
 }
 
