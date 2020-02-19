@@ -1102,9 +1102,48 @@ void updateDisplay(){
 void displaySun(char which){
   //which==0: display last sun event: yesterday's sunset, today's sunrise, or today's sunset
   //which==1: display next sun event: today's sunrise, today's sunset, or tomorrow's sunrise
-  Dusk2Dawn here(readEEPROM(10,true), readEEPROM(12,true), (float(readEEPROM(14,true))-100)/4);
-  int rise = here.sunrise(tod.year(),tod.month(),tod.day(),isDST(tod.year(),tod.month(),tod.day())); //TODO unreliable if sun event is around 2am
-  //inputLastTODMins
+  //TODO here.sunrise and here.sunset are unreliable if event is around 2am on DST change day
+  int y = tod.year(); int m = tod.month(); int d = tod.day(); int evtTime = 0; bool evtIsRise = 0;
+  Dusk2Dawn here(readEEPROM(10,true), readEEPROM(12,true), (float(readEEPROM(14,true))-100)/4); //lat, long, GMT offset
+  int todRise = here.sunrise(y,m,d,isDST(y,m,d));
+  if(inputLastTODMins < todRise){ //now is before today's rise
+    if(which){ //show next event: today's rise
+      evtIsRise = 1; evtTime = todRise;
+    } else { //show prev event: yesterday's set
+      if(d!=1) d--;
+      else {
+        if(m!=1) { m--; d=daysInMonth(y,m); }
+        else { y--; m=12; d=31; }
+      }
+      evtIsRise = 0; evtTime = here.sunset(y,m,d,isDST(y,m,d));
+    }
+  } else { //now is after today's rise
+    int todSet = here.sunset(y,m,d,isDST(y,m,d));
+    if(inputLastTODMins < todSet){ //now is before today's set
+      if(which){ //show next event: today's set
+        evtIsRise = 0; evtTime = todSet;
+      } else { //show prev event: today's rise
+        evtIsRise = 1; evtTime = todRise;
+      }
+    } else { //now is after today's set
+      if(which){ //show next event: tomorrow's rise
+        if(d<daysInMonth(y,m)) d++;
+        else {
+          if(m<12) { m++; d=1; }
+          else { y++; m=1; d=1; }
+        }
+        evtIsRise = 1; evtTime = here.sunrise(y,m,d,isDST(y,m,d));
+      } else { //show prev event: today's set
+        evtIsRise = 0; evtTime = todSet;
+      }
+    }
+  }
+  char hr = evtTime/60;
+  if(readEEPROM(16,false)==1) hr = (hr==0?12:(hr>12?hr-12:hr)); //12/24h per settings
+  editDisplay(hr, 0, 1, readEEPROM(19,false), true); //leading zero per settings
+  editDisplay(evtTime%60, 2, 3, true, true);
+  editDisplay(evtIsRise, 4, 4, false, true);
+  blankDisplay(5, 5, true);
 }
 
 void displayWeather(char which){
