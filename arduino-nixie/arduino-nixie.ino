@@ -7,7 +7,7 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/v8c-6tube-top.h"
+#include "configs/v8c-6tube.h"
 
 #include "song.h"
 
@@ -30,8 +30,9 @@
 
 /*EEPROM locations for non-volatile clock settings
 Don't change which location is associated with which setting; they should remain permanent to avoid the need for EEPROM initializations after code upgrades; and they are used directly in code.
-Most values in the clock are 1-byte; if 2-byte, high byte is loc, low byte is loc+1.
-In updateDisplay(), special setting formats are deduced from the option max value (max 1439 is a time of day, max 56 is a UTC offset, etc)
+Setting values are char (1-byte unsigned, 0 to 255) or int (2-byte signed, -32768 to 32767) where high byte is loc and low byte is loc+1.
+In updateDisplay(), special setting formats are deduced from the option max value (max 1439 is a time of day, max 156 is a UTC offset, etc)
+and whether a value is an int or char is deduced from whether the max value > 255.
 
 These ones are set outside the options menu (defaults defined in initEEPROM()):
   0-1 Alarm time, mins
@@ -85,12 +86,12 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //Options menu numbers (displayed in UI and readme), EEPROM locations, and default/min/max values.
 //Option numbers/order can be changed (though try to avoid for user convenience);
 //but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
-//                       General                    Alarm        Timer     Strike    Night and away mode              Lat   Long  UTC±
+//                       General                    Alarm        Timer     Strike    Night and away mode              Lat   Long  UTC±*
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52};
 const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14};
 const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020,     0,    0,  0};
-const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0, -1800,-1800,-48};
-const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439,  1800, 1800, 56};
+const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0, -1800,-1800, 52};
+const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439,  1800, 1800,156};
 
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
@@ -168,6 +169,18 @@ void setup(){
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   findFnAndPageNumbers(); //initial values
   initOutputs(); //depends on some EEPROM settings
+  
+  //Sunrise/sunset test
+  Serial.print(F("Last of Feb in leap year: ")); suntest(2020,2,29);
+  Serial.print(F("First of March in leap year: ")); suntest(2020,3,1);
+  Serial.print(F("Last of Feb in non-leap year: ")); suntest(2021,2,28);
+  Serial.print(F("First of March in non-leap year: ")); suntest(2021,3,1);
+  Serial.print(F("Last of year: ")); suntest(2020,12,31);
+  Serial.print(F("First of year: ")); suntest(2021,1,1);
+  Serial.print(F("Day before DST: ")); suntest(2020,3,7);
+  Serial.print(F("Day after DST: ")); suntest(2020,3,8);
+  Serial.print(F("Summer solstice: ")); suntest(2020,6,21);
+  Serial.print(F("Winter solstice: ")); suntest(2020,12,21);
 }
 
 unsigned long pollCleanLast = 0; //every cleanSpeed ms
@@ -591,48 +604,54 @@ void initEEPROM(bool hard){
   for(byte fni=0; fni<sizeof(fnsEnabled); fni++) { if(fnsEnabled[fni]==readEEPROM(7,false)) { foundAltFn = true; break; }}
   if(hard || !foundAltFn) writeEEPROM(7,0,false); //Alt function preset – make sure it is not set to a function that isn't enabled in this clock  
   //then the options menu defaults
-  bool isWord = false;
+  bool isInt = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
-    isWord = (optsMax[opt]>255?true:false); //TODO shouldn't this be optsMax
-    if(hard || readEEPROM(optsLoc[opt],isWord)<optsMin[opt] || readEEPROM(optsLoc[opt],isWord)>optsMax[opt])
-      writeEEPROM(optsLoc[opt],optsDef[opt],isWord);
+    isInt = (optsMax[opt]>255?true:false); //TODO shouldn't this be optsMax
+    if(hard || readEEPROM(optsLoc[opt],isInt)<optsMin[opt] || readEEPROM(optsLoc[opt],isInt)>optsMax[opt])
+      writeEEPROM(optsLoc[opt],optsDef[opt],isInt);
   } //end for
 } //end initEEPROM()
-word readEEPROM(int loc, bool isWord){
-  if(isWord) {
-    //TODO why was it done this way
-    //word w = (EEPROM.read(loc)<<8)+EEPROM.read(loc+1); return w; //word / unsigned int, 0-65535
+int readEEPROM(int loc, bool isInt){
+  if(isInt) {
+    // if(loc==[value under test]) {
+    //   Serial.print(F("EEPROM read 2 bytes:"));
+    //   Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val ")); Serial.print(EEPROM.read(loc),DEC);
+    //   Serial.print(F(" loc ")); Serial.print(loc+1,DEC); Serial.print(F(" val ")); Serial.print(EEPROM.read(loc+1),DEC);
+    //   Serial.print(F(" sum ")); Serial.print((EEPROM.read(loc)<<8)+EEPROM.read(loc+1)); Serial.println();
+    // }
     return (EEPROM.read(loc)<<8)+EEPROM.read(loc+1);
   } else {
-    //byte b = EEPROM.read(loc); return b; //byte, 0-255
+    // if(loc==[value under test]) {
+    //   Serial.print(F("EEPROM read 1 byte:"));
+    //   Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val ")); Serial.print(EEPROM.read(loc),DEC); Serial.println();
+    // }
     return EEPROM.read(loc);
   }
 }
 void writeEEPROM(int loc, int val, bool is2Byte){
   if(is2Byte) {
-    Serial.print(F("EEPROM write 2 bytes (")); Serial.print(val,DEC); Serial.print(F("):"));
-    Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val "));
-    if(EEPROM.read(loc)!=highByte(val)) { Serial.print(highByte(val),DEC); } else { Serial.print(F("no change")); } Serial.print(F(";"));
+    // Serial.print(F("EEPROM write 2 bytes (")); Serial.print(val,DEC); Serial.print(F("):"));
+    // Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val "));
+    // if(EEPROM.read(loc)!=highByte(val)) { Serial.print(highByte(val),DEC); } else { Serial.print(F("no change")); } Serial.print(F(";"));
+    // Serial.print(F(" loc ")); Serial.print(loc+1,DEC); Serial.print(F(" val "));
+    // if(EEPROM.read(loc+1)!=lowByte(val)) { Serial.println(lowByte(val),DEC); } else { Serial.println(F("no change")); }
     EEPROM.update(loc,highByte(val));
-    Serial.print(F(" loc ")); Serial.print(loc+1,DEC); Serial.print(F(" val "));
-    if(EEPROM.read(loc+1)!=lowByte(val)) { Serial.println(lowByte(val),DEC); } else { Serial.println(F("no change")); }
     EEPROM.update(loc+1,lowByte(val));
   } else {
-    Serial.print(F("EEPROM write byte (")); Serial.print(val,DEC); Serial.print(F("):"));
-    Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val "));
-    if(EEPROM.read(loc)!=val) { Serial.println(val,DEC); } else { Serial.println(F("no change")); }
+    // Serial.print(F("EEPROM write byte (")); Serial.print(val,DEC); Serial.print(F("):"));
+    // Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val "));
+    // if(EEPROM.read(loc)!=val) { Serial.println(val,DEC); } else { Serial.println(F("no change")); }
     EEPROM.update(loc,val);
   }
-  //Serial.println();
 }
 
 void findFnAndPageNumbers(){
   //Each function, and each page in a paged function, has a number. //TODO should pull from EEPROM 8
   fnDatePages = 1; //date function always has a page for the date itself
   if(true){ fnDatePages++; fnDateCounter=fnDatePages-1; }
-  if(false){ fnDatePages++; fnDateSunlast=fnDatePages-1; }
+  if(true){ fnDatePages++; fnDateSunlast=fnDatePages-1; }
   if(false){ fnDatePages++; fnDateWeathernow=fnDatePages-1; }
-  if(false){ fnDatePages++; fnDateSunnext=fnDatePages-1; }
+  if(true){ fnDatePages++; fnDateSunnext=fnDatePages-1; }
   if(false){ fnDatePages++; fnDateWeathernext=fnDatePages-1; }
 }
 byte daysInMonth(word y, byte m){
@@ -807,7 +826,8 @@ void checkRTC(bool force){
     
     //Finally, update the display, whether natural tick or not, as long as we're not setting or on a scrolled display (unless forced eg. fn change)
     //This also determines night/away mode, which is why strikes will happen if we go into off at top of hour, and not when we come into on at the top of the hour TODO find a way to fix this
-    if(fnSetPg==0 && (scrollRemain==0 || force)) updateDisplay();
+    //Also skip updating the display if this is date and not being forced, since its pages take some calculating that cause it to flicker
+    if(fnSetPg==0 && (scrollRemain==0 || force) && !(fn==fnIsDate && !force)) updateDisplay();
     
     rtcSecLast = tod.second();
     
@@ -817,7 +837,7 @@ void checkRTC(bool force){
 void autoDST(){
   //Call daily when clock reaches 2am, and at first run.
   bool dstNow = isDST(tod.year(),tod.month(),tod.day());
-  if(dstNow!==dstOn){ ds3231.setHour(dstNow>dstOn? 3: 1); dstOn = dstNow; writeEEPROM(15,dstOn,false); }
+  if(dstNow!=dstOn){ ds3231.setHour(dstNow>dstOn? 3: 1); dstOn = dstNow; writeEEPROM(15,dstOn,false); }
 }
 bool isDST(int y, char m, char d){
   //returns whether DST is in effect on this date (after 2am shift)
@@ -865,6 +885,7 @@ void switchAlarm(char dir){
           alarmOn=0; writeEEPROM(2,alarmOn,false); if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(64), 100); }}}} //C6
     updateDisplay();
   }
+  //TODO don't make alarm permanent until leaving setting to minimize writes to eeprom as user cycles through options?
 }
 void switchPower(char dir){
   signalRemain = 0; snoozeRemain = 0; //in case alarm is going now - alternatively use signalStop()?
@@ -964,9 +985,11 @@ void updateDisplay(){
     } else if(fnSetValMax==88) { //A piezo pitch. Play a short demo beep.
       editDisplay(fnSetVal, 0, 3, false, false);
       if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(fnSetVal), 100); } //One exception to using signalStart since we need to specify pitch directly
-    } else if(fnSetValMax==56) { //Timezone offset from UTC in quarter hours
-      editDisplay((abs(fnSetVal)*25)/100, 0, 1, fnSetVal<0, false); //hours, leading zero for negatives
-      editDisplay((abs(fnSetVal)%4)*15, 2, 3, true, false); //minutes, leading zero always
+    } else if(fnSetValMax==156) { //Timezone offset from UTC in quarter hours plus 100 (since we're not set up to support signed bytes)
+      editDisplay((abs(fnSetVal-100)*25)/100, 0, 1, fnSetVal<100, false); //hours, leading zero for negatives
+      editDisplay((abs(fnSetVal-100)%4)*15, 2, 3, true, false); //minutes, leading zero always
+    } else if(fnSetValMax==1800) { //Lat/long: display on slightly different tubes on 4- vs 6-tube clocks
+      editDisplay(abs(fnSetVal), 0, (displaySize>4? 4: 3), fnSetVal<0, false);
     } else editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0, false); //some other type of value - leading zeros for negatives
   }
   else if(fn >= fnOpts){ //options menu, but not setting a value
@@ -1025,9 +1048,10 @@ void updateDisplay(){
           //TODO for now don't indicate negative. Elsewhere we use leading zeros to represent negative but I don't like how that looks here
           blankDisplay(4,5,true);
         }
-        else if(fnPg==fnDateSunlast) displaySun(0);
+        //The sun and weather displays are based on a snapshot of the time of day when the function display was triggered, just in case it's triggered a few seconds before a sun event (sunrise/sunset) and the "prev/now" and "next" displays fall on either side of that event, they'll both display data from before it. If triggered just before midnight, the date could change as well – not such an issue for sun, but might be for weather - TODO create date snapshot also
+        else if(fnPg==fnDateSunlast) displaySun(0,tod.year(),tod.month(),tod.day(),inputLastTODMins);
         else if(fnPg==fnDateWeathernow) displayWeather(0);
-        else if(fnPg==fnDateSunnext) displaySun(1);
+        else if(fnPg==fnDateSunnext) displaySun(1,tod.year(),tod.month(),tod.day(),inputLastTODMins);
         else if(fnPg==fnDateWeathernext) displayWeather(1);
         break; //end fnIsDate
       //fnIsDayCount removed in favor of paginated calendar
@@ -1099,14 +1123,14 @@ void updateDisplay(){
        
 } //end updateDisplay()
 
-void displaySun(char which){
+void displaySun(char which, int y, int m, int d, int tod){
   //which==0: display last sun event: yesterday's sunset, today's sunrise, or today's sunset
   //which==1: display next sun event: today's sunrise, today's sunset, or tomorrow's sunrise
   //TODO here.sunrise and here.sunset are unreliable if event is around 2am on DST change day
-  int y = tod.year(); int m = tod.month(); int d = tod.day(); int evtTime = 0; bool evtIsRise = 0;
-  Dusk2Dawn here(readEEPROM(10,true), readEEPROM(12,true), (float(readEEPROM(14,true))-100)/4); //lat, long, GMT offset
+  int evtTime = 0; bool evtIsRise = 0;
+  Dusk2Dawn here(readEEPROM(10,true)/10, readEEPROM(12,true)/10, (float(readEEPROM(14,false))-100)/4); //lat, long, GMT offset (non-DST)
   int todRise = here.sunrise(y,m,d,isDST(y,m,d));
-  if(inputLastTODMins < todRise){ //now is before today's rise
+  if(tod < todRise){ //now is before today's rise
     if(which){ //show next event: today's rise
       evtIsRise = 1; evtTime = todRise;
     } else { //show prev event: yesterday's set
@@ -1119,7 +1143,7 @@ void displaySun(char which){
     }
   } else { //now is after today's rise
     int todSet = here.sunset(y,m,d,isDST(y,m,d));
-    if(inputLastTODMins < todSet){ //now is before today's set
+    if(tod < todSet){ //now is before today's set
       if(which){ //show next event: today's set
         evtIsRise = 0; evtTime = todSet;
       } else { //show prev event: today's rise
@@ -1138,12 +1162,56 @@ void displaySun(char which){
       }
     }
   }
-  char hr = evtTime/60;
-  if(readEEPROM(16,false)==1) hr = (hr==0?12:(hr>12?hr-12:hr)); //12/24h per settings
-  editDisplay(hr, 0, 1, readEEPROM(19,false), true); //leading zero per settings
-  editDisplay(evtTime%60, 2, 3, true, true);
+  if(evtTime<0){ //event won't happen? super north or south maybe
+    blankDisplay(0,3,true);
+  } else {
+    char hr = evtTime/60;
+    if(readEEPROM(16,false)==1) hr = (hr==0?12:(hr>12?hr-12:hr)); //12/24h per settings
+    editDisplay(hr, 0, 1, readEEPROM(19,false), true); //leading zero per settings
+    editDisplay(evtTime%60, 2, 3, true, true);
+  }
   editDisplay(evtIsRise, 4, 4, false, true);
   blankDisplay(5, 5, true);
+  //Serial for testing
+  if(tod/60<10) Serial.print(F("0"));
+  Serial.print(tod/60,DEC);
+  Serial.print(F(":"));
+  if(tod%60<10) Serial.print(F("0"));
+  Serial.print(tod%60,DEC);
+  Serial.print(which? F(" Next: "): F(" Last: "));
+  Serial.print(evtIsRise? F("Rise "): F("Set  "));
+  Serial.print(y,DEC);
+  Serial.print(F("-"));
+  if(m<10) Serial.print(F("0"));
+  Serial.print(m,DEC);
+  Serial.print(F("-"));
+  if(d<10) Serial.print(F("0"));
+  Serial.print(d,DEC);
+  Serial.print(F(" "));
+  if(evtTime<0){
+    Serial.print(F("None"));
+  } else {
+    if(evtTime/60<10) Serial.print(F("0"));
+    Serial.print(evtTime/60,DEC);
+    Serial.print(F(":"));
+    if(evtTime%60<10) Serial.print(F("0"));
+    Serial.print(evtTime%60,DEC);
+  }
+  Serial.println();
+}
+void suntest(int y, int m, int d){
+  //See also test criteria in setup()
+  Serial.print(y,DEC);
+  Serial.print(F("-"));
+  if(m<10) Serial.print(F("0"));
+  Serial.print(m,DEC);
+  Serial.print(F("-"));
+  if(d<10) Serial.print(F("0"));
+  Serial.print(d,DEC);
+  Serial.println();
+  displaySun(0,y,m,d, 2*60); displaySun(1,y,m,d, 2*60);
+  displaySun(0,y,m,d,12*60); displaySun(1,y,m,d,12*60);
+  displaySun(0,y,m,d,22*60); displaySun(1,y,m,d,22*60);
 }
 
 void displayWeather(char which){
@@ -1287,7 +1355,7 @@ void cycleDisplay(){
   
     if(dim) delay(dimDur);
   } //end if displayDim>0
-  
+  //TODO why does it sometimes flicker while in the setting mode
 } //end cycleDisplay()
 
 void setCathodes(byte decValA, byte decValB){
