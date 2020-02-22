@@ -169,18 +169,6 @@ void setup(){
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   findFnAndPageNumbers(); //initial values
   initOutputs(); //depends on some EEPROM settings
-  
-  //Sunrise/sunset test
-  Serial.print(F("Last of Feb in leap year: ")); suntest(2020,2,29);
-  Serial.print(F("First of March in leap year: ")); suntest(2020,3,1);
-  Serial.print(F("Last of Feb in non-leap year: ")); suntest(2021,2,28);
-  Serial.print(F("First of March in non-leap year: ")); suntest(2021,3,1);
-  Serial.print(F("Last of year: ")); suntest(2020,12,31);
-  Serial.print(F("First of year: ")); suntest(2021,1,1);
-  Serial.print(F("Day before DST: ")); suntest(2020,3,7);
-  Serial.print(F("Day after DST: ")); suntest(2020,3,8);
-  Serial.print(F("Summer solstice: ")); suntest(2020,6,21);
-  Serial.print(F("Winter solstice: ")); suntest(2020,12,21);
 }
 
 unsigned long pollCleanLast = 0; //every cleanSpeed ms
@@ -191,6 +179,7 @@ void loop(){
   if(cleanRemain && (unsigned long)(now-pollCleanLast)>=cleanSpeed) { //account for rollover
     pollCleanLast=now;
     cleanRemain--;
+    if(cleanRemain<1) calcSun(tod.year(),tod.month(),tod.day()); //take this opportunity to perform a calculation that blanks the display for a bit
     updateDisplay();
   }
   //If we're scrolling an animation, advance it every scrollSpeed ms.
@@ -412,6 +401,8 @@ void ctrlEvt(byte ctrl, byte evt){
               ds3231.setHour(fnSetVal/60);
               ds3231.setMinute(fnSetVal%60);
               ds3231.setSecond(0);
+              calcSun(tod.year(),tod.month(),tod.day());
+              isDSTByHour(tod.year(),tod.month(),tod.day(),fnSetVal/60,true);
               clearSet(); break;
             case fnIsDate: //depends what page we're on
               if(fnPg==0){ //regular date display: save in RTC
@@ -429,6 +420,8 @@ void ctrlEvt(byte ctrl, byte evt){
                     ds3231.setMonth(fnSetValDate[1]);
                     ds3231.setDate(fnSetVal);
                     ds3231.setDoW(dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal)+1); //ds3231 weekday is 1-index
+                    calcSun(fnSetValDate[0],fnSetValDate[1],fnSetVal);
+                    isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,tod.hour(),true);
                     clearSet(); break;
                   default: break;
                 }
@@ -835,8 +828,9 @@ void checkRTC(bool force){
 } //end checkRTC()
 
 void autoDST(){
+  //Change the clock if the current DST differs from the dstOn flag.
   //Call daily when clock reaches 2am, and at first run.
-  bool dstNow = isDST(tod.year(),tod.month(),tod.day());
+  bool dstNow = isDSTByHour(tod.year(),tod.month(),tod.day(),tod.hour(),false);
   if(dstNow!=dstOn){ ds3231.setHour(dstNow>dstOn? 3: 1); dstOn = dstNow; writeEEPROM(15,dstOn,false); }
 }
 bool isDST(int y, char m, char d){
@@ -857,6 +851,18 @@ bool isDST(int y, char m, char d){
     default: break;
   }
   return 0;
+}
+bool isDSTByHour(int y, char m, char d, char h, bool setFlag){
+  //Takes isDST() one step further by comparing to the previous day and considering the hour
+  bool dstNow = isDST(y,m,d);
+  d--; if(d<1){ m--; if(m<1){ y--; m=12; } d=daysInMonth(y,m); }
+  if(dstNow!=isDST(y,m,d) && h<2) dstNow=!dstNow;
+  if(setFlag){
+    dstOn = dstNow;
+    writeEEPROM(15,dstOn,false);
+    //Serial.print(F("DST is ")); Serial.println(dstOn?F("on"):F("off"));
+  }
+  return dstNow;
 }
 char nthSunday(int y, char m, char nth){
   if(nth>0) return (((7-dayOfWeek(y,m,1))%7)+1+((nth-1)*7));
@@ -1049,9 +1055,9 @@ void updateDisplay(){
           blankDisplay(4,5,true);
         }
         //The sun and weather displays are based on a snapshot of the time of day when the function display was triggered, just in case it's triggered a few seconds before a sun event (sunrise/sunset) and the "prev/now" and "next" displays fall on either side of that event, they'll both display data from before it. If triggered just before midnight, the date could change as well – not such an issue for sun, but might be for weather - TODO create date snapshot also
-        else if(fnPg==fnDateSunlast) displaySun(0,tod.year(),tod.month(),tod.day(),inputLastTODMins);
+        else if(fnPg==fnDateSunlast) displaySun(0,tod.day(),inputLastTODMins);
         else if(fnPg==fnDateWeathernow) displayWeather(0);
-        else if(fnPg==fnDateSunnext) displaySun(1,tod.year(),tod.month(),tod.day(),inputLastTODMins);
+        else if(fnPg==fnDateSunnext) displaySun(1,tod.day(),inputLastTODMins);
         else if(fnPg==fnDateWeathernext) displayWeather(1);
         break; //end fnIsDate
       //fnIsDayCount removed in favor of paginated calendar
@@ -1099,7 +1105,7 @@ void updateDisplay(){
     }//end switch
   } //end if fn running
   
-  if(false) { //DEBUG MODE: when display's not working, just write it to the console, with time
+  if(false) { //DEBUG MODE: when display's not working, just write it to the console, with time. TODO create dummy display handler
     if(tod.hour()<10) Serial.print(F("0"));
     Serial.print(tod.hour(),DEC);
     Serial.print(F(":"));
@@ -1123,46 +1129,72 @@ void updateDisplay(){
        
 } //end updateDisplay()
 
-void displaySun(char which, int y, int m, int d, int tod){
-  //which==0: display last sun event: yesterday's sunset, today's sunrise, or today's sunset
-  //which==1: display next sun event: today's sunrise, today's sunset, or tomorrow's sunrise
-  //TODO here.sunrise and here.sunset are unreliable if event is around 2am on DST change day
+//A snapshot of sun times, in minutes past midnight, calculated at clean time and when the date or time is changed.
+//Need to capture this many, as we could be displaying these values at least through end of tomorrow depending on when cleaning happens.
+
+char sunDate = 0; //date of month when calculated ("today")
+int sunSet0  = -1; //yesterday's set
+int sunRise1 = -1; //today rise
+int sunSet1  = -1; //today set
+int sunRise2 = -1; //tomorrow rise
+int sunSet2  = -1; //tomorrow set
+int sunRise3 = -1; //day after tomorrow rise
+void calcSun(int y, char m, char d){
+  //Calculates sun times and stores them in the values above
+  blankDisplay(0,5,false); //immediately blank display so we can fade in from it elegantly
+  Dusk2Dawn here(readEEPROM(10,true)/10, readEEPROM(12,true)/10, (float(readEEPROM(14,false))-100)/4);
+  //Today
+  sunDate = d;
+  sunRise1 = here.sunrise(y,m,d,isDST(y,m,d)); //TODO: unreliable if event is before time change on DST change day. Optionally if isDSTChangeDay() and event is <2h de-correct for it - maybe modify the library to do this - as when 2h overlaps in fall, we don't know whether the output has been precorrected.
+  sunSet1  = here.sunset(y,m,d,isDST(y,m,d));
+  // serialPrintDate(y,m,d);
+  // Serial.print(F("  Rise ")); serialPrintTime(sunRise1);
+  // Serial.print(F("  Set ")); serialPrintTime(sunSet1); Serial.println();
+  //Yesterday
+  d--; if(d<1){ m--; if(m<1){ y--; m=12; } d=daysInMonth(y,m); }
+  sunSet0  = here.sunset(y,m,d,isDST(y,m,d));
+  // serialPrintDate(y,m,d);
+  // Serial.print(F("            "));
+  // Serial.print(F("  Set ")); serialPrintTime(sunSet0); Serial.println();
+  //Tomorrow
+  d+=2; if(d>daysInMonth(y,m)){ d-=daysInMonth(y,m); m++; if(m>12){ m=1; y++; }}
+  sunRise2 = here.sunrise(y,m,d,isDST(y,m,d));
+  sunSet2  = here.sunset(y,m,d,isDST(y,m,d));
+  // serialPrintDate(y,m,d);
+  // Serial.print(F("  Rise ")); serialPrintTime(sunRise2);
+  // Serial.print(F("  Set ")); serialPrintTime(sunSet2); Serial.println();
+  //Day after tomorrow
+  d++; if(d>daysInMonth(y,m)){ d=1; m++; if(m>12){ m=1; y++; }}
+  sunRise3 = here.sunrise(y,m,d,isDST(y,m,d));
+  // serialPrintDate(y,m,d);
+  // Serial.print(F("  Rise ")); serialPrintTime(sunRise3); Serial.println();
+}
+void serialPrintDate(int y, char m, char d){
+  Serial.print(y,DEC); Serial.print(F("-"));
+  if(m<10) Serial.print(F("0")); Serial.print(m,DEC); Serial.print(F("-"));
+  if(d<10) Serial.print(F("0")); Serial.print(d,DEC);
+}
+void serialPrintTime(int todMins){
+  if(todMins/60<10) Serial.print(F("0")); Serial.print(todMins/60,DEC); Serial.print(F(":"));
+  if(todMins%60<10) Serial.print(F("0")); Serial.print(todMins%60,DEC);
+}
+
+void displaySun(char which, int d, int tod){
+  //Displays sun times from previously calculated values
+  //Old code to calculate sun at display time, with test serial output, is in commit 163ca33
   int evtTime = 0; bool evtIsRise = 0;
-  Dusk2Dawn here(readEEPROM(10,true)/10, readEEPROM(12,true)/10, (float(readEEPROM(14,false))-100)/4); //lat, long, GMT offset (non-DST)
-  int todRise = here.sunrise(y,m,d,isDST(y,m,d));
-  if(tod < todRise){ //now is before today's rise
-    if(which){ //show next event: today's rise
-      evtIsRise = 1; evtTime = todRise;
-    } else { //show prev event: yesterday's set
-      if(d!=1) d--;
-      else {
-        if(m!=1) { m--; d=daysInMonth(y,m); }
-        else { y--; m=12; d=31; }
-      }
-      evtIsRise = 0; evtTime = here.sunset(y,m,d,isDST(y,m,d));
-    }
-  } else { //now is after today's rise
-    int todSet = here.sunset(y,m,d,isDST(y,m,d));
-    if(tod < todSet){ //now is before today's set
-      if(which){ //show next event: today's set
-        evtIsRise = 0; evtTime = todSet;
-      } else { //show prev event: today's rise
-        evtIsRise = 1; evtTime = todRise;
-      }
-    } else { //now is after today's set
-      if(which){ //show next event: tomorrow's rise
-        if(d<daysInMonth(y,m)) d++;
-        else {
-          if(m<12) { m++; d=1; }
-          else { y++; m=1; d=1; }
-        }
-        evtIsRise = 1; evtTime = here.sunrise(y,m,d,isDST(y,m,d));
-      } else { //show prev event: today's set
-        evtIsRise = 0; evtTime = todSet;
-      }
-    }
+  if(d==sunDate){ //displaying same day as calc
+    if(tod<sunRise1)    { evtIsRise = (which?0:1); evtTime = (which?sunSet0:sunRise1); }
+    else if(tod<sunSet1){ evtIsRise = (which?1:0); evtTime = (which?sunRise1:sunSet1); }
+    else                { evtIsRise = (which?0:1); evtTime = (which?sunSet1:sunRise2); }
   }
-  if(evtTime<0){ //event won't happen? super north or south maybe
+  else if(d==sunDate+1 || d==1){ //displaying day after calc (or month rollover)
+    if(tod<sunRise2)    { evtIsRise = (which?0:1); evtTime = (which?sunSet1:sunRise2); }
+    else if(tod<sunSet2){ evtIsRise = (which?1:0); evtTime = (which?sunRise2:sunSet2); }
+    else                { evtIsRise = (which?0:1); evtTime = (which?sunSet2:sunRise3); }
+  }
+  else { evtIsRise = 0; evtTime = -1; } //date error
+  if(evtTime<0){ //event won't happen? super north or south maybe TODO test this. In this case weather will need arbitrary dawn/dusk times
     blankDisplay(0,3,true);
   } else {
     char hr = evtTime/60;
@@ -1172,46 +1204,6 @@ void displaySun(char which, int y, int m, int d, int tod){
   }
   editDisplay(evtIsRise, 4, 4, false, true);
   blankDisplay(5, 5, true);
-  //Serial for testing
-  if(tod/60<10) Serial.print(F("0"));
-  Serial.print(tod/60,DEC);
-  Serial.print(F(":"));
-  if(tod%60<10) Serial.print(F("0"));
-  Serial.print(tod%60,DEC);
-  Serial.print(which? F(" Next: "): F(" Last: "));
-  Serial.print(evtIsRise? F("Rise "): F("Set  "));
-  Serial.print(y,DEC);
-  Serial.print(F("-"));
-  if(m<10) Serial.print(F("0"));
-  Serial.print(m,DEC);
-  Serial.print(F("-"));
-  if(d<10) Serial.print(F("0"));
-  Serial.print(d,DEC);
-  Serial.print(F(" "));
-  if(evtTime<0){
-    Serial.print(F("None"));
-  } else {
-    if(evtTime/60<10) Serial.print(F("0"));
-    Serial.print(evtTime/60,DEC);
-    Serial.print(F(":"));
-    if(evtTime%60<10) Serial.print(F("0"));
-    Serial.print(evtTime%60,DEC);
-  }
-  Serial.println();
-}
-void suntest(int y, int m, int d){
-  //See also test criteria in setup()
-  Serial.print(y,DEC);
-  Serial.print(F("-"));
-  if(m<10) Serial.print(F("0"));
-  Serial.print(m,DEC);
-  Serial.print(F("-"));
-  if(d<10) Serial.print(F("0"));
-  Serial.print(d,DEC);
-  Serial.println();
-  displaySun(0,y,m,d, 2*60); displaySun(1,y,m,d, 2*60);
-  displaySun(0,y,m,d,12*60); displaySun(1,y,m,d,12*60);
-  displaySun(0,y,m,d,22*60); displaySun(1,y,m,d,22*60);
 }
 
 void displayWeather(char which){
