@@ -33,11 +33,13 @@ Don't change which location is associated with which setting; they should remain
 Setting values are char (1-byte unsigned, 0 to 255) or int (2-byte signed, -32768 to 32767) where high byte is loc and low byte is loc+1.
 In updateDisplay(), special setting formats are deduced from the option max value (max 1439 is a time of day, max 156 is a UTC offset, etc)
 and whether a value is an int or char is deduced from whether the max value > 255.
+TODO consider having volatile values for all these things, using EEPROM just to recover after a power loss - so any degradation of EEPROM would not be noticeable during running. This can be integrated into a storage module accommodating flash memory in the Arduino IoT
 
 These ones are set outside the options menu (defaults defined in initEEPROM()):
   0-1 Alarm time, mins
   2 Alarm on (mirrors volatile var)
-  3-4 Day count year TODO free up
+  3 [free]
+  4 Day count direction
   5 Day count month
   6 Day count date
   7 Function preset (done by Alt when not power-switching)
@@ -46,17 +48,17 @@ These ones are set outside the options menu (defaults defined in initEEPROM()):
     const unsigned int FN_DAYCOUNT = 1<<1; //2
     const unsigned int FN_SUN = 1<<2; //4
     const unsigned int FN_WEATHER = 1<<3; //8
-  9 Day count orientation (count down, count up) TODO
-  10-11 Latitude
-  12-13 Longitude
-  14 UTC offset in quarter-hours plus 100 - range is 52 (-12h or -48qh, US Minor Outlying Islands) to 156 (+14h or +56qh, Kiribati)
+  9 [free]
   15 DST on (mirrors volatile var)
 
 These ones are set inside the options menu (defaults defined in arrays below).
 Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
+  10-11 Latitude
+  12-13 Longitude
+  14 UTC offset in quarter-hours plus 100 - range is 52 (-12h or -48qh, US Minor Outlying Islands) to 156 (+14h or +56qh, Kiribati)
   16 Time format
   17 Date format 
-  18 Display date during time TODO only the one page
+  18 Display date during time
   19 Leading zero in hour, date, and month
   20 Digit fade duration
   21 Strike - skipped when no piezo and relay is switch (start=0)
@@ -89,7 +91,7 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //                       General                    Alarm        Timer     Strike    Night and away mode              Lat   Long  UTC±*
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52};
 const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14};
-const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020,     0,    0,  0};
+const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020,     0,    0,100};
 const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0, -1800,-1800, 52};
 const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439,  1800, 1800,156};
 
@@ -327,8 +329,8 @@ void ctrlEvt(byte ctrl, byte evt){
           case fnIsDate: //depends what page we're on
             if(fnPg==0){ //regular date display: set year
               fnSetValDate[1]=tod.month(), fnSetValDate[2]=tod.day(); startSet(tod.year(),0,9999,1);
-            } else if(fnPg==fnDateCounter){ //set year like date, but from eeprom like startOpt
-              startSet(readEEPROM(3,true),2000,9999,1);
+            } else if(fnPg==fnDateCounter){ //month, date, direction
+              startSet(readEEPROM(5,false),1,12,1);
             } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
               //TODO
             } else if(fnPg==fnDateWeathernow || fnDateWeathernext){ //temperature units??
@@ -359,7 +361,6 @@ void ctrlEvt(byte ctrl, byte evt){
         }
       }
       else if(altSel>0 && ctrl==altSel) { //alt sel press
-        //TODO switch I2C radio
         //if switched relay, and soft switch enabled, we'll switch power.
         if(enableSoftPowerSwitch && relayPin>=0 && relayMode==0) { switchPower(0); btnStop(); }
         //Otherwise, this becomes our function preset.
@@ -375,10 +376,14 @@ void ctrlEvt(byte ctrl, byte evt){
               quickBeep(); //beep 2
             }
           }
-          //On short release, toggle between fnIsTime and the preset fn.
+          //On short release, jump to the preset fn.
           else if(evt==0) {
             btnStop();
-            if(fn==readEEPROM(7,false)) fn=fnIsTime; else fn=readEEPROM(7,false);
+            if(fn!=readEEPROM(7,false)) fn=readEEPROM(7,false);
+            else {
+              //Special case: if this is the alarm and it's on, toggle the skip state
+              if(fn==fnIsAlarm && alarmOn) switchAlarm(alarmSkip);
+            }
             fnPg = 0; //reset page counter in case we were in a paged display
             updateDisplay();
           }
@@ -427,16 +432,17 @@ void ctrlEvt(byte ctrl, byte evt){
                 }
               } else if(fnPg==fnDateCounter){ //set like date, save in eeprom like finishOpt
                 switch(fnSetPg){
-                  case 1: //save year, set month
-                    delay(300); //blink display to indicate save. Safe b/c we've btnStopped. See below for why
-                    writeEEPROM(3,fnSetVal,true);
-                    startSet(readEEPROM(5,false),1,12,2); break;
-                  case 2: //save month, set date
-                    delay(300); //blink display to indicate save. Needed if set month == date: without blink, nothing changes.
+                  case 1: //save month, set date
+                    delay(300); //blink display to indicate save. Safe b/c we've btnStopped.
+                    //Needed if set month == date: without blink, nothing changes. Also just good feedback.
                     writeEEPROM(5,fnSetVal,false);
-                    startSet(readEEPROM(6,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
-                  case 3: //save date
+                    startSet(readEEPROM(6,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),2); break;
+                  case 2: //save date, set direction
+                    delay(300);
                     writeEEPROM(6,fnSetVal,false);
+                    startSet(readEEPROM(4,false),0,1,3); break;
+                  case 3: //save date
+                    writeEEPROM(4,fnSetVal,false);
                     clearSet(); break;
                   default: break;
                 }
@@ -481,6 +487,9 @@ void ctrlEvt(byte ctrl, byte evt){
       //if we were setting a value, writes setting val to EEPROM if needed
       if(fnSetPg) writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
       fn = fnIsTime;
+      //we may have changed lat/long/GMT/DST settings so recalc those
+      calcSun(tod.year(),tod.month(),tod.day());
+      isDSTByHour(tod.year(),tod.month(),tod.day(),tod.hour(),true);
       clearSet();
       return;
     }
@@ -586,20 +595,22 @@ void initEEPROM(bool hard){
     ds3231.setMinute(0);
     ds3231.setSecond(0);
   }
-  //Set the default values that aren't part of the options menu
-  //only on hard init, or if the set value is outside of range
-  if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //alarm at 7am
-  if(hard){ alarmOn = !enableSoftAlarmSwitch; writeEEPROM(2,alarmOn,false); } //alarm is off, or on if no software switch
-  if(hard || readEEPROM(3,true)<2018) writeEEPROM(3,2018,true); //day counter target: 2018...
-  if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) writeEEPROM(5,1,false); //...January...
-  if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) writeEEPROM(6,1,false); //...first.
+  if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //0-1: alarm at 7am
+  if(hard){ alarmOn = !enableSoftAlarmSwitch; writeEEPROM(2,alarmOn,false); } //2: alarm is off, or on if no software switch
+  //3 is free
+  if(hard || readEEPROM(4,false)<0 || readEEPROM(4,false)>1) writeEEPROM(4,1,false); //4: day counter direction: count up...
+  if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) writeEEPROM(5,12,false); //5: ...December...
+  if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) writeEEPROM(6,31,false); //6: ...31st. (This gives the day of the year)
   bool foundAltFn = false;
   for(byte fni=0; fni<sizeof(fnsEnabled); fni++) { if(fnsEnabled[fni]==readEEPROM(7,false)) { foundAltFn = true; break; }}
-  if(hard || !foundAltFn) writeEEPROM(7,0,false); //Alt function preset – make sure it is not set to a function that isn't enabled in this clock  
+  if(hard || !foundAltFn) writeEEPROM(7,0,false); //7: Alt function preset – make sure it is not set to a function that isn't enabled in this clock
+  //8: TODO functions/pages enabled (bitmask)
+  //9: free
+  //15: DST on flag (will be set at first RTC check)
   //then the options menu defaults
   bool isInt = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
-    isInt = (optsMax[opt]>255?true:false); //TODO shouldn't this be optsMax
+    isInt = (optsMax[opt]>255?true:false);
     if(hard || readEEPROM(optsLoc[opt],isInt)<optsMin[opt] || readEEPROM(optsLoc[opt],isInt)>optsMax[opt])
       writeEEPROM(optsLoc[opt],optsDef[opt],isInt);
   } //end for
@@ -646,32 +657,6 @@ void findFnAndPageNumbers(){
   if(false){ fnDatePages++; fnDateWeathernow=fnDatePages-1; }
   if(true){ fnDatePages++; fnDateSunnext=fnDatePages-1; }
   if(false){ fnDatePages++; fnDateWeathernext=fnDatePages-1; }
-}
-byte daysInMonth(word y, byte m){
-  if(m==2) return (y%4==0 && (y%100!=0 || y%400==0) ? 29 : 28);
-  //https://cmcenroe.me/2014/12/05/days-in-month-formula.html
-  else return (28 + ((m + (m/8)) % 2) + (2 % m) + (2 * (1/m)));
-}
-//The following are for use with the Day Counter feature - find number of days between now and target date
-//I don't know how reliable the unixtime() is from RTClib past 2038, plus there might be timezone complications
-//so we'll just calculate the number of days since 2000-01-01
-long dateToDayCount(word y, byte m, byte d){
-  long dc = (y-2000)*365; //365 days for every full year since 2000
-  word i; for(i=0; i<y-2000; i++) if(i%4==0 && (i%100!=0 || i%400==0)) dc++; //+1 for every feb 29th in those years
-  for(i=1; i<m; i++) dc += daysInMonth(y,i); //add every full month since start of this year
-  dc += d-1; //every full day since start of this month
-  return dc;
-}
-byte dayOfWeek(word y, byte m, byte d){
-  //DS3231 doesn't really calculate the day of the week, it just keeps a counter.
-  //When setting date, we'll calculate per https://en.wikipedia.org/wiki/Zeller%27s_congruence
-  byte yb = y%100; //2-digit year
-  byte ya = y/100; //century
-  //For this formula, Jan and Feb are considered months 11 and 12 of the previous year.
-  //So if it's Jan or Feb, add 10 to the month, and set back the year and century if applicable
-  if(m<3) { m+=10; if(yb==0) { yb=99; ya-=1; } else yb-=1; }
-  else m -= 2; //otherwise subtract 2 from the month
-  return (d + ((13*m-1)/5) + yb + (yb/4) + (ya/4) + 5*ya) %7;
 }
 
 
@@ -869,6 +854,52 @@ char nthSunday(int y, char m, char nth){
   if(nth<0) return (dayOfWeek(y,m,1)==0 && daysInMonth(y,m)>28? 29: nthSunday(y,m,1)+21+((nth+1)*7));
   return 0;
 }
+byte daysInMonth(word y, byte m){
+  if(m==2) return (y%4==0 && (y%100!=0 || y%400==0) ? 29 : 28);
+  //https://cmcenroe.me/2014/12/05/days-in-month-formula.html
+  else return (28 + ((m + (m/8)) % 2) + (2 % m) + (2 * (1/m)));
+}
+int daysInYear(word y){
+  return 337 + daysInMonth(y,2);
+}
+int dateToDayCount(word y, byte m, byte d){
+  int dc = 0;
+  for(byte i=1; i<m; i++) dc += daysInMonth(y,i); //add every full month since start of this year
+  dc += d-1; //every full day since start of this month
+  return dc;
+}
+byte dayOfWeek(word y, byte m, byte d){
+  //DS3231 doesn't really calculate the day of the week, it just keeps a counter.
+  //When setting date, we'll calculate per https://en.wikipedia.org/wiki/Zeller%27s_congruence
+  byte yb = y%100; //2-digit year
+  byte ya = y/100; //century
+  //For this formula, Jan and Feb are considered months 11 and 12 of the previous year.
+  //So if it's Jan or Feb, add 10 to the month, and set back the year and century if applicable
+  if(m<3) { m+=10; if(yb==0) { yb=99; ya-=1; } else yb-=1; }
+  else m -= 2; //otherwise subtract 2 from the month
+  return (d + ((13*m-1)/5) + yb + (yb/4) + (ya/4) + 5*ya) %7;
+}
+int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp){
+  //If m+d is later   { if count up from, use last year, else use this year }: in Feb, count up from last Mar or down to this Mar
+  //If m+d is earlier { if count down to, use next year, else use this year }: in Feb, count down to next Jan or up from this Jan
+  bool targetDir = mt*100+dt>=m*100+d+(countUp&&!(mt==12&&dt==31)?1:0); //if count up from 12/31 (day of year), show 365/366 instead of 0
+  int targetYear = (countUp && targetDir? y-1: (!countUp && !targetDir? y+1: y));
+  int targetDayCount; targetDayCount = dateToDayCount(targetYear, mt, dt);
+  if(targetYear<y) targetDayCount -= daysInYear(targetYear);
+  if(targetYear>y) targetDayCount += daysInYear(y);
+  long currentDayCount; currentDayCount = dateToDayCount(y,m,d);
+  return abs(targetDir? currentDayCount-targetDayCount: targetDayCount-currentDayCount);
+  //For now, this does not indicate negative (eg with leading zeros bc I don't like how it looks here)
+  //and since the direction is specified, it's always going to be either negative or positive
+  // Serial.print("Today is ");
+  // serialPrintDate(y,m,d);
+  // Serial.print(" and ");
+  // serialPrintDate(targetYear,mt,dt);
+  // Serial.print(" is ");
+  // Serial.print(abs(targetDir? currentDayCount-targetDayCount: targetDayCount-currentDayCount),DEC);
+  // Serial.print(" day(s) ");
+  // Serial.println(countUp?"ago":"away");
+}
 
 void switchAlarm(char dir){
   if(enableSoftAlarmSwitch){
@@ -1044,14 +1075,7 @@ void updateDisplay(){
           }
         }
         else if(fnPg==fnDateCounter){
-          long targetDayCount; targetDayCount = dateToDayCount(
-            readEEPROM(3,true),
-            readEEPROM(5,false),
-            readEEPROM(6,false)
-          );
-          long currentDayCount; currentDayCount = dateToDayCount(tod.year(),tod.month(),tod.day());
-          editDisplay(abs(targetDayCount-currentDayCount),0,3,false,true);
-          //TODO for now don't indicate negative. Elsewhere we use leading zeros to represent negative but I don't like how that looks here
+          editDisplay(dateComp(tod.year(),tod.month(),tod.day(),readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)),0,3,false,true);
           blankDisplay(4,5,true);
         }
         //The sun and weather displays are based on a snapshot of the time of day when the function display was triggered, just in case it's triggered a few seconds before a sun event (sunrise/sunset) and the "prev/now" and "next" displays fall on either side of that event, they'll both display data from before it. If triggered just before midnight, the date could change as well – not such an issue for sun, but might be for weather - TODO create date snapshot also
@@ -1182,16 +1206,24 @@ void serialPrintTime(int todMins){
 void displaySun(char which, int d, int tod){
   //Displays sun times from previously calculated values
   //Old code to calculate sun at display time, with test serial output, is in commit 163ca33
+  //which is 0=prev, 1=next
   int evtTime = 0; bool evtIsRise = 0;
+  serialPrintTime(tod);
   if(d==sunDate){ //displaying same day as calc
-    if(tod<sunRise1)    { evtIsRise = (which?0:1); evtTime = (which?sunSet0:sunRise1); }
-    else if(tod<sunSet1){ evtIsRise = (which?1:0); evtTime = (which?sunRise1:sunSet1); }
-    else                { evtIsRise = (which?0:1); evtTime = (which?sunSet1:sunRise2); }
+    //before sunrise: prev is calcday-1 sunset, next is calcday sunrise
+    //daytime:        prev is calcday sunrise,  next is calcday sunset
+    //after sunset:   prev is calcday sunset,   next is calcday+1 sunrise
+    if(tod<sunRise1)     { evtIsRise = which;  evtTime = (!which?sunSet0:sunRise1); Serial.print(F(" A ")); serialPrintTime(evtTime); Serial.println(); }
+    else if(tod<sunSet1) { evtIsRise = !which; evtTime = (!which?sunRise1:sunSet1); Serial.print(F(" B ")); serialPrintTime(evtTime); Serial.println(); }
+    else                 { evtIsRise = which;  evtTime = (!which?sunSet1:sunRise2); Serial.print(F(" C ")); serialPrintTime(evtTime); Serial.println(); }
   }
-  else if(d==sunDate+1 || d==1){ //displaying day after calc (or month rollover)
-    if(tod<sunRise2)    { evtIsRise = (which?0:1); evtTime = (which?sunSet1:sunRise2); }
-    else if(tod<sunSet2){ evtIsRise = (which?1:0); evtTime = (which?sunRise2:sunSet2); }
-    else                { evtIsRise = (which?0:1); evtTime = (which?sunSet2:sunRise3); }
+  else if(d==sunDate+1 || d==1){ //if there's been a midnight since the last calc – displaying day after calc (or month rollover)
+    //before sunrise: prev is calcday sunset,    next is calcday+1 sunrise
+    //daytime:        prev is calcday+1 sunrise, next is calcday+1 sunset
+    //after sunset:   prev is calcday+1 sunset,  next is calcday+2 sunrise
+    if(tod<sunRise2)     { evtIsRise = which;  evtTime = (!which?sunSet1:sunRise2); Serial.print(F(" D ")); serialPrintTime(evtTime); Serial.println(); }
+    else if(tod<sunSet2) { evtIsRise = !which; evtTime = (!which?sunRise2:sunSet2); Serial.print(F(" E ")); serialPrintTime(evtTime); Serial.println(); }
+    else                 { evtIsRise = which;  evtTime = (!which?sunSet2:sunRise3); Serial.print(F(" F ")); serialPrintTime(evtTime); Serial.println(); }
   }
   else { evtIsRise = 0; evtTime = -1; } //date error
   if(evtTime<0){ //event won't happen? super north or south maybe TODO test this. In this case weather will need arbitrary dawn/dusk times
@@ -1202,8 +1234,8 @@ void displaySun(char which, int d, int tod){
     editDisplay(hr, 0, 1, readEEPROM(19,false), true); //leading zero per settings
     editDisplay(evtTime%60, 2, 3, true, true);
   }
-  editDisplay(evtIsRise, 4, 4, false, true);
-  blankDisplay(5, 5, true);
+  blankDisplay(4, 4, true);
+  editDisplay(evtIsRise, 5, 5, false, true);
 }
 
 void displayWeather(char which){
