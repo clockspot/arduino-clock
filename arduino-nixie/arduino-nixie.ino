@@ -9,21 +9,12 @@
 
 #include "configs/v8c-6tube.h"
 
-#include "song.h"
-
-// Song woody(0); //declare a Song object called woody
-//
-// void setup(){
-//   woody.play();
-// }
-//
-// void loop(){
-//   woody.check(false);
-// }
-
+////////// Software version //////////
+const byte vMajor = 1;
+const byte vMinor = 6;
+const byte vPatch = 0;
 
 ////////// Other includes, global consts, and vars //////////
-#include "version.h"
 #include <Wire.h> //Arduino - GNU LPGL
 #include <EEPROM.h> //Arduino - GNU LPGL
 #include <DS3231.h> //NorthernWidget - The Unlicense
