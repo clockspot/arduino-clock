@@ -1214,7 +1214,6 @@ void displaySun(char which, int d, int tod){
   //Old code to calculate sun at display time, with test serial output, is in commit 163ca33
   //which is 0=prev, 1=next
   int evtTime = 0; bool evtIsRise = 0;
-  serialPrintTime(tod);
   if(d==sunDate){ //displaying same day as calc
     //before sunrise: prev is calcday-1 sunset, next is calcday sunrise
     //daytime:        prev is calcday sunrise,  next is calcday sunset

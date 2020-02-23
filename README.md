@@ -62,7 +62,7 @@ If your clock is equipped with an **Alt** button, it will do one of two things (
 
 * In most cases, the **Alt** button works as a function preset, similar to a preset button in a car radio. While viewing the function you want quick access to, hold **Alt** until it beeps twice; then you can use **Alt** to jump straight to that function. It works best for Alarm or Timer.
 
-  * TIP: If used with Alarm, the **Alt** button will also toggle the “skip” state – so to skip or unskip the next alarm, you only need to press the **Alt** button twice: once to show it, and once to change it.
+  * TIP: If used with Alarm, the **Alt** button will also toggle the skip mode – so to skip or unskip the next alarm, you only need to press the **Alt** button twice: once to display it, and once to change it.
 
 * If your clock has a switched relay with soft power switch enabled, the **Alt** button switches the relay on and off – great for using the clock as an appliance timer.
 
