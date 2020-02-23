@@ -1,4 +1,4 @@
-//Unmodified UNDB v8 with LED and relay disabled, and buttons as labeled, with 6-digit display.
+//UNDB v8 modified to v9 spec (put Sel/Alt on A7/A6, Up/Down on A0/A1, relay on A3, led on 9, and cathode B4 on A2), relay disabled, Sel/Alt buttons reversed, with 6-digit display.
 
 const byte displaySize = 6; //number of tubes in display module. Small display adjustments are made for 4-tube clocks
 
@@ -24,13 +24,13 @@ const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer}; //, fnIsTe
 // A6-A7 are analog-only pins that aren't quite as responsive and require a physical pullup resistor (1K to +5V), and can't be used with rotary encoders because they don't support pin change interrupts.
 
 // What input is associated with each control?
-const byte mainSel = A1; //main select button - must be equipped
-const byte mainAdjUp = A2; //main up/down buttons or rotary encoder - must be equipped
-const byte mainAdjDn = A3;
-const byte altSel = A0; //alt select button - if unequipped, set to 0
+const byte mainSel = A7;
+const byte mainAdjUp = A0;
+const byte mainAdjDn = A1;
+const byte altSel = A6; //if not equipped, set to 0
 
 // What type of adj controls are equipped?
-// 1 = momentary buttons. 2 = quadrature rotary encoder.
+// 1 = momentary buttons. 2 = quadrature rotary encoder (not currently supported).
 const byte mainAdjType = 1;
 
 //What are the signal pin(s) connected to?
@@ -53,9 +53,9 @@ const byte enableSoftPowerSwitch = 1; //works with switched relay only
 // 1 = yes. Relay can be switched on and off directly with Alt button at any time (except in options menu). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
 // 0 = no. Use if the connected appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched. In this case (and/or if there is no switched relay) Alt will act as a function preset.
 
-//LED circuit control
-const char ledPin = -1;
-// -1 to disable feature; A2 if equipped (UNDB v8)
+//LED circuit control with PWM
+const char ledPin = 9;
+// -1 to disable feature; 11 if equipped (UNDB v8 modded)
 
 //When display is dim/off, a press will light the tubes for how long?
 const byte unoffDur = 10; //sec
@@ -86,7 +86,7 @@ const char outA4 = 5;
 const char outB1 = 6;
 const char outB2 = 7;
 const char outB3 = 8;
-const char outB4 = 9;
+const char outB4 = 16; //A2 - was 9 before PWM fix pt2
 //3 pins out to anode channel switches
 const char anode1 = 11;
 const char anode2 = 12;

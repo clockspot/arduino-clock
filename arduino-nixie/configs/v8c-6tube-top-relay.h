@@ -1,4 +1,4 @@
-//UNDB v8 modified to v9 spec (put Sel/Alt on A7/A6, Up/Down on A0/A1, relay on A3, led on 9, and cathode B4 on A2), relay disabled, Sel/Alt buttons reversed, with 6-digit display.
+//UNDB v8 modified to v9 spec (put Sel/Alt on A7/A6, Up/Down on A0/A1, relay on A3, led on 9, and cathode B4 on A2), relay enabled, Sel/Alt buttons reversed, with 6-digit display.
 
 const byte displaySize = 6; //number of tubes in display module. Small display adjustments are made for 4-tube clocks
 
@@ -7,11 +7,10 @@ const byte fnIsTime = 0;
 const byte fnIsDate = 1;
 const byte fnIsAlarm = 2;
 const byte fnIsTimer = 3;
-const byte fnIsDayCount = 4;
-const byte fnIsTemp = 5;
-const byte fnIsTubeTester = 6; //cycles all digits on all tubes 1/second, similar to anti-cathode-poisoning cleaner
+const byte fnIsTemp = 4;
+const byte fnIsTubeTester = 5; //cycles all digits on all tubes 1/second, similar to anti-cathode-poisoning cleaner
 // functions enabled in this clock, in their display order. Only fnIsTime is required
-const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCount}; //, fnIsTemp, fnIsTubeTester
+const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer}; //, fnIsTemp, fnIsTubeTester
 // To control which of these display persistently vs. switch back to Time after a few seconds, search "Temporary-display mode timeout"
 
 // These are the RLB board connections to Arduino analog input pins.
@@ -36,7 +35,7 @@ const byte mainAdjType = 1;
 
 //What are the signal pin(s) connected to?
 const char piezoPin = 10;
-const char relayPin = -1;
+const char relayPin = A3;
 // -1 to disable feature (no relay item equipped); A3 if equipped (UNDB v8)
 const byte relayMode = 0; //If relay is equipped, what does it do?
 // 0 = switched mode: the relay will be switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in switchDur.

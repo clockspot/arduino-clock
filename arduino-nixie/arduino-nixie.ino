@@ -7,7 +7,7 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/v8c-6tube-relayswitch-pwm-top.h"
+#include "configs/v8c-6tube.h"
 
 #include "song.h"
 
@@ -23,25 +23,40 @@
 
 
 ////////// Other includes, global consts, and vars //////////
+#include "version.h"
+#include <Wire.h> //Arduino - GNU LPGL
 #include <EEPROM.h> //Arduino - GNU LPGL
-#include <DS3231.h> //Arduino - GNU LPGL
-#include <Wire.h> //NorthernWidget - The Unlicense
+#include <DS3231.h> //NorthernWidget - The Unlicense
+#include <Dusk2Dawn.h> //TODO not needed unless whatever
 
 /*EEPROM locations for non-volatile clock settings
 Don't change which location is associated with which setting; they should remain permanent to avoid the need for EEPROM initializations after code upgrades; and they are used directly in code.
-Most values in the clock are 1-byte; if 2-byte, high byte is loc, low byte is loc+1.
+Setting values are char (1-byte unsigned, 0 to 255) or int (2-byte signed, -32768 to 32767) where high byte is loc and low byte is loc+1.
+In updateDisplay(), special setting formats are deduced from the option max value (max 1439 is a time of day, max 156 is a UTC offset, etc)
+and whether a value is an int or char is deduced from whether the max value > 255.
+TODO consider having volatile values for all these things, using EEPROM just to recover after a power loss - so any degradation of EEPROM would not be noticeable during running. This can be integrated into a storage module accommodating flash memory in the Arduino IoT
 
 These ones are set outside the options menu (defaults defined in initEEPROM()):
   0-1 Alarm time, mins
-  2 Alarm on
-  3-4 Day count year
+  2 Alarm on (mirrors volatile var)
+  3 [free]
+  4 Day count direction
   5 Day count month
   6 Day count date
   7 Function preset (done by Alt when not power-switching)
-( 8-15 are available )
+  8 Functions/pages enabled (bitmask, dynamic) TODO
+    const unsigned int FN_TIMER = 1<<0; //1
+    const unsigned int FN_DAYCOUNT = 1<<1; //2
+    const unsigned int FN_SUN = 1<<2; //4
+    const unsigned int FN_WEATHER = 1<<3; //8
+  9 [free]
+  15 DST on (mirrors volatile var)
 
 These ones are set inside the options menu (defaults defined in arrays below).
 Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
+  10-11 Latitude
+  12-13 Longitude
+  14 UTC offset in quarter-hours plus 100 - range is 52 (-12h or -48qh, US Minor Outlying Islands) to 156 (+14h or +56qh, Kiribati)
   16 Time format
   17 Date format 
   18 Display date during time
@@ -74,12 +89,12 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //Options menu numbers (displayed in UI and readme), EEPROM locations, and default/min/max values.
 //Option numbers/order can be changed (though try to avoid for user convenience);
 //but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
-//                       General                    Alarm        Timer     Strike    Night and away mode
-const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47};
-const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37};
-const word optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020};
-const word optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0};
-const word optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439};
+//                       General                    Alarm        Timer     Strike    Night and away mode              Lat   Long  UTC±*
+const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52};
+const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14};
+const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020,     0,    0,100};
+const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0, -1800,-1800, 52};
+const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439,  1800, 1800,156};
 
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
@@ -93,17 +108,30 @@ byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long
 unsigned long inputLast = 0; //When a button was last pressed
 unsigned long inputLast2 = 0; //Second-to-last of above
 //TODO the math between these two may fail very rarely due to millis() rolling over while setting. Need to find a fix. I think it only applies to the rotary encoder though.
+int inputLastTODMins = 0; //time of day, in minutes past midnight, when button was pressed. Used in paginated functions so they all reflect the same TOD.
 
 const byte fnOpts = 201; //fn values from here to 255 correspond to options in the options menu
 byte fn = fnIsTime; //currently displayed fn (per fnsEnabled)
+byte fnPg = 0; //allows a function to have multiple pages
 byte fnSetPg = 0; //whether this function is currently being set, and which option/page it's on
-word fnSetVal; //the value currently being set, if any - unsigned int 0-65535
-word fnSetValMin; //min possible - unsigned int
-word fnSetValMax; //max possible - unsigned int
+ int fnSetVal; //the value currently being set, if any
+ int fnSetValMin; //min possible
+ int fnSetValMax; //max possible
 bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
-word fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
+ int fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
+
+//the calendar function page numbers, depending on which ones are enabled. See findFnAndPageNumbers
+byte fnDatePages = 1;
+byte fnDateCounter = 255;
+byte fnDateSunlast = 255;
+byte fnDateWeathernow = 255;
+byte fnDateSunnext = 255;
+byte fnDateWeathernext = 255;
 
 // Volatile running values used throughout the code. (Others are defined right above the method that uses them)
+bool dstOn = 0; //this is stored in EEPROM too, but only for correction after power loss – this var hedges against EEPROM failure in normal use
+bool alarmOn = 0; //this is stored in EEPROM too, but only for power loss recovery – this var hedges against EEPROM failure in normal use
+bool alarmSkip = 0;
 byte signalSource = 0;
 word signalRemain = 0; //alarm/timer signal timeout counter, seconds
 word snoozeRemain = 0; //snooze timeout counter, seconds
@@ -112,8 +140,9 @@ word timerRemain = 0; //timer actual counter
 unsigned long signalPulseStartTime = 0; //to keep track of individual pulses so we can stop them
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night or away modes) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
-byte cleanRemain = 11; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
+byte cleanRemain = 0; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
 char scrollRemain = 0; //"frames" of scroll – 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change
+byte versionRemain = 3; //display version at start
 
 
 ////////// Main code control //////////
@@ -138,8 +167,11 @@ void setup(){
     writeEEPROM(21,0,false); //turn off strike
     writeEEPROM(25,0,false); //turn off timer interval mode
   }
-  if(!enableSoftAlarmSwitch) writeEEPROM(2,1,false); //force alarm on if software switch is disabled
+  if(!enableSoftAlarmSwitch) alarmOn = 1; //force alarm on if software switch is disabled
+  else alarmOn = (readEEPROM(2,false)>0); //otherwise set alarm per EEPROM backup
+  dstOn = (readEEPROM(15,false)>0); //set last known DST state per EEPROM backup
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
+  findFnAndPageNumbers(); //initial values
   initOutputs(); //depends on some EEPROM settings
 }
 
@@ -151,6 +183,7 @@ void loop(){
   if(cleanRemain && (unsigned long)(now-pollCleanLast)>=cleanSpeed) { //account for rollover
     pollCleanLast=now;
     cleanRemain--;
+    if(cleanRemain<1) calcSun(tod.year(),tod.month(),tod.day()); //take this opportunity to perform a calculation that blanks the display for a bit
     updateDisplay();
   }
   //If we're scrolling an animation, advance it every scrollSpeed ms.
@@ -205,7 +238,7 @@ void checkBtn(byte btn){
   unsigned long now = millis();
   //If the button has just been pressed, and no other buttons are in use...
   if(btnCur==0 && bnow==LOW) {
-    btnCur = btn; btnCurHeld = 0; inputLast2 = inputLast; inputLast = now;
+    btnCur = btn; btnCurHeld = 0; inputLast2 = inputLast; inputLast = now; inputLastTODMins = tod.hour()*60+tod.minute();
     ctrlEvt(btn,1); //hey, the button has been pressed
   }
   //If the button is being held...
@@ -245,7 +278,7 @@ void ctrlEvt(byte ctrl, byte evt){
   //evt: 1=press, 2=short hold, 3=long hold, 0=release.
   //We only handle press evts for adj ctrls, as that's the only evt encoders generate.
   //But we can handle short and long holds and releases for the sel ctrls (always buttons).
-  
+
   //Before all else, is it a press to stop the signal? Silence it
   if(signalRemain>0 && evt==1){
     stoppingSignal = true;
@@ -295,15 +328,22 @@ void ctrlEvt(byte ctrl, byte evt){
         switch(fn){
           case fnIsTime: //set mins
             startSet((tod.hour()*60)+tod.minute(),0,1439,1); break;
-          case fnIsDate: //set year
-            fnSetValDate[1]=tod.month(), fnSetValDate[2]=tod.day(); startSet(tod.year(),0,9999,1); break;
+          case fnIsDate: //depends what page we're on
+            if(fnPg==0){ //regular date display: set year
+              fnSetValDate[1]=tod.month(), fnSetValDate[2]=tod.day(); startSet(tod.year(),0,9999,1);
+            } else if(fnPg==fnDateCounter){ //month, date, direction
+              startSet(readEEPROM(5,false),1,12,1);
+            } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
+              //TODO
+            } else if(fnPg==fnDateWeathernow || fnDateWeathernext){ //temperature units??
+              //TODO
+            } break;
           case fnIsAlarm: //set mins
             startSet(readEEPROM(0,true),0,1439,1); break;
           case fnIsTimer: //set mins, up to 18 hours (64,800 seconds - fits just inside a word)
             if(timerRemain>0) { timerRemain = 0; btnStop(); updateDisplay(); break; } //If the timer is running, zero it out.
             startSet(timerInitial/60,0,1080,1); break;
-          case fnIsDayCount: //set year like date, but from eeprom like startOpt
-            startSet(readEEPROM(3,true),2000,9999,1); break;
+          //fnIsDayCount removed in favor of paginated calendar
           case fnIsTemp: //could do calibration here if so inclined
           case fnIsTubeTester:
           default: break;
@@ -314,6 +354,7 @@ void ctrlEvt(byte ctrl, byte evt){
         //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
         if(ctrl==mainSel){
           fnScroll(1); //Go to next fn in the cycle
+          fnPg = 0; //reset page counter in case we were in a paged display
           checkRTC(true); //updates display
         }
         else if(ctrl==mainAdjUp || ctrl==mainAdjDn) {
@@ -322,7 +363,6 @@ void ctrlEvt(byte ctrl, byte evt){
         }
       }
       else if(altSel>0 && ctrl==altSel) { //alt sel press
-        //TODO switch I2C radio
         //if switched relay, and soft switch enabled, we'll switch power.
         if(enableSoftPowerSwitch && relayPin>=0 && relayMode==0) { switchPower(0); btnStop(); }
         //Otherwise, this becomes our function preset.
@@ -338,10 +378,15 @@ void ctrlEvt(byte ctrl, byte evt){
               quickBeep(); //beep 2
             }
           }
-          //On short release, toggle between fnIsTime and the preset fn.
+          //On short release, jump to the preset fn.
           else if(evt==0) {
             btnStop();
-            if(fn==readEEPROM(7,false)) fn=fnIsTime; else fn=readEEPROM(7,false);
+            if(fn!=readEEPROM(7,false)) fn=readEEPROM(7,false);
+            else {
+              //Special case: if this is the alarm and it's on, toggle the skip state
+              if(fn==fnIsAlarm && alarmOn) switchAlarm(alarmSkip);
+            }
+            fnPg = 0; //reset page counter in case we were in a paged display
             updateDisplay();
           }
         }
@@ -363,25 +408,52 @@ void ctrlEvt(byte ctrl, byte evt){
               ds3231.setHour(fnSetVal/60);
               ds3231.setMinute(fnSetVal%60);
               ds3231.setSecond(0);
+              calcSun(tod.year(),tod.month(),tod.day());
+              isDSTByHour(tod.year(),tod.month(),tod.day(),fnSetVal/60,true);
               clearSet(); break;
-            case fnIsDate: //save in RTC
-              switch(fnSetPg){
-                case 1: //save year, set month
-                  delay(300); //blink display to indicate save. Safe b/c we've btnStopped. See below for why
-                  fnSetValDate[0]=fnSetVal;
-                  startSet(fnSetValDate[1],1,12,2); break; 
-                case 2: //save month, set date
-                  delay(300); //blink display to indicate save. Needed if set month == date: without blink, nothing changes.
-                  fnSetValDate[1]=fnSetVal;
-                  startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
-                case 3: //write year/month/date to RTC
-                  ds3231.setYear(fnSetValDate[0]%100); //TODO: do we store century on our end? Per ds3231 docs, "The century bit (bit 7 of the month register) is toggled when the years register overflows from 99 to 00."
-                  ds3231.setMonth(fnSetValDate[1]);
-                  ds3231.setDate(fnSetVal);
-                  ds3231.setDoW(dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal)+1); //ds3231 weekday is 1-index
-                  clearSet(); break;
-                default: break;
-              } break;
+            case fnIsDate: //depends what page we're on
+              if(fnPg==0){ //regular date display: save in RTC
+                switch(fnSetPg){
+                  case 1: //save year, set month
+                    delay(300); //blink display to indicate save. Safe b/c we've btnStopped. See below for why
+                    fnSetValDate[0]=fnSetVal;
+                    startSet(fnSetValDate[1],1,12,2); break; 
+                  case 2: //save month, set date
+                    delay(300); //blink display to indicate save. Needed if set month == date: without blink, nothing changes.
+                    fnSetValDate[1]=fnSetVal;
+                    startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
+                  case 3: //write year/month/date to RTC
+                    ds3231.setYear(fnSetValDate[0]%100); //TODO: do we store century on our end? Per ds3231 docs, "The century bit (bit 7 of the month register) is toggled when the years register overflows from 99 to 00."
+                    ds3231.setMonth(fnSetValDate[1]);
+                    ds3231.setDate(fnSetVal);
+                    ds3231.setDoW(dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal)+1); //ds3231 weekday is 1-index
+                    calcSun(fnSetValDate[0],fnSetValDate[1],fnSetVal);
+                    isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,tod.hour(),true);
+                    clearSet(); break;
+                  default: break;
+                }
+              } else if(fnPg==fnDateCounter){ //set like date, save in eeprom like finishOpt
+                switch(fnSetPg){
+                  case 1: //save month, set date
+                    delay(300); //blink display to indicate save. Safe b/c we've btnStopped.
+                    //Needed if set month == date: without blink, nothing changes. Also just good feedback.
+                    writeEEPROM(5,fnSetVal,false);
+                    startSet(readEEPROM(6,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),2); break;
+                  case 2: //save date, set direction
+                    delay(300);
+                    writeEEPROM(6,fnSetVal,false);
+                    startSet(readEEPROM(4,false),0,1,3); break;
+                  case 3: //save date
+                    writeEEPROM(4,fnSetVal,false);
+                    clearSet(); break;
+                  default: break;
+                }
+              } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
+                //TODO
+              } else if(fnPg==fnDateWeathernow || fnPg==fnDateWeathernext){ //temperature units??
+                //TODO
+              }
+              break;
             case fnIsAlarm:
               writeEEPROM(0,fnSetVal,true);
               clearSet(); break;
@@ -395,22 +467,7 @@ void ctrlEvt(byte ctrl, byte evt){
                 //TODO will this cancel properly? especially if alarm interrupts?
               }
               clearSet(); break;
-            case fnIsDayCount: //set like date, save in eeprom like finishOpt
-              switch(fnSetPg){
-                case 1: //save year, set month
-                  delay(300); //blink display to indicate save. Safe b/c we've btnStopped. See below for why
-                  writeEEPROM(3,fnSetVal,true);
-                  startSet(readEEPROM(5,false),1,12,2); break;
-                case 2: //save month, set date
-                  delay(300); //blink display to indicate save. Needed if set month == date: without blink, nothing changes.
-                  writeEEPROM(5,fnSetVal,false);
-                  startSet(readEEPROM(6,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
-                case 3: //save date
-                  writeEEPROM(6,fnSetVal,false);
-                  clearSet(); break;
-                default: break;
-              } break;
-              break;
+            //fnIsDayCount removed in favor of paginated calendar
             case fnIsTemp:
               break;
             default: break;
@@ -432,6 +489,9 @@ void ctrlEvt(byte ctrl, byte evt){
       //if we were setting a value, writes setting val to EEPROM if needed
       if(fnSetPg) writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
       fn = fnIsTime;
+      //we may have changed lat/long/GMT/DST settings so recalc those
+      calcSun(tod.year(),tod.month(),tod.day());
+      isDSTByHour(tod.year(),tod.month(),tod.day(),tod.hour(),true);
       clearSet();
       return;
     }
@@ -489,7 +549,7 @@ void fnOptScroll(char dir){
   }
 }
 
-void startSet(word n, word m, word x, byte p){ //Enter set state at page p, and start setting a value
+void startSet(int n, int m, int x, byte p){ //Enter set state at page p, and start setting a value
   fnSetVal=n; fnSetValMin=m; fnSetValMax=x; fnSetValVel=(x-m>30?1:0); fnSetPg=p;
   updateDisplay();
 }
@@ -537,77 +597,68 @@ void initEEPROM(bool hard){
     ds3231.setMinute(0);
     ds3231.setSecond(0);
   }
-  //Set the default values that aren't part of the options menu
-  //only on hard init, or if the set value is outside of range
-  if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //alarm at 7am
-  if(hard || readEEPROM(2,false)>1) writeEEPROM(2,enableSoftAlarmSwitch==0?1:0,false); //alarm is off, or on if no software switch
-  if(hard || readEEPROM(3,true)<2018) writeEEPROM(3,2018,true); //day counter target: 2018...
-  if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) writeEEPROM(5,1,false); //...January...
-  if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) writeEEPROM(6,1,false); //...first.
+  if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //0-1: alarm at 7am
+  if(hard){ alarmOn = !enableSoftAlarmSwitch; writeEEPROM(2,alarmOn,false); } //2: alarm is off, or on if no software switch
+  //3 is free
+  if(hard || readEEPROM(4,false)<0 || readEEPROM(4,false)>1) writeEEPROM(4,1,false); //4: day counter direction: count up...
+  if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) writeEEPROM(5,12,false); //5: ...December...
+  if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) writeEEPROM(6,31,false); //6: ...31st. (This gives the day of the year)
   bool foundAltFn = false;
   for(byte fni=0; fni<sizeof(fnsEnabled); fni++) { if(fnsEnabled[fni]==readEEPROM(7,false)) { foundAltFn = true; break; }}
-  if(hard || !foundAltFn) writeEEPROM(7,0,false); //Alt function preset – make sure it is not set to a function that isn't enabled in this clock  
+  if(hard || !foundAltFn) writeEEPROM(7,0,false); //7: Alt function preset – make sure it is not set to a function that isn't enabled in this clock
+  //8: TODO functions/pages enabled (bitmask)
+  //9: free
+  //15: DST on flag (will be set at first RTC check)
   //then the options menu defaults
-  bool isWord = false;
+  bool isInt = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
-    isWord = (optsMax[opt]>255?true:false); //TODO shouldn't this be optsMax
-    if(hard || readEEPROM(optsLoc[opt],isWord)<optsMin[opt] || readEEPROM(optsLoc[opt],isWord)>optsMax[opt])
-      writeEEPROM(optsLoc[opt],optsDef[opt],isWord);
+    isInt = (optsMax[opt]>255?true:false);
+    if(hard || readEEPROM(optsLoc[opt],isInt)<optsMin[opt] || readEEPROM(optsLoc[opt],isInt)>optsMax[opt])
+      writeEEPROM(optsLoc[opt],optsDef[opt],isInt);
   } //end for
 } //end initEEPROM()
-word readEEPROM(int loc, bool isWord){
-  if(isWord) {
-    //TODO why was it done this way
-    //word w = (EEPROM.read(loc)<<8)+EEPROM.read(loc+1); return w; //word / unsigned int, 0-65535
+int readEEPROM(int loc, bool isInt){
+  if(isInt) {
+    // if(loc==[value under test]) {
+    //   Serial.print(F("EEPROM read 2 bytes:"));
+    //   Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val ")); Serial.print(EEPROM.read(loc),DEC);
+    //   Serial.print(F(" loc ")); Serial.print(loc+1,DEC); Serial.print(F(" val ")); Serial.print(EEPROM.read(loc+1),DEC);
+    //   Serial.print(F(" sum ")); Serial.print((EEPROM.read(loc)<<8)+EEPROM.read(loc+1)); Serial.println();
+    // }
     return (EEPROM.read(loc)<<8)+EEPROM.read(loc+1);
   } else {
-    //byte b = EEPROM.read(loc); return b; //byte, 0-255
+    // if(loc==[value under test]) {
+    //   Serial.print(F("EEPROM read 1 byte:"));
+    //   Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val ")); Serial.print(EEPROM.read(loc),DEC); Serial.println();
+    // }
     return EEPROM.read(loc);
   }
 }
-void writeEEPROM(int loc, int val, bool isWord){
-  if(isWord) {
-    // Serial.print(F("EEPROM write word:"));
+void writeEEPROM(int loc, int val, bool is2Byte){
+  if(is2Byte) {
+    // Serial.print(F("EEPROM write 2 bytes (")); Serial.print(val,DEC); Serial.print(F("):"));
     // Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val "));
-    // if(EEPROM.read(loc)!=highByte(val)) { Serial.print(highByte(val),DEC); } else { Serial.print(F("no change")); }
-    EEPROM.update(loc,highByte(val));
+    // if(EEPROM.read(loc)!=highByte(val)) { Serial.print(highByte(val),DEC); } else { Serial.print(F("no change")); } Serial.print(F(";"));
     // Serial.print(F(" loc ")); Serial.print(loc+1,DEC); Serial.print(F(" val "));
-    // if(EEPROM.read(loc+1)!=lowByte(val)) { Serial.print(lowByte(val),DEC); } else { Serial.print(F("no change")); }
+    // if(EEPROM.read(loc+1)!=lowByte(val)) { Serial.println(lowByte(val),DEC); } else { Serial.println(F("no change")); }
+    EEPROM.update(loc,highByte(val));
     EEPROM.update(loc+1,lowByte(val));
   } else {
-    // Serial.print(F("EEPROM write byte:"));
+    // Serial.print(F("EEPROM write byte (")); Serial.print(val,DEC); Serial.print(F("):"));
     // Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val "));
-    // if(EEPROM.read(loc)!=val) { Serial.print(val,DEC); } else { Serial.print(F("no change")); }
+    // if(EEPROM.read(loc)!=val) { Serial.println(val,DEC); } else { Serial.println(F("no change")); }
     EEPROM.update(loc,val);
   }
-  //Serial.println();
 }
 
-byte daysInMonth(word y, byte m){
-  if(m==2) return (y%4==0 && (y%100!=0 || y%400==0) ? 29 : 28);
-  //https://cmcenroe.me/2014/12/05/days-in-month-formula.html
-  else return (28 + ((m + (m/8)) % 2) + (2 % m) + (2 * (1/m)));
-}
-//The following are for use with the Day Counter feature - find number of days between now and target date
-//I don't know how reliable the unixtime() is from RTClib past 2038, plus there might be timezone complications
-//so we'll just calculate the number of days since 2000-01-01
-long dateToDayCount(word y, byte m, byte d){
-  long dc = (y-2000)*365; //365 days for every full year since 2000
-  word i; for(i=0; i<y-2000; i++) if(i%4==0 && (i%100!=0 || i%400==0)) dc++; //+1 for every feb 29th in those years
-  for(i=1; i<m; i++) dc += daysInMonth(y,i); //add every full month since start of this year
-  dc += d-1; //every full day since start of this month
-  return dc;
-}
-byte dayOfWeek(word y, byte m, byte d){
-  //DS3231 doesn't really calculate the day of the week, it just keeps a counter.
-  //When setting date, we'll calculate per https://en.wikipedia.org/wiki/Zeller%27s_congruence
-  byte yb = y%100; //2-digit year
-  byte ya = y/100; //century
-  //For this formula, Jan and Feb are considered months 11 and 12 of the previous year.
-  //So if it's Jan or Feb, add 10 to the month, and set back the year and century if applicable
-  if(m<3) { m+=10; if(yb==0) { yb=99; ya-=1; } else yb-=1; }
-  else m -= 2; //otherwise subtract 2 from the month
-  return (d + ((13*m-1)/5) + yb + (yb/4) + (ya/4) + 5*ya) %7;
+void findFnAndPageNumbers(){
+  //Each function, and each page in a paged function, has a number. //TODO should pull from EEPROM 8
+  fnDatePages = 1; //date function always has a page for the date itself
+  if(true){ fnDatePages++; fnDateCounter=fnDatePages-1; }
+  if(true){ fnDatePages++; fnDateSunlast=fnDatePages-1; }
+  if(false){ fnDatePages++; fnDateWeathernow=fnDatePages-1; }
+  if(true){ fnDatePages++; fnDateSunnext=fnDatePages-1; }
+  if(false){ fnDatePages++; fnDateWeathernext=fnDatePages-1; }
 }
 
 
@@ -625,8 +676,15 @@ void checkRTC(bool force){
   if(fnSetPg || fn>=fnOpts){
     if((unsigned long)(now-inputLast)>=timeoutSet*1000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
   }
-  //Temporary-display mode timeout: if we're *not* in a permanent one (time, Alt preset, or running/signaling timer)
-  else if(fn!=fnIsTime && fn!=readEEPROM(7,false) && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){
+  //Paged-display mode timeout //TODO change fnIsDate to consts? //TODO timeoutPageFn var
+  else if(fn==fnIsDate && (unsigned long)(now-inputLast)>=2500) {
+    //Here we just have to increment the page and decide when to reset. updateDisplay() will do the rendering
+    fnPg++; inputLast+=2500; //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
+    if(fnPg >= fnDatePages){ fnPg = 0; fn = fnIsTime; }
+    force=true;
+  }
+  //Temporary-display mode timeout: if we're *not* in a permanent one (time, or running/signaling timer)
+  else if(fn!=fnIsTime && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){ // && fn!=readEEPROM(7,false)
     if((unsigned long)(now-inputLast)>=timeoutTempFn*1000) { fnSetPg = 0; fn = fnIsTime; force=true; }
   }
   //Stop a signal pulse if it's time to
@@ -640,22 +698,32 @@ void checkRTC(bool force){
   
   if(rtcSecLast != tod.second() || force) { //If it's a new RTC second, or we are forcing it
     
+    //First run things
+    if(rtcSecLast==61) { autoDST(); calcSun(tod.year(),tod.month(),tod.day()); }
+  
     //Things to do at specific times
     if(tod.second()==0) { //at top of minute
       //at 2am, check for DST change
-      if(tod.minute()==0 && tod.hour()==2) autoDST();
-      //check if we should trigger the alarm - if the time is right and the alarm is on...
-      if(tod.hour()*60+tod.minute()==readEEPROM(0,true) && readEEPROM(2,false)) {
-        if(readEEPROM(23,false)==0 || //any day of the week
-          (readEEPROM(23,false)==1 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow)) || //weekday only
-          (readEEPROM(23,false)==2 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow)) ) { //weekend only
-            fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0);
-        } //end toddow check
+      if((tod.minute()==0 && tod.hour()==2)) autoDST();
+      //at the alarm trigger time
+      if(tod.hour()*60+tod.minute()==readEEPROM(0,true)){
+        if(alarmOn && !alarmSkip) { //if the alarm is on and not skipped, sound it!
+          fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0);
+        }
+        //set alarmSkip for the next instance of the alarm
+        alarmSkip =
+          //if alarm is any day of the week
+          (readEEPROM(23,false)==0 ||
+          //or if alarm is weekday only, and tomorrow is a weekday
+          (readEEPROM(23,false)==1 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),(toddow==6?0:toddow+1))) ||
+          //or if alarm is weekend only, and tomorrow is a weekend
+          (readEEPROM(23,false)==2 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),(toddow==6?0:toddow+1)))
+          ? 0: 1); //then don't skip the next alarm; else skip it
       } //end alarm trigger
     }
     //At bottom of minute, see if we should show the date
     if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0) {
-      if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = now; updateDisplay(); }
+      if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = now; inputLastTODMins = tod.hour()*60+tod.minute(); fnPg = 254; updateDisplay(); }
       if(readEEPROM(18,false)==3) { startScroll(); }
     }
     //Anti-poisoning routine triggering: start when applicable, and not at night, during setting, or after a button press (unoff)
@@ -712,15 +780,16 @@ void checkRTC(bool force){
             if(readEEPROM(25,false)) { //interval timer: a short signal and restart; don't change to timer fn
               signalStart(fnIsTimer,0,0); timerRemain = timerInitial;
             } else {
-              fnSetPg = 0; fn = fnIsTimer; inputLast = now; signalStart(fnIsTimer,signalDur,0);
+              fnSetPg = 0; fn = fnIsTimer; inputLast = now; inputLastTODMins = tod.hour()*60+tod.minute(); signalStart(fnIsTimer,signalDur,0);
             }
           } //end not switched relay
         } //end timer elapsed
       }
       //If alarm snooze has time on it, decrement and trigger signal if we reach zero (and alarm is still on)
+      //Won't check alarm skip status here, as it reflects tomorrow
       if(snoozeRemain>0) {
         snoozeRemain--;
-        if(snoozeRemain<=0 && readEEPROM(2,false)) {
+        if(snoozeRemain<=0 && alarmOn) {
           fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1,0);
         }
       }
@@ -736,67 +805,134 @@ void checkRTC(bool force){
       if(unoffRemain>0) {
         unoffRemain--; //updateDisplay will naturally put it back to off state if applicable
       }
+      if(versionRemain>0) {
+        versionRemain--;
+      }
     } //end natural second
     
     //Finally, update the display, whether natural tick or not, as long as we're not setting or on a scrolled display (unless forced eg. fn change)
     //This also determines night/away mode, which is why strikes will happen if we go into off at top of hour, and not when we come into on at the top of the hour TODO find a way to fix this
-    if(fnSetPg==0 && (scrollRemain==0 || force)) updateDisplay();
+    //Also skip updating the display if this is date and not being forced, since its pages take some calculating that cause it to flicker
+    if(fnSetPg==0 && (scrollRemain==0 || force) && !(fn==fnIsDate && !force)) updateDisplay();
     
     rtcSecLast = tod.second();
     
   } //end if force or new second
 } //end checkRTC()
 
-bool fellBack = false;
 void autoDST(){
-  //Call daily when clock reaches 2am.
-  //If rule matches, will set to 3am in spring, 1am in fall (and set fellBack so it only happens once)
-  if(fellBack) { fellBack=false; return; } //If we fell back at last 2am, do nothing.
-  if(toddow==0) { //is it sunday? currently all these rules fire on Sundays only
-    switch(readEEPROM(22,false)){
-      case 1: //second Sunday in March to first Sunday in November (US/CA)
-        if(tod.month()==3 && tod.day()>=8 && tod.day()<=14) setDST(1);
-        if(tod.month()==11 && tod.day()<=7) setDST(-1);
-        break;
-      case 2: //last Sunday in March to last Sunday in October (UK/EU)
-        if(tod.month()==3 && tod.day()>=25) setDST(1);
-        if(tod.month()==10 && tod.day()>=25) setDST(-1);
-        break;
-      case 3: //first Sunday in April to last Sunday in October (MX)
-        if(tod.month()==4 && tod.day()<=7) setDST(1);
-        if(tod.month()==10 && tod.day()>=25) setDST(-1);
-        break;
-      case 4: //last Sunday in September to first Sunday in April (NZ)
-        if(tod.month()==9 && tod.day()>=24) setDST(1); //30 days hath September: last Sun will be 24-30
-        if(tod.month()==4 && tod.day()<=7) setDST(-1);
-        break;
-      case 5: //first Sunday in October to first Sunday in April (AU)
-        if(tod.month()==10 && tod.day()<=7) setDST(1);
-        if(tod.month()==4 && tod.day()<=7) setDST(-1);
-        break;
-      case 6: //third Sunday in October to third Sunday in February (BZ)
-        if(tod.month()==10 && tod.day()>=15 && tod.day()<=21) setDST(1);
-        if(tod.month()==2 && tod.day()>=15 && tod.day()<=21) setDST(-1);
-        break;
-      default: break;
-    } //end setting switch
-  } //end is it sunday
+  //Change the clock if the current DST differs from the dstOn flag.
+  //Call daily when clock reaches 2am, and at first run.
+  bool dstNow = isDSTByHour(tod.year(),tod.month(),tod.day(),tod.hour(),false);
+  if(readEEPROM(15,false)>1){ //dstOn unreliable probably due to software update to 1.6.0
+    dstOn = dstNow; writeEEPROM(15,dstOn,false); }
+  if(dstNow!=dstOn){ ds3231.setHour(dstNow>dstOn? 3: 1); dstOn = dstNow; writeEEPROM(15,dstOn,false); }
 }
-void setDST(char dir){
-  if(dir==1) ds3231.setHour(3); //could set relatively if we move away from 2am-only sets
-  if(dir==-1 && !fellBack) { ds3231.setHour(1); fellBack=true; }
+bool isDST(int y, char m, char d){
+  //returns whether DST is in effect on this date (after 2am shift)
+  switch(readEEPROM(22,false)){ //local DST ruleset
+    case 1: //second Sunday in March to first Sunday in November (US/CA)
+      return (m==3 && d>=nthSunday(y,3,2)) || (m>3 && m<11) || (m==11 && d<nthSunday(y,11,1)); break;
+    case 2: //last Sunday in March to last Sunday in October (UK/EU)
+      return (m==3 && d>=nthSunday(y,3,-1)) || (m>3 && m<10) || (m==10 && d<nthSunday(y,10,-1)); break;
+    case 3: //first Sunday in April to last Sunday in October (MX)
+      return (m==4 && d>=nthSunday(y,4,1)) || (m>4 && m<10) || (m==10 && d<nthSunday(y,10,-1)); break;
+    case 4: //last Sunday in September to first Sunday in April (NZ)
+      return (m==9 && d>=nthSunday(y,9,-1)) || (m>9 || m<4) || (m==4 && d<nthSunday(y,4,1)); break;
+    case 5: //first Sunday in October to first Sunday in April (AU)
+      return (m==10 && d>=nthSunday(y,10,1)) || (m>10 || m<4) || (m==4 && d<nthSunday(y,4,1)); break;
+    case 6: //third Sunday in October to third Sunday in February (BZ)
+      return (m==10 && d>=nthSunday(y,10,3)) || (m>10 || m<2) || (m==2 && d<nthSunday(y,2,3)); break;
+    default: break;
+  }
+  return 0;
+}
+bool isDSTByHour(int y, char m, char d, char h, bool setFlag){
+  //Takes isDST() one step further by comparing to the previous day and considering the hour
+  bool dstNow = isDST(y,m,d);
+  d--; if(d<1){ m--; if(m<1){ y--; m=12; } d=daysInMonth(y,m); }
+  if(dstNow!=isDST(y,m,d) && h<2) dstNow=!dstNow;
+  if(setFlag){
+    dstOn = dstNow;
+    writeEEPROM(15,dstOn,false);
+    //Serial.print(F("DST is ")); Serial.println(dstOn?F("on"):F("off"));
+  }
+  return dstNow;
+}
+char nthSunday(int y, char m, char nth){
+  if(nth>0) return (((7-dayOfWeek(y,m,1))%7)+1+((nth-1)*7));
+  if(nth<0) return (dayOfWeek(y,m,1)==0 && daysInMonth(y,m)>28? 29: nthSunday(y,m,1)+21+((nth+1)*7));
+  return 0;
+}
+byte daysInMonth(word y, byte m){
+  if(m==2) return (y%4==0 && (y%100!=0 || y%400==0) ? 29 : 28);
+  //https://cmcenroe.me/2014/12/05/days-in-month-formula.html
+  else return (28 + ((m + (m/8)) % 2) + (2 % m) + (2 * (1/m)));
+}
+int daysInYear(word y){
+  return 337 + daysInMonth(y,2);
+}
+int dateToDayCount(word y, byte m, byte d){
+  int dc = 0;
+  for(byte i=1; i<m; i++) dc += daysInMonth(y,i); //add every full month since start of this year
+  dc += d-1; //every full day since start of this month
+  return dc;
+}
+byte dayOfWeek(word y, byte m, byte d){
+  //DS3231 doesn't really calculate the day of the week, it just keeps a counter.
+  //When setting date, we'll calculate per https://en.wikipedia.org/wiki/Zeller%27s_congruence
+  byte yb = y%100; //2-digit year
+  byte ya = y/100; //century
+  //For this formula, Jan and Feb are considered months 11 and 12 of the previous year.
+  //So if it's Jan or Feb, add 10 to the month, and set back the year and century if applicable
+  if(m<3) { m+=10; if(yb==0) { yb=99; ya-=1; } else yb-=1; }
+  else m -= 2; //otherwise subtract 2 from the month
+  return (d + ((13*m-1)/5) + yb + (yb/4) + (ya/4) + 5*ya) %7;
+}
+int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp){
+  //If m+d is later   { if count up from, use last year, else use this year }: in Feb, count up from last Mar or down to this Mar
+  //If m+d is earlier { if count down to, use next year, else use this year }: in Feb, count down to next Jan or up from this Jan
+  bool targetDir = mt*100+dt>=m*100+d+(countUp&&!(mt==12&&dt==31)?1:0); //if count up from 12/31 (day of year), show 365/366 instead of 0
+  int targetYear = (countUp && targetDir? y-1: (!countUp && !targetDir? y+1: y));
+  int targetDayCount; targetDayCount = dateToDayCount(targetYear, mt, dt);
+  if(targetYear<y) targetDayCount -= daysInYear(targetYear);
+  if(targetYear>y) targetDayCount += daysInYear(y);
+  long currentDayCount; currentDayCount = dateToDayCount(y,m,d);
+  return abs(targetDir? currentDayCount-targetDayCount: targetDayCount-currentDayCount);
+  //For now, this does not indicate negative (eg with leading zeros bc I don't like how it looks here)
+  //and since the direction is specified, it's always going to be either negative or positive
+  // Serial.print("Today is ");
+  // serialPrintDate(y,m,d);
+  // Serial.print(" and ");
+  // serialPrintDate(targetYear,mt,dt);
+  // Serial.print(" is ");
+  // Serial.print(abs(targetDir? currentDayCount-targetDayCount: targetDayCount-currentDayCount),DEC);
+  // Serial.print(" day(s) ");
+  // Serial.println(countUp?"ago":"away");
 }
 
 void switchAlarm(char dir){
   if(enableSoftAlarmSwitch){
     signalStop(); //snoozeRemain = 0;
-    byte itWas = readEEPROM(2,false);
-    if(dir==1) writeEEPROM(2,1,false);
-    if(dir==-1) writeEEPROM(2,0,false);
-    if(dir==0) writeEEPROM(2,!readEEPROM(2,false),false);
-    if(readEEPROM(2,false) && itWas==false) quickBeep(); //Short signal to indicate we just turned the alarm on
+    //There are three alarm states - on, on with skip (skips the next alarm trigger), and off.
+    //Currently we use up/down buttons or a rotary control, rather than a binary switch, so we can cycle up/down through these states.
+    //On/off is stored in EEPROM to survive power loss; skip is volatile, not least because it can change automatically and I don't like making automated writes to EEPROM if I can help it. Skip state doesn't matter when alarm is off.
+    //Using tone() instead of quickBeep since we need to set the pitch. TODO replace with the Song class.
+    if(dir==0) dir=(alarmOn?-1:1); //If alarm is off, cycle button goes up; otherwise down.
+    if(dir==1){
+      if(!alarmOn){ //if off, go straight to on, no skip
+        alarmOn=1; writeEEPROM(2,alarmOn,false); alarmSkip=0; if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(76), 100); }} //C7
+      else if(alarmSkip){ //else if skip, go to on
+        alarmSkip=0; if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(76), 100); }}} //C7
+    if(dir==-1){
+      if(alarmOn){ //if on
+        if(!alarmSkip){ //if not skip, go to skip
+          alarmSkip=1; if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(71), 100); }} //G6
+        else { //if skip, go to off
+          alarmOn=0; writeEEPROM(2,alarmOn,false); if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(64), 100); }}}} //C6
     updateDisplay();
   }
+  //TODO don't make alarm permanent until leaving setting to minimize writes to eeprom as user cycles through options?
 }
 void switchPower(char dir){
   signalRemain = 0; snoozeRemain = 0; //in case alarm is going now - alternatively use signalStop()?
@@ -883,6 +1019,11 @@ void updateDisplay(){
       displayNext[i] = (isrc>=displaySize? 15: scrollDisplay[isrc]); //allow to fade
     }
   }
+  else if(versionRemain>0) {
+    editDisplay(vMajor, 0, 1, false, false);
+    editDisplay(vMinor, 2, 3, false, false);
+    editDisplay(vPatch, 4, 5, false, false);
+  }
   else if(fnSetPg) { //setting value, for either fn or option
     displayDim = 2;
     blankDisplay(4, 5, false);
@@ -896,7 +1037,12 @@ void updateDisplay(){
     } else if(fnSetValMax==88) { //A piezo pitch. Play a short demo beep.
       editDisplay(fnSetVal, 0, 3, false, false);
       if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(fnSetVal), 100); } //One exception to using signalStart since we need to specify pitch directly
-    } else editDisplay(fnSetVal, 0, 3, false, false); //some other type of value
+    } else if(fnSetValMax==156) { //Timezone offset from UTC in quarter hours plus 100 (since we're not set up to support signed bytes)
+      editDisplay((abs(fnSetVal-100)*25)/100, 0, 1, fnSetVal<100, false); //hours, leading zero for negatives
+      editDisplay((abs(fnSetVal-100)%4)*15, 2, 3, true, false); //minutes, leading zero always
+    } else if(fnSetValMax==1800) { //Lat/long: display on slightly different tubes on 4- vs 6-tube clocks
+      editDisplay(abs(fnSetVal), 0, (displaySize>4? 4: 3), fnSetVal<0, false);
+    } else editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0, false); //some other type of value - leading zeros for negatives
   }
   else if(fn >= fnOpts){ //options menu, but not setting a value
     displayDim = 2;
@@ -929,37 +1075,42 @@ void updateDisplay(){
         if(readEEPROM(18,false)==1) editDisplay(tod.day(), 4, 5, readEEPROM(19,false), true); //date
         else editDisplay(tod.second(), 4, 5, true, true); //seconds
         break;
-      case fnIsDate:
-        byte df; df = readEEPROM(17,false); //1=m/d/w, 2=d/m/w, 3=m/d/y, 4=d/m/y, 5=y/m/d
-        if(df<=4) {
-          editDisplay((df==1||df==3?tod.month():tod.day()),0,1,readEEPROM(19,false),true); //month or date first
-          editDisplay((df==1||df==3?tod.day():tod.month()),2,3,readEEPROM(19,false),true); //date or month second
-          editDisplay((df<=2?toddow:tod.year()),4,5,(df<=2?false:true),true); //dow or year third - dow never leading zero, year always
+      case fnIsDate: //a paged display
+        if(fnPg==0 || fnPg==254){ //plain ol' date - 0 will continue to other pages, 254 will only display date then return to time (e.g. at half minute)
+          byte df; df = readEEPROM(17,false); //1=m/d/w, 2=d/m/w, 3=m/d/y, 4=d/m/y, 5=y/m/d
+          if(df<=4) {
+            editDisplay((df==1||df==3?tod.month():tod.day()),0,1,readEEPROM(19,false),true); //month or date first
+            editDisplay((df==1||df==3?tod.day():tod.month()),2,3,readEEPROM(19,false),true); //date or month second
+            editDisplay((df<=2?toddow:tod.year()),4,5,(df<=2?false:true),true); //dow or year third - dow never leading zero, year always
+          }
+          else { //df==5
+            editDisplay(tod.year(),0,1,true,true); //year always has leading zero
+            editDisplay(tod.month(),2,3,readEEPROM(19,false),true);
+            editDisplay(tod.day(),4,5,readEEPROM(19,false),true);
+          }
         }
-        else { //df==5
-          editDisplay(tod.year(),0,1,true,true); //year always has leading zero
-          editDisplay(tod.month(),2,3,readEEPROM(19,false),true);
-          editDisplay(tod.day(),4,5,readEEPROM(19,false),true);
+        else if(fnPg==fnDateCounter){
+          editDisplay(dateComp(tod.year(),tod.month(),tod.day(),readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)),0,3,false,true);
+          blankDisplay(4,5,true);
         }
-        break;
-      case fnIsDayCount:
-        long targetDayCount; targetDayCount = dateToDayCount(
-          readEEPROM(3,true),
-          readEEPROM(5,false),
-          readEEPROM(6,false)
-        );
-        long currentDayCount; currentDayCount = dateToDayCount(tod.year(),tod.month(),tod.day());
-        editDisplay(abs(targetDayCount-currentDayCount),0,3,false,true);
-        //TODO for now don't indicate negative. Elsewhere we use leading zeros to represent negative but I don't like how that looks here
-        blankDisplay(4,5,true);
-        break;
+        //The sun and weather displays are based on a snapshot of the time of day when the function display was triggered, just in case it's triggered a few seconds before a sun event (sunrise/sunset) and the "prev/now" and "next" displays fall on either side of that event, they'll both display data from before it. If triggered just before midnight, the date could change as well – not such an issue for sun, but might be for weather - TODO create date snapshot also
+        else if(fnPg==fnDateSunlast) displaySun(0,tod.day(),inputLastTODMins);
+        else if(fnPg==fnDateWeathernow) displayWeather(0);
+        else if(fnPg==fnDateSunnext) displaySun(1,tod.day(),inputLastTODMins);
+        else if(fnPg==fnDateWeathernext) displayWeather(1);
+        break; //end fnIsDate
+      //fnIsDayCount removed in favor of paginated calendar
       case fnIsAlarm: //alarm
         word almTime; almTime = readEEPROM(0,true);
         editDisplay(almTime/60, 0, 1, readEEPROM(19,false), true); //hours with leading zero
         editDisplay(almTime%60, 2, 3, true, true);
-        editDisplay(readEEPROM(2,false),4,4,false,true); //status 1/0
-        displayDim = (readEEPROM(2,false)?2:1); //status bright/dim
-        blankDisplay(5,5,true);
+        if(alarmOn && alarmSkip){ //alarm on+skip
+          editDisplay(1,4,5,true,true); //01 to indicate off now, on maybe later
+        } else { //alarm fully on or off
+          editDisplay(alarmOn,4,4,false,true);
+          blankDisplay(5,5,true);
+        }
+        displayDim = (alarmOn?2:1); //status bright/dim
         break;
       case fnIsTimer: //timer - display time left.
         //Relative unit positioning: when t <1h, display min/sec in place of hr/min on 4-tube displays
@@ -993,7 +1144,7 @@ void updateDisplay(){
     }//end switch
   } //end if fn running
   
-  if(false) { //DEBUG MODE: when display's not working, just write it to the console, with time
+  if(false) { //DEBUG MODE: when display's not working, just write it to the console, with time. TODO create dummy display handler
     if(tod.hour()<10) Serial.print(F("0"));
     Serial.print(tod.hour(),DEC);
     Serial.print(F(":"));
@@ -1016,6 +1167,98 @@ void updateDisplay(){
   //Serial.println();
        
 } //end updateDisplay()
+
+//A snapshot of sun times, in minutes past midnight, calculated at clean time and when the date or time is changed.
+//Need to capture this many, as we could be displaying these values at least through end of tomorrow depending on when cleaning happens.
+
+char sunDate = 0; //date of month when calculated ("today")
+int sunSet0  = -1; //yesterday's set
+int sunRise1 = -1; //today rise
+int sunSet1  = -1; //today set
+int sunRise2 = -1; //tomorrow rise
+int sunSet2  = -1; //tomorrow set
+int sunRise3 = -1; //day after tomorrow rise
+void calcSun(int y, char m, char d){
+  //Calculates sun times and stores them in the values above
+  blankDisplay(0,5,false); //immediately blank display so we can fade in from it elegantly
+  Dusk2Dawn here(readEEPROM(10,true)/10, readEEPROM(12,true)/10, (float(readEEPROM(14,false))-100)/4);
+  //Today
+  sunDate = d;
+  sunRise1 = here.sunrise(y,m,d,isDST(y,m,d)); //TODO: unreliable if event is before time change on DST change day. Optionally if isDSTChangeDay() and event is <2h de-correct for it - maybe modify the library to do this - as when 2h overlaps in fall, we don't know whether the output has been precorrected.
+  sunSet1  = here.sunset(y,m,d,isDST(y,m,d));
+  // serialPrintDate(y,m,d);
+  // Serial.print(F("  Rise ")); serialPrintTime(sunRise1);
+  // Serial.print(F("  Set ")); serialPrintTime(sunSet1); Serial.println();
+  //Yesterday
+  d--; if(d<1){ m--; if(m<1){ y--; m=12; } d=daysInMonth(y,m); }
+  sunSet0  = here.sunset(y,m,d,isDST(y,m,d));
+  // serialPrintDate(y,m,d);
+  // Serial.print(F("            "));
+  // Serial.print(F("  Set ")); serialPrintTime(sunSet0); Serial.println();
+  //Tomorrow
+  d+=2; if(d>daysInMonth(y,m)){ d-=daysInMonth(y,m); m++; if(m>12){ m=1; y++; }}
+  sunRise2 = here.sunrise(y,m,d,isDST(y,m,d));
+  sunSet2  = here.sunset(y,m,d,isDST(y,m,d));
+  // serialPrintDate(y,m,d);
+  // Serial.print(F("  Rise ")); serialPrintTime(sunRise2);
+  // Serial.print(F("  Set ")); serialPrintTime(sunSet2); Serial.println();
+  //Day after tomorrow
+  d++; if(d>daysInMonth(y,m)){ d=1; m++; if(m>12){ m=1; y++; }}
+  sunRise3 = here.sunrise(y,m,d,isDST(y,m,d));
+  // serialPrintDate(y,m,d);
+  // Serial.print(F("  Rise ")); serialPrintTime(sunRise3); Serial.println();
+}
+void serialPrintDate(int y, char m, char d){
+  Serial.print(y,DEC); Serial.print(F("-"));
+  if(m<10) Serial.print(F("0")); Serial.print(m,DEC); Serial.print(F("-"));
+  if(d<10) Serial.print(F("0")); Serial.print(d,DEC);
+}
+void serialPrintTime(int todMins){
+  if(todMins/60<10) Serial.print(F("0")); Serial.print(todMins/60,DEC); Serial.print(F(":"));
+  if(todMins%60<10) Serial.print(F("0")); Serial.print(todMins%60,DEC);
+}
+
+void displaySun(char which, int d, int tod){
+  //Displays sun times from previously calculated values
+  //Old code to calculate sun at display time, with test serial output, is in commit 163ca33
+  //which is 0=prev, 1=next
+  int evtTime = 0; bool evtIsRise = 0;
+  serialPrintTime(tod);
+  if(d==sunDate){ //displaying same day as calc
+    //before sunrise: prev is calcday-1 sunset, next is calcday sunrise
+    //daytime:        prev is calcday sunrise,  next is calcday sunset
+    //after sunset:   prev is calcday sunset,   next is calcday+1 sunrise
+    if(tod<sunRise1)     { evtIsRise = which;  evtTime = (!which?sunSet0:sunRise1); }
+    else if(tod<sunSet1) { evtIsRise = !which; evtTime = (!which?sunRise1:sunSet1); }
+    else                 { evtIsRise = which;  evtTime = (!which?sunSet1:sunRise2); }
+  }
+  else if(d==sunDate+1 || d==1){ //if there's been a midnight since the last calc – displaying day after calc (or month rollover)
+    //before sunrise: prev is calcday sunset,    next is calcday+1 sunrise
+    //daytime:        prev is calcday+1 sunrise, next is calcday+1 sunset
+    //after sunset:   prev is calcday+1 sunset,  next is calcday+2 sunrise
+    if(tod<sunRise2)     { evtIsRise = which;  evtTime = (!which?sunSet1:sunRise2); }
+    else if(tod<sunSet2) { evtIsRise = !which; evtTime = (!which?sunRise2:sunSet2); }
+    else                 { evtIsRise = which;  evtTime = (!which?sunSet2:sunRise3); }
+  }
+  else { evtIsRise = 0; evtTime = -1; } //date error
+  if(evtTime<0){ //event won't happen? super north or south maybe TODO test this. In this case weather will need arbitrary dawn/dusk times
+    blankDisplay(0,3,true);
+  } else {
+    char hr = evtTime/60;
+    if(readEEPROM(16,false)==1) hr = (hr==0?12:(hr>12?hr-12:hr)); //12/24h per settings
+    editDisplay(hr, 0, 1, readEEPROM(19,false), true); //leading zero per settings
+    editDisplay(evtTime%60, 2, 3, true, true);
+  }
+  blankDisplay(4, 4, true);
+  editDisplay(evtIsRise, 5, 5, false, true);
+}
+
+void displayWeather(char which){
+  //shows high/low temp (for day/night respectively) on main tubes, and precipitation info on seconds tubes
+  //which==0: display for current sun period (after last sun event)
+  //which==1: display for next sun period (after next sun event)
+  //IoT: Show the weather for the current period (after last sun event): high (day) or low (night) and precip info//IoT: Show the weather for the period after the next sun event
+}
 
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
   //Splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
@@ -1068,7 +1311,7 @@ void initOutputs() {
   if(piezoPin>=0) pinMode(piezoPin, OUTPUT);
   if(relayPin>=0) {
     pinMode(relayPin, OUTPUT); digitalWrite(relayPin, HIGH); //LOW = device on
-    quickBeep(); //"primes" the beeper, seems necessary when relay pin is spec'd, otherwise first intentional beep doesn't happen
+    quickBeep(); //"primes" the beeper, seems necessary when relay pin is spec'd, otherwise first intentional beep doesn't happen TODO still true?
   }
   if(ledPin>=0) pinMode(ledPin, OUTPUT);
   updateLEDs(); //set to initial value
@@ -1086,6 +1329,7 @@ void cycleDisplay(){
   } else {
     if(setStartLast>0) setStartLast=0;
   }
+  //TODO if we want to flash certain elements, we might do it similarly here
   
   fadeLastDur = fadeDur-(dim?dimDur:0); //by default, last digit displays for entire fadeDur minus dim time
   
@@ -1150,7 +1394,7 @@ void cycleDisplay(){
   
     if(dim) delay(dimDur);
   } //end if displayDim>0
-  
+  //TODO why does it sometimes flicker while in the setting mode
 } //end cycleDisplay()
 
 void setCathodes(byte decValA, byte decValB){

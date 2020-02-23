@@ -2,7 +2,6 @@
 
 * Timer count up, ending options - maybe separate chrono and timer à la Timex?
 * Different setting option for pushbutton (à la Timex) vs. rotary (à la microwave ovens) - external file?
-* Set current DST state in EEPROM so when the clock is connected to power, it can determine whether correction is needed
 * Option to display weekdays as Sun=0 or Sun=1 (per Portuguese!)
 * When setting times of day, make 1439 (minutes) roll over to 0 and vice versa
 * Implement options for full date every 5 minutes
@@ -16,10 +15,8 @@
 * Should functions have their own options menu?
 * I2C display to help with setting?
 * I2C multicolor LED to indicate which function we're in?
-* Display firmware version, correlating to release on github
 * Metronome function
 * Alarm option should be beeping patterns, including a slow wake which defeats the 2 minute delay
-* Alarm should have a way to override the auto-setting for the next wake time – maybe press the dedicated alarm button!
 * Signalstart should create a situation where there's time on the counter, but doesn't make sound since the rtc can do that. Other beepable actions would probably cancel that counter anyway
 
 See other TODOs throughout code.
