@@ -17,19 +17,17 @@ Written for [RLB Designs’](http://rlb-designs.com/) Universal Nixie Driver Boa
 
 [Instructions for earlier software versions are here.](https://github.com/clockspot/arduino-nixie/releases) (The clock displays its software version on startup, since v1.6.0.)
 
-### Clock Functions
-
-Press **Select** to cycle through the clock’s functions. [Time](#time), [Calendar](#calendar), [Alarm](#alarm), and [Timer](#timer).
+Press **Select** to cycle through the clock’s functions: [Time](#time), [Calendar](#calendar), [Alarm](#alarm), and [Timer](#timer).
 
 To set something, simply hold **Select** until it flashes; use **Up/Down** to set, and **Select** to save.
 
-#### Time
+### Time
 
 This displays the time of day. You can specify 12h or 24h format in the [options menu](#options-menu), but when setting, it will display in 24h so you can tell AM from PM.
 
 In the [options menu](#options-menu), you can also enable automatic daylight saving time adjustment, enable an hourly chime, and set the display to dim or shut off at certain times.
 
-#### Calendar
+### Calendar
 
 The calendar has several displays and automatically cycles through them, before returning to Time.
 
@@ -40,7 +38,7 @@ The calendar has several displays and automatically cycles through them, before 
 
 * **Sunrise and sunset.** These two displays show the previous and next sunrise or sunset (indicated by `1` or `0` on the seconds tubes). For this to work correctly, please set your latitude, longitude, and UTC offset in the [options menu](#options-menu).
 
-#### Alarm
+### Alarm
 
 The alarm is always shown in 24h format so you can tell AM from PM. Use **Up/Down** to switch the alarm on and off (indicated by `1` or `0` on the seconds tubes, and high and low beeps).
 
@@ -52,13 +50,13 @@ When the alarm goes off, press any button to snooze it, or briefly hold any butt
 
 In the [options menu](#options-menu), you can set the snooze length and the alarm sound. If your clock has a relay in switched mode (see [Hardware Configuration](#hardware-configuration)), you can also choose to switch on the relay at alarm time (like a clock radio), instead of sounding the beeper.
 
-#### Timer
+### Timer
 
 This countdown timer can be set up to 18 hours. It begins running as soon as you finish setting it, and will continue to run in the background if you change to a different function. To cancel the running timer, hold **Select**. When the timer runs out, press any button to silence. If power is lost, the timer will clear.
 
 In the [options menu](#options-menu), you can set it to be an interval timer (restarting when it reaches zero), and can also select the timer sound. If your clock has a relay in switched mode (see [Hardware Configuration](#hardware-configuration)), you can also choose to switch on the relay while the timer is running (like the “sleep” function on a clock radio), instead of sounding the beeper.
 
-### The **Alt** Button
+### The Alt Button
 
 If your clock is equipped with an **Alt** button, it will do one of two things (depending on your [hardware configuration](#hardware-configuration)):
 
@@ -71,7 +69,6 @@ If your clock is equipped with an **Alt** button, it will do one of two things (
 * To enter the options menu, hold **Select** for 3 seconds until you see a single `1` on the hour tubes. This indicates option number 1.
 * Use **Up/Down** to go to the option number you want to set (see table below); press **Select** to open it for setting (display will flash); use **Up/Down** to set; and **Select** to save.
 * When all done, hold **Select** to exit the options menu.
-* To view the version number for your clock’s software (as of v1.6.0), enter and leave the options menu without changing anything.
 
 |  | Option | Settings |
 | --- | --- | --- |
@@ -87,16 +84,16 @@ If your clock is equipped with an **Alt** button, it will do one of two things (
 |  | **Alarm** |  |
 | 10 | Alarm auto-skip | 0 = alarm triggers every day<br/>1 = work week only, skipping weekends (per settings below)<br/>2 = weekend only, skipping work week |
 | 11 | Alarm signal | 0 = beeper<br/>1 = relay (if in switch mode, will stay on for 2 hours)<br/>(Clocks with both beeper and relay only) |
-| 12 | Alarm beeper pitch | [Note number on a piano keyboard](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8). Some are louder than others!<br/>(Clocks with beeper only) |
+| 12 | Alarm beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>(Clocks with beeper only) |
 | 13 | Alarm snooze | 0–60 minutes. 0 disables snooze. |
 |  | **Timer** |  |
 | 20 | Timer interval mode | 0 = count down and stop<br/>1 = count down and restart (interval mode)<br/>(Clocks with beeper and/or pulse relay only) |
 | 21 | Timer signal | 0 = beeper<br/>1 = relay (if in switch mode, will stay on until timer runs down)</br>(Clocks with both beeper and relay only) |
-| 22 | Timer beeper pitch | Set the same way as the alarm pitch, above<br/>(Clocks with beeper only) |
+| 22 | Timer beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>(Clocks with beeper only) |
 |  | **Chime** |  |
 | 30 | Chime | Make noise on the hour:<br/>0 = off<br/>1 = single beep<br/>2 = pips<br/>3 = Chime the hour (1 to 12)<br/>4 = ship’s bell (hour and half hour)<br/>Will not sound during night/away modes (except when off starts at top of hour)<br/>(Clocks with beeper or pulse relay only) |
 | 31 | Chime signal | 0 = beeper<br/>1 = relay<br/>(Clocks with both beeper and pulse relay only) |
-| 32 | Chime beeper pitch | Set the same way as the alarm signal pitch, above. If using the pips, 63 (987 Hz) is closest to the real BBC pips frequency (1000 Hz).<br/>(Clocks with beeper only) |
+| 32 | Chime beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8). If using the pips, 63 (987 Hz) is closest to the real BBC pips frequency (1000 Hz).<br/>(Clocks with beeper only) |
 |  | **Night mode and away mode** |  |
 | 40 | Night mode | To save tube life and/or preserve your sleep, dim or shut off tubes nightly when you’re not around or sleeping.<br/>0 = none (tubes fully on at night)<br/>1 = dim tubes at night<br/>2 = shut off tubes at night<br/>When off, you can press **Select** to illuminate the tubes briefly. |
 | 41 | Night starts at | Time of day. |
