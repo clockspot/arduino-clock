@@ -824,6 +824,8 @@ void autoDST(){
   //Change the clock if the current DST differs from the dstOn flag.
   //Call daily when clock reaches 2am, and at first run.
   bool dstNow = isDSTByHour(tod.year(),tod.month(),tod.day(),tod.hour(),false);
+  if(readEEPROM(15,false)>1){ //dstOn unreliable probably due to software update to 1.6.0
+    dstOn = dstNow; writeEEPROM(15,dstOn,false); }
   if(dstNow!=dstOn){ ds3231.setHour(dstNow>dstOn? 3: 1); dstOn = dstNow; writeEEPROM(15,dstOn,false); }
 }
 bool isDST(int y, char m, char d){
