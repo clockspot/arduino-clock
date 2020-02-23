@@ -23,9 +23,10 @@
 
 
 ////////// Other includes, global consts, and vars //////////
+#include "version.h"
+#include <Wire.h> //Arduino - GNU LPGL
 #include <EEPROM.h> //Arduino - GNU LPGL
-#include <DS3231.h> //Arduino - GNU LPGL
-#include <Wire.h> //NorthernWidget - The Unlicense
+#include <DS3231.h> //NorthernWidget - The Unlicense
 #include <Dusk2Dawn.h> //TODO not needed unless whatever
 
 /*EEPROM locations for non-volatile clock settings
@@ -139,8 +140,9 @@ word timerRemain = 0; //timer actual counter
 unsigned long signalPulseStartTime = 0; //to keep track of individual pulses so we can stop them
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night or away modes) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
-byte cleanRemain = 11; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
+byte cleanRemain = 0; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
 char scrollRemain = 0; //"frames" of scroll – 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change
+byte versionRemain = 3; //display version at start
 
 
 ////////// Main code control //////////
@@ -696,10 +698,13 @@ void checkRTC(bool force){
   
   if(rtcSecLast != tod.second() || force) { //If it's a new RTC second, or we are forcing it
     
+    //First run things
+    if(rtcSecLast==61) { autoDST(); calcSun(tod.year(),tod.month(),tod.day()); }
+  
     //Things to do at specific times
     if(tod.second()==0) { //at top of minute
-      //at 2am, or if this is first run, check for DST change
-      if((tod.minute()==0 && tod.hour()==2) || rtcSecLast==61) autoDST();
+      //at 2am, check for DST change
+      if((tod.minute()==0 && tod.hour()==2)) autoDST();
       //at the alarm trigger time
       if(tod.hour()*60+tod.minute()==readEEPROM(0,true)){
         if(alarmOn && !alarmSkip) { //if the alarm is on and not skipped, sound it!
@@ -799,6 +804,9 @@ void checkRTC(bool force){
       }
       if(unoffRemain>0) {
         unoffRemain--; //updateDisplay will naturally put it back to off state if applicable
+      }
+      if(versionRemain>0) {
+        versionRemain--;
       }
     } //end natural second
     
@@ -1009,6 +1017,11 @@ void updateDisplay(){
       displayNext[i] = (isrc>=displaySize? 15: scrollDisplay[isrc]); //allow to fade
     }
   }
+  else if(versionRemain>0) {
+    editDisplay(vMajor, 0, 1, false, false);
+    editDisplay(vMinor, 2, 3, false, false);
+    editDisplay(vPatch, 4, 5, false, false);
+  }
   else if(fnSetPg) { //setting value, for either fn or option
     displayDim = 2;
     blankDisplay(4, 5, false);
@@ -1213,17 +1226,17 @@ void displaySun(char which, int d, int tod){
     //before sunrise: prev is calcday-1 sunset, next is calcday sunrise
     //daytime:        prev is calcday sunrise,  next is calcday sunset
     //after sunset:   prev is calcday sunset,   next is calcday+1 sunrise
-    if(tod<sunRise1)     { evtIsRise = which;  evtTime = (!which?sunSet0:sunRise1); Serial.print(F(" A ")); serialPrintTime(evtTime); Serial.println(); }
-    else if(tod<sunSet1) { evtIsRise = !which; evtTime = (!which?sunRise1:sunSet1); Serial.print(F(" B ")); serialPrintTime(evtTime); Serial.println(); }
-    else                 { evtIsRise = which;  evtTime = (!which?sunSet1:sunRise2); Serial.print(F(" C ")); serialPrintTime(evtTime); Serial.println(); }
+    if(tod<sunRise1)     { evtIsRise = which;  evtTime = (!which?sunSet0:sunRise1); }
+    else if(tod<sunSet1) { evtIsRise = !which; evtTime = (!which?sunRise1:sunSet1); }
+    else                 { evtIsRise = which;  evtTime = (!which?sunSet1:sunRise2); }
   }
   else if(d==sunDate+1 || d==1){ //if there's been a midnight since the last calc – displaying day after calc (or month rollover)
     //before sunrise: prev is calcday sunset,    next is calcday+1 sunrise
     //daytime:        prev is calcday+1 sunrise, next is calcday+1 sunset
     //after sunset:   prev is calcday+1 sunset,  next is calcday+2 sunrise
-    if(tod<sunRise2)     { evtIsRise = which;  evtTime = (!which?sunSet1:sunRise2); Serial.print(F(" D ")); serialPrintTime(evtTime); Serial.println(); }
-    else if(tod<sunSet2) { evtIsRise = !which; evtTime = (!which?sunRise2:sunSet2); Serial.print(F(" E ")); serialPrintTime(evtTime); Serial.println(); }
-    else                 { evtIsRise = which;  evtTime = (!which?sunSet2:sunRise3); Serial.print(F(" F ")); serialPrintTime(evtTime); Serial.println(); }
+    if(tod<sunRise2)     { evtIsRise = which;  evtTime = (!which?sunSet1:sunRise2); }
+    else if(tod<sunSet2) { evtIsRise = !which; evtTime = (!which?sunRise2:sunSet2); }
+    else                 { evtIsRise = which;  evtTime = (!which?sunSet2:sunRise3); }
   }
   else { evtIsRise = 0; evtTime = -1; } //date error
   if(evtTime<0){ //event won't happen? super north or south maybe TODO test this. In this case weather will need arbitrary dawn/dusk times
