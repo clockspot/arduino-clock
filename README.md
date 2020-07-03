@@ -4,7 +4,7 @@
 
 **A digital clock for the Arduino Nano and a nixie tube display.**
 
-* Features perpetual calendar with day counter and sunrise/sunset, alarm with skip/snooze, and countdown timer.
+* Features perpetual calendar with day counter/sunrise/sunset, alarm with skip/snooze, and countdown timer.
 * Supports automatic DST change, hourly chimes, LED lighting control, piezo beeper, and switchable relay.
 * Supports four- or six-digit displays of Nixie tubes multiplexed in pairs via two SN74141 driver chips.
 * Timekeeping requires a DS3231 real-time clock via I2C, which is battery-backed and thermocompensated.
@@ -14,7 +14,7 @@
 
 ## Operating Instructions, v1.6.0
 
-When first powered up, the clock will display its software version (as of v1.6). [Instructions for earlier versions are here.](https://github.com/clockspot/arduino-nixie/releases)
+The clock displays its software version at startup (as of v1.6). [Instructions for earlier versions are here.](https://github.com/clockspot/arduino-nixie/releases)
 
 Press **Select** to cycle through [Time of Day](#time-of-day), [Calendar](#calendar), [Alarm](#alarm), and [Countdown Timer](#countdown-timer).
 
@@ -56,7 +56,7 @@ In the [options menu](#options-menu), you can set it to be an interval timer (re
 
 ### The Alt Button
 
-If your clock is equipped with an **Alt** button, it will do one of two things (depending on your [hardware configuration](#hardware-configuration)):
+If your clock has an **Alt** button, it will do one of two things (depending on your [hardware configuration](#hardware-configuration)):
 
 * If your clock has a switched relay with soft power switch enabled (such as for a radio), the **Alt** button acts as the power switch.
 
