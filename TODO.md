@@ -10,7 +10,6 @@
 * In display code, consider using `delayMicroseconds()` which, with its tighter resolution, may give better control over fades and dim levels
 * in `checkInputs()`, can all this if/else business be defined at load instead of evaluated every sample? OR is it compiled that way? maybe use `#ifdef`
 * in `ctrlEvt()`, could we do release/shorthold on mainSel so we can exit without making changes?
-* Should functions be called modes?
 * Should functions be modular in the code, and have a reserved memory location / 100 per each?
 * Should functions have their own options menu?
 * I2C display to help with setting?
