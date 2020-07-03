@@ -5,8 +5,8 @@
 **A digital clock for the Arduino Nano and a nixie tube display.**
 
 * Features perpetual calendar with day counter/sunrise/sunset, alarm with skip/snooze, and countdown timer.
-* Supports automatic DST change, hourly chimes, LED lighting control, piezo beeper, and switchable relay.
 * Supports four- or six-digit displays of Nixie tubes multiplexed in pairs via two SN74141 driver chips.
+* Supports auto DST change, tube shutoff, hourly chimes, LED lighting, piezo beeper, and switchable relay.
 * Timekeeping requires a DS3231 real-time clock via I2C, which is battery-backed and thermocompensated.
 * Written for [RLB Designs’](http://rlb-designs.com/) Universal Nixie Driver Board (UNDB), with LED control for v8+ and relay for v9+.
 
@@ -16,52 +16,44 @@
 
 The clock displays its software version at startup (as of v1.6). [Instructions for earlier versions are here.](https://github.com/clockspot/arduino-nixie/releases)
 
-Press **Select** to cycle through [Time of Day](#time-of-day), [Calendar](#calendar), [Alarm](#alarm), and [Countdown Timer](#countdown-timer).
-
-To set something, simply hold **Select** until it flashes; use **Up/Down** to set, and **Select** to save.
+* Press **Select** to cycle through [Time of Day](#time-of-day), [Calendar](#calendar), [Alarm](#alarm), and [Countdown Timer](#countdown-timer).
+* To set anything, simply hold **Select** until it flashes; use **Up/Down** to set, and **Select** to save. Additional settings are available in the [options menu](#options-menu).
 
 ### Time of Day
 
-The time of day can be displayed in either 12h or 24h format per the [options menu](#options-menu), but when setting, it will display in 24h so you can tell AM from PM.
-
-In the [options menu](#options-menu), you can also enable automatic daylight saving time adjustment, an hourly chime, and dimming/shutoff of the display at certain times, among other things.
+The time of day is shown in 12h or 24h format per the [options menu](#options-menu), but when setting, it is shown in 24h so you can tell AM from PM.
 
 ### Calendar
 
 The calendar cycles through several displays, before returning to the time of day:
 
 * **The date.** Several formats are available in the [options menu](#options-menu). When setting, it will ask for year, then month, then date.
-
 * **Day counter.** This will count down to, or up from, a date of your choice, repeating every year. When setting, it will ask for month, then date, then direction (0 = count down, 1 = count up).
-
   * TIP: To display the day of the year, set it to count up from December 31.
-
-* **Sunrise and sunset.** These two displays show the previous and next sunrise or sunset (indicated by `1` or `0` on the seconds tubes). For this to work correctly, set your latitude, longitude, and UTC offset in the [options menu](#options-menu). They will display in the same 12h/24h format as the time of day.
+* **Sunrise and sunset.** These two displays show the previous and next sunrise or sunset (indicated by `1` or `0` on the seconds tubes), in the same 12h/24h format as the time of day. This is based on the latitude, longitude, and UTC offset you specify in the [options menu](#options-menu).
 
 ### Alarm
 
-The alarm is always shown in 24h format so you can tell AM from PM. Use **Up/Down** to switch the alarm between **on, skip, and off** (indicated by `1`/`01`/`0` on the seconds tubes, and/or high/medium/low beeps).
+The alarm is always shown in 24h format so you can tell AM from PM.
 
-When the alarm sounds, press any button to snooze it, or briefly hold any button to silence it (it will give a short beep, and the display will blink once).
-
-**Skip** will silence the next alarm in advance — useful if you’re taking a day off, or you wake up before your alarm. In the [options menu](#options-menu), you can program the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back on. The [Alt button](#the-alt-button) can be set to toggle the skip setting.
-
-In the [options menu](#options-menu), you can set the snooze length and the alarm sound. If your clock has a [relay in switched mode](#hardware-configuration), you can also choose to switch on the relay at alarm time (like a clock radio) instead of sounding the beeper.
+* Use **Up/Down** to switch the alarm between **on, skip, and off** (indicated by `1`/`01`/`0` on the seconds tubes, and/or high/medium/low beeps).
+* When the alarm sounds, press any button to snooze it, or briefly hold any button to silence it (it will give a short beep, and the display will blink once).
+* **Skip** will silence the next alarm in advance — useful if you’re taking a day off, or you wake up before your alarm. In the [options menu](#options-menu), you can program the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back on. The [Alt button](#the-alt-button) can be set to toggle the skip setting.
 
 ### Countdown Timer
 
-The countdown timer can be set up to 18 hours. It begins running as soon as you finish setting it, and will continue to run in the background if you switch to a different display. To cancel the running timer, hold **Select** while the timer is displayed. When the timer runs out, press any button to silence. If power is lost, the timer will clear.
+The countdown timer can be set up to 18 hours, and can be configured as an interval timer in the [options menu](#options-menu).
 
-In the [options menu](#options-menu), you can set it to be an interval timer (restarting when it reaches zero), and can also select the timer sound. If your clock has a [relay in switched mode](#hardware-configuration), you can also choose to switch on the relay while the timer is running (like the “sleep” function on a clock radio) instead of sounding the beeper.
+* The timer will begin running as soon as you finish setting it. If you switch to another display, the timer will continue to run in the background (but will clear if power is lost).
+* To cancel the running timer, hold **Select** while the timer is displayed.
+* When the timer runs out, press any button to silence.
 
 ### The Alt Button
 
 If your clock has an **Alt** button, it will do one of two things (depending on your [hardware configuration](#hardware-configuration)):
 
 * If your clock has a switched relay with soft power switch enabled (such as for a radio), the **Alt** button acts as the power switch.
-
 * Otherwise, it works as a preset button. While viewing the display you want quick access to (such as the alarm or countdown timer), hold **Alt** until it beeps twice; then you can use **Alt** to jump straight there.
-
   * TIP: If used with the alarm, the **Alt** button will also toggle the skip setting – so to skip (or unskip) the next alarm, you only need to press the **Alt** button twice: once to display it, and once to change it.
 
 ### Options Menu
