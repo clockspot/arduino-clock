@@ -14,10 +14,10 @@
 
 ## Operating Instructions, v1.6.0
 
-The clock displays its software version at startup (as of v1.6). [Instructions for earlier versions are here.](https://github.com/clockspot/arduino-nixie/releases)
+The clock displays its software version when powered up (as of v1.6). [Instructions for earlier versions are here.](https://github.com/clockspot/arduino-nixie/releases)
 
 * Press **Select** to cycle through [Time of Day](#time-of-day), [Calendar](#calendar), [Alarm](#alarm), and [Countdown Timer](#countdown-timer).
-* To set anything, simply hold **Select** until it flashes; use **Up/Down** to set, and **Select** to save. Additional settings are available in the [options menu](#options-menu).
+* To set anything, simply hold **Select** until the display flashes; use **Up/Down** to set, and **Select** to save. Additional settings are available in the [options menu](#options-menu).
 
 ### Time of Day
 
@@ -27,8 +27,8 @@ The time of day is shown in 12h or 24h format per the [options menu](#options-me
 
 The calendar cycles through several displays, before returning to the time of day:
 
-* **The date.** Several formats are available in the [options menu](#options-menu). When setting, it will ask for year, then month, then date.
-* **Day counter.** This will count down to, or up from, a date of your choice, repeating every year. When setting, it will ask for month, then date, then direction (0 = count down, 1 = count up).
+* **The date.** Several formats are available in the [options menu](#options-menu). When setting, it will ask for the year, then the month, then the date.
+* **Day counter.** This will count down to, or up from, a date of your choice, repeating every year. When setting, it will ask for the month, then the date, then the direction (0 = count down, 1 = count up).
   * TIP: To display the day of the year, set it to count up from December 31.
 * **Sunrise and sunset.** These two displays show the previous and next sunrise or sunset (indicated by `1` or `0` on the seconds tubes), in the same 12h/24h format as the time of day. This is based on the latitude, longitude, and UTC offset you specify in the [options menu](#options-menu).
 
@@ -38,7 +38,7 @@ The alarm is always shown in 24h format so you can tell AM from PM.
 
 * Use **Up/Down** to switch the alarm between **on, skip, and off** (indicated by `1`/`01`/`0` on the seconds tubes, and/or high/medium/low beeps).
 * When the alarm sounds, press any button to snooze it, or briefly hold any button to silence it (it will give a short beep, and the display will blink once).
-* **Skip** will silence the next alarm in advance — useful if you’re taking a day off, or you wake up before your alarm. In the [options menu](#options-menu), you can program the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back on. The [Alt button](#the-alt-button) can be set to toggle the skip setting.
+* **Skip** silences the next alarm in advance – useful if you’re taking a day off, or you wake up before your alarm. In the [options menu](#options-menu), you can program the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back on. The [Alt button](#the-alt-button) can be set to toggle the skip setting.
 
 ### Countdown Timer
 
@@ -52,7 +52,7 @@ The countdown timer can be set up to 18 hours, and can be configured as an inter
 
 If your clock has an **Alt** button, it will do one of two things (depending on your [hardware configuration](#hardware-configuration)):
 
-* If your clock has a switched relay with soft power switch enabled (such as for a radio), the **Alt** button acts as the power switch.
+* If your clock has a switched relay with soft power switch enabled (such as for a radio), **Alt** acts as that switch.
 * Otherwise, it works as a preset button. While viewing the display you want quick access to (such as the alarm or countdown timer), hold **Alt** until it beeps twice; then you can use **Alt** to jump straight there.
   * TIP: If used with the alarm, the **Alt** button will also toggle the skip setting – so to skip (or unskip) the next alarm, you only need to press the **Alt** button twice: once to display it, and once to change it.
 
@@ -66,11 +66,11 @@ If your clock has an **Alt** button, it will do one of two things (depending on 
 | --- | --- | --- |
 |  | **General** |  |
 | 1 | Time format | 1 = 12-hour<br/>2 = 24-hour<br/>(time-of-day display only; setting times is always done in 24h) |
-| 2 | Date format | 1 = month/date/weekday<br/>2 = date/month/weekday<br/>3 = month/date/year<br/>4 = date/month/year<br/>5 = year/month/date<br/>Note that four-tube clocks will display only the first two values in each of these options.<br/>The weekday is displayed as a number from 0 (Sunday) to 6 (Saturday). |
+| 2 | Date format | 1 = month/date/weekday<br/>2 = date/month/weekday<br/>3 = month/date/year<br/>4 = date/month/year<br/>5 = year/month/date<br/>The weekday is displayed as a number from 0 (Sunday) to 6 (Saturday).<br/>Four-tube clocks will display only the first two values in each of these options. |
 | 3 | Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date each minute at :30 seconds<br/>3 = same as 2, but scrolls in and out |
 | 4 | Leading zero in hour, date, and month? | 0 = no<br/>1 = yes |
 | 5 | Digit fade | 0–20 (in hundredths of a second) |
-| 6 | Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ)<br/>(If the clock is not powered at the time, it will correct itself when connected to power.) |
+| 6 | Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ)<br/>If the clock is not powered at the time, it will correct itself when powered up. |
 | 7 | LED behavior | 0 = always off<br/>1 = always on<br/>2 = on, but follow night/away shutoff if enabled<br/>3 = off, but on when alarm/timer sounds</br>4 = off, but on with switched relay (if equipped)<br/>(Clocks with LED lighting only) |
 | 8 | Anti-cathode poisoning | Briefly cycles all digits to prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)<br/>0 = once a day, either at midnight or when night shutoff starts (if enabled)<br/>1 = at the top of every hour<br/>2 = at the top of every minute<br/>(Will not trigger during night/away shutoff) |
 |  | **Alarm** |  |
@@ -85,7 +85,7 @@ If your clock has an **Alt** button, it will do one of two things (depending on 
 |  | **Chime** |  |
 | 30 | Chime | Make noise on the hour:<br/>0 = off<br/>1 = single beep<br/>2 = pips<br/>3 = Chime the hour (1 to 12)<br/>4 = ship’s bell (hour and half hour)<br/>Will not sound during night/away shutoff (except when off starts at top of hour)<br/>(Clocks with beeper or pulse relay only) |
 | 31 | Chime signal | 0 = beeper<br/>1 = relay<br/>(Clocks with both beeper and pulse relay only) |
-| 32 | Chime beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8). If using the pips, 63 (987 Hz) is closest to the real BBC pips frequency (1000 Hz).<br/>(Clocks with beeper only) |
+| 32 | Chime beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>TIP: If using pips, 63 (987Hz) is closest to the real BBC pips frequency (1000Hz).<br/>(Clocks with beeper only) |
 |  | **Night/away shutoff** |  |
 | 40 | Night shutoff | To save tube life and/or preserve your sleep, dim or shut off tubes nightly when you’re not around or sleeping.<br/>0 = none (tubes fully on at night)<br/>1 = dim tubes at night<br/>2 = shut off tubes at night<br/>When off, you can press **Select** to illuminate the tubes briefly. |
 | 41 | Night starts at | Time of day. |
@@ -97,10 +97,10 @@ If your clock has an **Alt** button, it will do one of two things (depending on 
 | 47 | Work ends at | Time of day. |
 |  | **Geography** |  |
 | 50 | Latitude | Your latitude, in tenths of a degree; negative (south) values are indicated with leading zeroes. (Example: Dallas is at 32.8°N, set as `328`.) |
-| 51 | Longitude | Your longitude, in tenths of a degree; negative (west) values are indicated with leading zeroes. (Example: Dallas is at 96.7°W, set as `00967`.) |
+| 51 | Longitude | Your longitude, in tenths of a degree; negative (west) values are indicated with leading zeroes. (Example: Dallas is at 96.7°W, set as `00967`.)<br/>For these two options, four-tube clocks will not display the tenths digit. |
 | 52 | UTC offset | Your time zone’s offset from UTC (non-DST), in hours and minutes; negative (west) values are indicated with leading zeroes. (Example: Dallas is UTC–6, set as `0600`.) |
 
-To reset the clock to “factory” defaults, hold **Select** while connecting the clock to power.
+To reset the clock to “factory” defaults, hold **Select** while powering up the clock.
 
 ## Hardware Configuration
 
