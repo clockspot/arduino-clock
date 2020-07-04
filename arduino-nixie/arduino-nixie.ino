@@ -110,6 +110,7 @@ byte fnSetPg = 0; //whether this function is currently being set, and which opti
  int fnSetValMax; //max possible
 bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
  int fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
+bool fnSetValDid; //false when starting a set; true when value is changed - to detect if value was not changed
 
 //the calendar function page numbers, depending on which ones are enabled. See findFnAndPageNumbers
 byte fnDatePages = 1;
@@ -190,7 +191,7 @@ void loop(){
   //Every loop cycle, check the RTC and inputs (previously polled, but works fine without and less flicker)
   checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
-  doSetHold(); //if inputs have been held, this will do more things + updateDisplay as needed
+  doSetHold(false); //if inputs have been held, this will do more things + updateDisplay as needed
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
   cycleLEDs();
 }
@@ -263,36 +264,32 @@ void checkRot(){
 
 ////////// Input handling and value setting //////////
 
-bool stoppingSignal = false; //Special stuff (snooze canceling) happens right after a press that silences the signal
 void ctrlEvt(byte ctrl, byte evt){
   //Handle control events (from checkBtn or checkRot), based on current fn and set state.
   //evt: 1=press, 2=short hold, 3=long hold, 0=release.
   //We only handle press evts for adj ctrls, as that's the only evt encoders generate.
   //But we can handle short and long holds and releases for the sel ctrls (always buttons).
 
-  //Before all else, is it a press to stop the signal? Silence it
+  //If the signal is going, any press should silence it
   if(signalRemain>0 && evt==1){
-    stoppingSignal = true;
     signalStop();
     if(signalSource==fnIsAlarm) { //If this was the alarm
       //If the alarm is using the switched relay and this is the Alt button, don't set the snooze
       if(relayMode==0 && readEEPROM(42,false)==1 && altSel!=0 && ctrl==altSel) {
-        quickBeep(); //Short signal to indicate the alarm has been silenced until tomorrow
+        quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
         delay(250); //to flash the display to indicate this as well
       } else { //start snooze
         snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
       }
     }
+    btnStop();
     return;
   }
-  //After pressing to silence, short hold cancels a snooze; ignore other btn evts
-  if(stoppingSignal){
-    stoppingSignal = false;
-    if(evt==2 && snoozeRemain>0) {
-      snoozeRemain = 0;
-      quickBeep(); //Short signal to indicate the alarm has been silenced until tomorrow
-      delay(250); //to flash the display
-    }
+  //If the snooze is going, any press should cancel it, with a signal
+  if(snoozeRemain>0 && evt==1){
+    snoozeRemain = 0;
+    quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
+    delay(250); //to flash the display
     btnStop();
     return;
   }
@@ -364,9 +361,9 @@ void ctrlEvt(byte ctrl, byte evt){
             if(readEEPROM(7,false)!=fn) {
               btnStop();
               writeEEPROM(7,fn,false);
-              quickBeep(); //beep 1
+              quickBeep(76); //beep 1
               delay(250); //to flash the display and delay beep 2
-              quickBeep(); //beep 2
+              quickBeep(76); //beep 2
             }
           }
           //On short release, jump to the preset fn.
@@ -385,7 +382,7 @@ void ctrlEvt(byte ctrl, byte evt){
     } //end fn running
 
     else { //fn setting
-      if(evt==1) { //we respond only to press evts during fn setting
+      if(evt==1) { //press
         //TODO could we do release/shorthold on mainSel so we can exit without making changes?
         //currently no, because we don't btnStop() when short hold goes into fn setting, in case long hold may go to options menu
         //so we can't handle a release because it would immediately save if releasing from the short hold.
@@ -396,11 +393,13 @@ void ctrlEvt(byte ctrl, byte evt){
           //con: potential for very rare clock rollover while setting; pro: can set date separate from time
           switch(fn){
             case fnIsTime: //save in RTC
-              ds3231.setHour(fnSetVal/60);
-              ds3231.setMinute(fnSetVal%60);
-              ds3231.setSecond(0);
-              calcSun(tod.year(),tod.month(),tod.day());
-              isDSTByHour(tod.year(),tod.month(),tod.day(),fnSetVal/60,true);
+              if(fnSetValDid){ //but only if the value was actually changed
+                ds3231.setHour(fnSetVal/60);
+                ds3231.setMinute(fnSetVal%60);
+                ds3231.setSecond(0);
+                calcSun(tod.year(),tod.month(),tod.day());
+                isDSTByHour(tod.year(),tod.month(),tod.day(),fnSetVal/60,true);
+              }
               clearSet(); break;
             case fnIsDate: //depends what page we're on
               if(fnPg==0){ //regular date display: save in RTC
@@ -467,6 +466,9 @@ void ctrlEvt(byte ctrl, byte evt){
         if(ctrl==mainAdjUp) doSet(inputLast-inputLast2<velThreshold ? 10 : 1);
         if(ctrl==mainAdjDn) doSet(inputLast-inputLast2<velThreshold ? -10 : -1);
       } //end if evt==1
+      else if(evt==2){ //short hold - trigger doSetHold directly for better timing
+        if(ctrl==mainAdjUp || ctrl==mainAdjDn) doSetHold(true);
+      }
     } //end fn setting
     
   } //end normal fn running/setting
@@ -541,21 +543,25 @@ void fnOptScroll(char dir){
 }
 
 void startSet(int n, int m, int x, byte p){ //Enter set state at page p, and start setting a value
-  fnSetVal=n; fnSetValMin=m; fnSetValMax=x; fnSetValVel=(x-m>30?1:0); fnSetPg=p;
+  fnSetVal=n; fnSetValMin=m; fnSetValMax=x; fnSetValVel=(x-m>30?1:0); fnSetPg=p; fnSetValDid=false;
   updateDisplay();
 }
 void doSet(int delta){
   //Does actual setting of fnSetVal, as told to by ctrlEvt or doSetHold. Makes sure it stays within range.
   if(delta>0) if(fnSetValMax-fnSetVal<delta) fnSetVal=fnSetValMax; else fnSetVal=fnSetVal+delta;
   if(delta<0) if(fnSetVal-fnSetValMin<abs(delta)) fnSetVal=fnSetValMin; else fnSetVal=fnSetVal+delta;
+  fnSetValDid=true;
   updateDisplay();
 }
 unsigned long doSetHoldLast;
-void doSetHold(){
+void doSetHold(bool start){
   //When we're setting via an adj button that's passed a hold point, fire off doSet commands at intervals
   //TODO integrate this with checkInputs?
   unsigned long now = millis();
-  if((unsigned long)(now-doSetHoldLast)>=250) {
+  //The interval used to be 250, but in order to make the value change by a full 9 values between btnShortHold and btnLongHold,
+  //the interval is now that difference divided by 9.5 (to try to ensure btnLongHold occurs comfortably between 9th and 10th doSet).
+  //It may be weird not being exactly quarter-seconds, but it doesn't line up with the blinking anyway.
+  if(start || (unsigned long)(now-doSetHoldLast)>=((btnLongHold-btnShortHold)/9)) {
     doSetHoldLast = now;
     if(fnSetPg!=0 && (mainAdjType==1 && (btnCur==mainAdjUp || btnCur==mainAdjDn)) ){ //if we're setting, and this is an adj btn
       bool dir = (btnCur==mainAdjUp ? 1 : 0);
@@ -568,6 +574,7 @@ void doSetHold(){
 }
 void clearSet(){ //Exit set state
   startSet(0,0,0,0);
+  fnSetValDid=false;
   updateLEDs(); //in case LED setting was changed
   checkRTC(true); //force an update to tod and updateDisplay()
 }
@@ -908,19 +915,25 @@ void switchAlarm(char dir){
     //There are three alarm states - on, on with skip (skips the next alarm trigger), and off.
     //Currently we use up/down buttons or a rotary control, rather than a binary switch, so we can cycle up/down through these states.
     //On/off is stored in EEPROM to survive power loss; skip is volatile, not least because it can change automatically and I don't like making automated writes to EEPROM if I can help it. Skip state doesn't matter when alarm is off.
-    //Using tone() instead of quickBeep since we need to set the pitch. TODO replace with the Song class.
     if(dir==0) dir=(alarmOn?-1:1); //If alarm is off, cycle button goes up; otherwise down.
     if(dir==1){
       if(!alarmOn){ //if off, go straight to on, no skip
-        alarmOn=1; writeEEPROM(2,alarmOn,false); alarmSkip=0; if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(76), 100); }} //C7
+        alarmOn=1; writeEEPROM(2,alarmOn,false); alarmSkip=0; quickBeep(76); //C7
+      }
       else if(alarmSkip){ //else if skip, go to on
-        alarmSkip=0; if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(76), 100); }}} //C7
+        alarmSkip=0; quickBeep(76); //C7
+      }
+    }
     if(dir==-1){
       if(alarmOn){ //if on
         if(!alarmSkip){ //if not skip, go to skip
-          alarmSkip=1; if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(71), 100); }} //G6
+          alarmSkip=1; quickBeep(71); //G6
+        }
         else { //if skip, go to off
-          alarmOn=0; writeEEPROM(2,alarmOn,false); if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(64), 100); }}}} //C6
+          alarmOn=0; writeEEPROM(2,alarmOn,false); quickBeep(64); //C6
+        }
+      }
+    }
     updateDisplay();
   }
   //TODO don't make alarm permanent until leaving setting to minimize writes to eeprom as user cycles through options?
@@ -1301,7 +1314,7 @@ void initOutputs() {
   if(piezoPin>=0) pinMode(piezoPin, OUTPUT);
   if(relayPin>=0) {
     pinMode(relayPin, OUTPUT); digitalWrite(relayPin, HIGH); //LOW = device on
-    quickBeep(); //"primes" the beeper, seems necessary when relay pin is spec'd, otherwise first intentional beep doesn't happen TODO still true?
+    quickBeep(76); //"primes" the beeper, seems necessary when relay pin is spec'd, otherwise first intentional beep doesn't happen TODO still true?
   }
   if(ledPin>=0) pinMode(ledPin, OUTPUT);
   updateLEDs(); //set to initial value
@@ -1467,10 +1480,11 @@ word getHz(byte note){
 char getSignalOutput(){ //for current signal: time, timer, or (default) alarm: 0=piezo, 1=relay
   return readEEPROM((signalSource==fnIsTime?44:(signalSource==fnIsTimer?43:42)),false);
 }
-void quickBeep(){
-  //Short beeper signal at alarm pitch (if equipped), even if relay is switched. Used when silencing snooze or switching alarm on.
-  if(getSignalOutput()==1 && relayMode==0) { if(piezoPin>=0) { signalSource=fnIsAlarm; tone(piezoPin, getSignalPitch(), 100); }}
-  else signalStart(fnIsAlarm,0,100);
+void quickBeep(int pitch){
+  //C6 = 64
+  //G6 = 71
+  //C7 = 76
+  if(piezoPin>=0) { signalStop(); tone(piezoPin, getHz(pitch), 100); }
 }
 
 const byte ledFadeStep = 10; //fade speed – with every loop() we'll increment/decrement the LED brightness (between 0-255) by this amount

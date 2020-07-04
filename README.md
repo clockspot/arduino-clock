@@ -21,7 +21,7 @@ The clock displays its software version when powered up (as of v1.6). [Instructi
 
 ### Time of Day
 
-The time of day is shown in 12h or 24h format per the [options menu](#options-menu), but when setting, it is shown in 24h so you can tell AM from PM.
+The time of day is shown in 12h or 24h format per the [options menu](#options-menu), but when setting, it is shown in 24h so you can tell AM from PM. When exiting setting, seconds will set to zero, unless the time was not changed.
 
 ### Calendar
 
@@ -37,16 +37,16 @@ The calendar cycles through several displays, before returning to the time of da
 The alarm is always shown in 24h format so you can tell AM from PM.
 
 * Use **Up/Down** to switch the alarm between **on, skip, and off** (indicated by `1`/`01`/`0` on the seconds tubes, and/or high/medium/low beeps).
-* When the alarm sounds, press any button to snooze it, or briefly hold any button to silence it (it will give a short beep, and the display will blink once).
+* When the alarm sounds, press any button to snooze it, and again to cancel the snooze, which will silence it until the next alarm time (it will give a short low beep, and the display will blink once).
 * **Skip** silences the next alarm in advance – useful if you’re taking a day off, or you wake up before your alarm. In the [options menu](#options-menu), you can program the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back on. The [Alt button](#the-alt-button) can be set to toggle the skip setting.
 
 ### Countdown Timer
 
 The countdown timer can be set up to 18 hours, and can be configured as an interval timer in the [options menu](#options-menu).
 
-* The timer will begin running as soon as you finish setting it. If you switch to another display, the timer will continue to run in the background (but will clear if power is lost).
+* The timer will begin running as soon as you finish setting it. If you switch to another display, the timer will continue to run in the background. If power is lost, the timer will clear.
 * To cancel the running timer, hold **Select** while the timer is displayed.
-* When the timer runs out, press any button to silence.
+* When the timer sounds, press any button to silence it.
 
 ### The Alt Button
 

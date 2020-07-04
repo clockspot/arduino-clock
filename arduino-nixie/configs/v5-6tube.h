@@ -39,7 +39,7 @@ const char relayPin = -1; //don't change - not available until UNDB v8
 const byte relayMode = 0; //don't change - not available until UNDB v8
 const word signalDur = 180; //sec - when pulsed signal is going, pulses are sent once/sec for this period (e.g. 180 = 3min)
 const word switchDur = 7200; //sec - when alarm triggers switched relay, it's switched on for this period (e.g. 7200 = 2hr)
-const word piezoPulse = 500; //ms - used with piezo via tone()
+const word piezoPulse = 250; //ms - used with piezo via tone()
 const word relayPulse = 200; //ms - used with pulsed relay
 
 //Soft power switches
@@ -57,9 +57,9 @@ const byte unoffDur = 10; //sec
 // How long (in ms) are the button hold durations?
 const word btnShortHold = 1000; //for setting the displayed feataure
 const word btnLongHold = 3000; //for for entering options menu
-const byte velThreshold = 150; //ms
+const word velThreshold = 0; //ms
 // When an adj up/down input (btn or rot) follows another in less than this time, value will change more (10 vs 1).
-// Recommend ~150 for rotaries. If you want to use this feature with buttons, extend to ~400.
+// 0 to disable. Recommend ~150 for rotaries. If you want to use this feature with buttons, extend to ~400.
 
 // What is the "frame rate" of the tube cleaning and display scrolling? up to 65535 ms
 const word cleanSpeed = 200; //ms
