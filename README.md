@@ -21,7 +21,7 @@ The clock displays its software version when powered up (as of v1.6). [Instructi
 
 ### Time of Day
 
-The time of day is shown in 12h or 24h format per the [options menu](#options-menu), but when setting, it is shown in 24h so you can tell AM from PM. When exiting setting, seconds will set to zero, unless the time was not changed.
+The time of day is shown in 12h or 24h format per the [options menu](#options-menu), but when setting, it is shown in 24h so you can tell AM from PM. When exiting setting, seconds will reset to zero, unless the time was not changed.
 
 ### Calendar
 
@@ -30,14 +30,15 @@ The calendar cycles through several displays, before returning to the time of da
 * **The date.** Several formats are available in the [options menu](#options-menu). When setting, it will ask for the year, then the month, then the date.
 * **Day counter.** This will count down to, or up from, a date of your choice, repeating every year. When setting, it will ask for the month, then the date, then the direction (0 = count down, 1 = count up).
   * TIP: To display the day of the year, set it to count up from December 31.
-* **Sunrise and sunset.** These two displays show the previous and next sunrise or sunset (indicated by `1` or `0` on the seconds tubes), in the same 12h/24h format as the time of day. This is based on the latitude, longitude, and UTC offset you specify in the [options menu](#options-menu).
+* **Sunrise/sunset.** These two displays show the previous and next apparent sunrise/sunset times (indicated by `1` or `0` on the seconds tubes – during the day, it shows sunrise then sunset; at night, sunset then sunrise). The times are calculated using the latitude, longitude, UTC offset, and auto DST rule specified in the [options menu](#options-menu), and shown in the same 12h/24h format as the time of day.
+  * NOTE: At this writing, the times may be incorrect by a few minutes, depending on [your longitude and time of year](https://docs.google.com/spreadsheets/d/1dYchVCJAuhvosrCdtEeHLT3ZXcLZK8X0UtENItZR32M/edit#gid=0). I believe this to be a rounding error(s) in the [Dusk2Dawn library](https://github.com/dmkishi/Dusk2Dawn) (compared to the [NOAA Solar Calculator](https://www.esrl.noaa.gov/gmd/grad/solcalc/) it’s based on) and plan to investigate.
 
 ### Alarm
 
 The alarm is always shown in 24h format so you can tell AM from PM.
 
 * Use **Up/Down** to switch the alarm between **on, skip, and off** (indicated by `1`/`01`/`0` on the seconds tubes, and/or high/medium/low beeps).
-* When the alarm sounds, press any button to snooze it, and again to cancel the snooze, which will silence it until the next alarm time (it will give a short low beep, and the display will blink once).
+* When the alarm sounds, press any button – once to snooze, and again to cancel the snooze / silence the alarm for the day (it will give a short low beep, and the display will blink once).
 * **Skip** silences the next alarm in advance – useful if you’re taking a day off, or you wake up before your alarm. In the [options menu](#options-menu), you can program the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back on. The [Alt button](#the-alt-button) can be set to toggle the skip setting.
 
 ### Countdown Timer
@@ -45,7 +46,7 @@ The alarm is always shown in 24h format so you can tell AM from PM.
 The countdown timer can be set up to 18 hours, and can be configured as an interval timer in the [options menu](#options-menu).
 
 * The timer will begin running as soon as you finish setting it. If you switch to another display, the timer will continue to run in the background. If power is lost, the timer will clear.
-* To cancel the running timer, hold **Select** while the timer is displayed.
+* To cancel the running timer, hold **Select** while the timer is shown.
 * When the timer sounds, press any button to silence it.
 
 ### The Alt Button
@@ -97,7 +98,7 @@ If your clock has an **Alt** button, it will do one of two things (depending on 
 | 47 | Work ends at | Time of day. |
 |  | **Geography** |  |
 | 50 | Latitude | Your latitude, in tenths of a degree; negative (south) values are indicated with leading zeroes. (Example: Dallas is at 32.8°N, set as `328`.) |
-| 51 | Longitude | Your longitude, in tenths of a degree; negative (west) values are indicated with leading zeroes. (Example: Dallas is at 96.7°W, set as `00967`.)<br/>For these two options, four-tube clocks will not display the tenths digit. |
+| 51 | Longitude | Your longitude, in tenths of a degree; negative (west) values are indicated with leading zeroes. (Example: Dallas is at 96.7°W, set as `00967`.) |
 | 52 | UTC offset | Your time zone’s offset from UTC (non-DST), in hours and minutes; negative (west) values are indicated with leading zeroes. (Example: Dallas is UTC–6, set as `0600`.) |
 
 To reset the clock to “factory” defaults, hold **Select** while powering up the clock.

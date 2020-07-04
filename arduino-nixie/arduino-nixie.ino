@@ -84,8 +84,8 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52};
 const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14};
 const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020,     0,    0,100};
-const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0, -1800,-1800, 52};
-const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439,  1800, 1800,156};
+const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0,  0, 0,49,  0, 0,49,  0,   0,   0, 0, 0, 0,   0,   0,  -900,-1800, 52};
+const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88,60,  1, 1,88,  4, 1,88,  2,1439,1439, 2, 6, 6,1439,1439,   900, 1800,156};
 
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
@@ -1044,7 +1044,9 @@ void updateDisplay(){
     } else if(fnSetValMax==156) { //Timezone offset from UTC in quarter hours plus 100 (since we're not set up to support signed bytes)
       editDisplay((abs(fnSetVal-100)*25)/100, 0, 1, fnSetVal<100, false); //hours, leading zero for negatives
       editDisplay((abs(fnSetVal-100)%4)*15, 2, 3, true, false); //minutes, leading zero always
-    } else if(fnSetValMax==1800) { //Lat/long: display on slightly different tubes on 4- vs 6-tube clocks
+    } else if(fnSetValMax==900 || fnSetValMax==1800) { //Lat/long in tenths of a degree
+      //If 6 tubes (0-5), display degrees on 0-3 and tenths on 4, with 5 blank
+      //If 4 tubes (0-3), display degrees on 0-2 and tenths on 3
       editDisplay(abs(fnSetVal), 0, (displaySize>4? 4: 3), fnSetVal<0, false);
     } else editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0, false); //some other type of value - leading zeros for negatives
   }
@@ -1274,6 +1276,8 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fad
       case 1: place=10; break;
       case 2: place=100; break;
       case 3: place=1000; break;
+      case 4: place=10000; break;
+      case 5: place=100000; break;
       default: break;
     }
     displayNext[posEnd-i] = (i==0&&n==0 ? 0 : (n>=place ? (n/place)%10 : (leadingZeros?0:15)));
