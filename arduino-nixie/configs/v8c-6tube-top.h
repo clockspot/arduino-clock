@@ -1,4 +1,4 @@
-//UNDB v8 modified to v9 spec (put Sel/Alt on A6/A7, Up/Down on A0/A1, relay on A3, led on 9, and cathode B4 on A2), buttons as labeled, with 6-digit display.
+//UNDB v8 modified to v9 spec (put Sel/Alt on A7/A6, Up/Down on A0/A1, relay on A3, led on 9, and cathode B4 on A2), relay disabled, Sel/Alt buttons reversed, with 6-digit display.
 
 const byte displaySize = 6; //number of tubes in display module. Small display adjustments are made for 4-tube clocks
 
@@ -7,12 +7,11 @@ const byte fnIsTime = 0;
 const byte fnIsDate = 1;
 const byte fnIsAlarm = 2;
 const byte fnIsTimer = 3;
-const byte fnIsDayCount = 4;
-const byte fnIsTemp = 5;
-const byte fnIsTubeTester = 6; //cycles all digits on all tubes 1/second, similar to anti-cathode-poisoning cleaner
+const byte fnIsTemp = 4;
+const byte fnIsTubeTester = 5; //cycles all digits on all tubes 1/second, similar to anti-cathode-poisoning cleaner
 // functions enabled in this clock, in their display order. Only fnIsTime is required
-const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCount}; //, fnIsTemp, fnIsTubeTester
-// To control which of these display persistently vs. switch back to Time after a few seconds, search "Temporary-display mode timeout"
+const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer}; //, fnIsTemp, fnIsTubeTester
+// To control which of these display persistently vs. switch back to Time after a few seconds, search "Temporary-display function timeout"
 
 // These are the RLB board connections to Arduino analog input pins.
 // S1/PL13 = Reset
@@ -25,10 +24,10 @@ const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer, fnIsDayCoun
 // A6-A7 are analog-only pins that aren't quite as responsive and require a physical pullup resistor (1K to +5V), and can't be used with rotary encoders because they don't support pin change interrupts.
 
 // What input is associated with each control?
-const byte mainSel = A6;
+const byte mainSel = A7;
 const byte mainAdjUp = A0;
 const byte mainAdjDn = A1;
-const byte altSel = A7; //if not equipped, set to 0
+const byte altSel = A6; //if not equipped, set to 0
 
 // What type of adj controls are equipped?
 // 1 = momentary buttons. 2 = quadrature rotary encoder (not currently supported).
@@ -36,14 +35,14 @@ const byte mainAdjType = 1;
 
 //What are the signal pin(s) connected to?
 const char piezoPin = 10;
-const char relayPin = A3;
+const char relayPin = -1;
 // -1 to disable feature (no relay item equipped); A3 if equipped (UNDB v8)
 const byte relayMode = 0; //If relay is equipped, what does it do?
 // 0 = switched mode: the relay will be switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in switchDur.
 // 1 = pulsed mode: the relay will be pulsed, like the beeper is, to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in relayPulse.
 const word signalDur = 180; //sec - when pulsed signal is going, pulses are sent once/sec for this period (e.g. 180 = 3min)
 const word switchDur = 7200; //sec - when alarm triggers switched relay, it's switched on for this period (e.g. 7200 = 2hr)
-const word piezoPulse = 500; //ms - used with piezo via tone()
+const word piezoPulse = 250; //ms - used with piezo via tone()
 const word relayPulse = 200; //ms - used with pulsed relay
 
 //Soft power switches
@@ -62,11 +61,11 @@ const char ledPin = 9;
 const byte unoffDur = 10; //sec
 
 // How long (in ms) are the button hold durations?
-const word btnShortHold = 1000; //for setting the displayed feataure
-const word btnLongHold = 3000; //for for entering options menu
-const byte velThreshold = 150; //ms
+const word btnShortHold = 1000; //for entering setting mode, or hold-setting at low velocity
+const word btnLongHold = 3000; //for entering options menu, or hold-setting at high velocity
+const word velThreshold = 0; //ms
 // When an adj up/down input (btn or rot) follows another in less than this time, value will change more (10 vs 1).
-// Recommend ~150 for rotaries. If you want to use this feature with buttons, extend to ~400.
+// 0 to disable. Recommend ~150 for rotaries. If you want to use this feature with buttons, extend to ~300.
 
 // What is the "frame rate" of the tube cleaning and display scrolling? up to 65535 ms
 const word cleanSpeed = 200; //ms
