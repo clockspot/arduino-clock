@@ -59,10 +59,10 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   24 Alarm snooze
   25 Timer interval mode - skipped when no piezo and relay is switch (start=0)
   26 LED circuit behavior - skipped when no led pin
-  27 Night mode
+  27 Night shutoff
   28-29 Night start, mins
   30-31 Night end, mins
-  32 Away mode
+  32 Away shutoff
   33 First day of workweek
   34 Last day of workweek
   35-36 Work starts at, mins
@@ -80,7 +80,7 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //Options menu numbers (displayed in UI and readme), EEPROM locations, and default/min/max values.
 //Option numbers/order can be changed (though try to avoid for user convenience);
 //but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
-//                       General                    Alarm        Timer     Strike    Night and away mode              Lat   Long  UTC±*
+//                       General                    Alarm        Timer     Strike    Night and away shutoff           Lat   Long  UTC±*
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13, 20,21,22, 30,31,32, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52};
 const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,24, 25,43,40, 21,44,41, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14};
 const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,61, 9,  0, 0,61,  0, 0,61,  0,1320, 360, 0, 1, 5, 480,1020,     0,    0,100};
@@ -130,7 +130,7 @@ word snoozeRemain = 0; //snooze timeout counter, seconds
 word timerInitial = 0; //timer original setting, seconds - up to 18 hours (64,800 seconds - fits just inside a word)
 word timerRemain = 0; //timer actual counter
 unsigned long signalPulseStartTime = 0; //to keep track of individual pulses so we can stop them
-word unoffRemain = 0; //un-off (briefly turn on tubes during full night or away modes) timeout counter, seconds
+word unoffRemain = 0; //un-off (briefly turn on tubes during full night/away shutoff) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 byte cleanRemain = 0; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
 char scrollRemain = 0; //"frames" of scroll – 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change
@@ -559,7 +559,7 @@ void doSetHold(bool start){
   //TODO integrate this with checkInputs?
   unsigned long now = millis();
   //The interval used to be 250, but in order to make the value change by a full 9 values between btnShortHold and btnLongHold,
-  //the interval is now that difference divided by 9.5 (to try to ensure btnLongHold occurs comfortably between 9th and 10th doSet).
+  //the interval is now that difference divided by 9. TODO divisor may need to be a bit higher in case btnLongHold ever fires before 9th.
   //It may be weird not being exactly quarter-seconds, but it doesn't line up with the blinking anyway.
   if(start || (unsigned long)(now-doSetHoldLast)>=((btnLongHold-btnShortHold)/9)) {
     doSetHoldLast = now;
@@ -674,14 +674,14 @@ void checkRTC(bool force){
   if(fnSetPg || fn>=fnOpts){
     if((unsigned long)(now-inputLast)>=timeoutSet*1000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
   }
-  //Paged-display mode timeout //TODO change fnIsDate to consts? //TODO timeoutPageFn var
+  //Paged-display function timeout //TODO change fnIsDate to consts? //TODO timeoutPageFn var
   else if(fn==fnIsDate && (unsigned long)(now-inputLast)>=2500) {
     //Here we just have to increment the page and decide when to reset. updateDisplay() will do the rendering
     fnPg++; inputLast+=2500; //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
     if(fnPg >= fnDatePages){ fnPg = 0; fn = fnIsTime; }
     force=true;
   }
-  //Temporary-display mode timeout: if we're *not* in a permanent one (time, or running/signaling timer)
+  //Temporary-display function timeout: if we're *not* in a permanent one (time, or running/signaling timer)
   else if(fn!=fnIsTime && !(fn==fnIsTimer && (timerRemain>0 || signalRemain>0))){ // && fn!=readEEPROM(7,false)
     if((unsigned long)(now-inputLast)>=timeoutTempFn*1000) { fnSetPg = 0; fn = fnIsTime; force=true; }
   }
@@ -728,8 +728,8 @@ void checkRTC(bool force){
     if(tod.second()<2 && displayDim==2 && fnSetPg==0 && unoffRemain==0) {
       switch(readEEPROM(46,false)) { //how often should the routine run?
         case 0: //every day
-          if(readEEPROM(27,false)>0? //is night mode enabled?
-            tod.second()==0 && tod.hour()*60+tod.minute()==readEEPROM(28,true): //if so, at start of night mode (at second :00 before dim is in effect)
+          if(readEEPROM(27,false)>0? //is night shutoff enabled?
+            tod.second()==0 && tod.hour()*60+tod.minute()==readEEPROM(28,true): //if so, at start of night shutoff (at second :00 before dim is in effect)
             tod.second()==1 && tod.hour()*60+tod.minute()==0) //if not, at 00:00:01
               cleanRemain = 51; //run routine for five cycles
           break;
@@ -809,7 +809,7 @@ void checkRTC(bool force){
     } //end natural second
     
     //Finally, update the display, whether natural tick or not, as long as we're not setting or on a scrolled display (unless forced eg. fn change)
-    //This also determines night/away mode, which is why strikes will happen if we go into off at top of hour, and not when we come into on at the top of the hour TODO find a way to fix this
+    //This also determines night/away shutoff, which is why strikes will happen if we go into off at top of hour, and not when we come into on at the top of the hour TODO find a way to fix this
     //Also skip updating the display if this is date and not being forced, since its pages take some calculating that cause it to flicker
     if(fnSetPg==0 && (scrollRemain==0 || force) && !(fn==fnIsDate && !force)) updateDisplay();
     
@@ -1064,7 +1064,7 @@ void updateDisplay(){
       displayDim = (unoffRemain>0? 2: 0); //unoff overrides this
     //clock at home: away on weekdays, during office hours only
     else if( readEEPROM(32,false)==2 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) && isTimeInRange(readEEPROM(35,true), readEEPROM(37,true), todmins) ) displayDim = (unoffRemain>0? 2: 0);
-    //night mode - if night end is 0:00, use alarm time instead
+    //night shutoff - if night end is 0:00, use alarm time instead
     else if( readEEPROM(27,false) && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins) ) displayDim = (readEEPROM(27,false)==1?1:(unoffRemain>0?2:0)); //dim or (unoff? bright: off)
     //normal
     else displayDim = 2;
@@ -1502,7 +1502,7 @@ void updateLEDs(){
         ledStateTarget = 255;
         //Serial.println(F("LEDs on always"));
         break;
-      case 2: //on, but follow night/away modes
+      case 2: //on, but follow night/away shutoff
         ledStateTarget = (displayDim==2? 255: (displayDim==1? 127: 0));
         //Serial.print(displayDim==2? F("LEDs on"): (displayDim==1? F("LEDs dim"): F("LEDs off"))); Serial.println(F(" per dim state"));
         break;

@@ -11,7 +11,7 @@ const byte fnIsTemp = 4;
 const byte fnIsTubeTester = 5; //cycles all digits on all tubes 1/second, similar to anti-cathode-poisoning cleaner
 // functions enabled in this clock, in their display order. Only fnIsTime is required
 const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer}; //, fnIsTemp, fnIsTubeTester
-// To control which of these display persistently vs. switch back to Time after a few seconds, search "Temporary-display mode timeout"
+// To control which of these display persistently vs. switch back to Time after a few seconds, search "Temporary-display function timeout"
 
 // These are the RLB board connections to Arduino analog input pins.
 // S1/PL13 = Reset
@@ -61,11 +61,11 @@ const char ledPin = 9;
 const byte unoffDur = 10; //sec
 
 // How long (in ms) are the button hold durations?
-const word btnShortHold = 1000; //for setting the displayed feataure
-const word btnLongHold = 3000; //for for entering options menu
+const word btnShortHold = 1000; //for entering setting mode, or hold-setting at low velocity
+const word btnLongHold = 3000; //for entering options menu, or hold-setting at high velocity
 const word velThreshold = 0; //ms
 // When an adj up/down input (btn or rot) follows another in less than this time, value will change more (10 vs 1).
-// 0 to disable. Recommend ~150 for rotaries. If you want to use this feature with buttons, extend to ~400.
+// 0 to disable. Recommend ~150 for rotaries. If you want to use this feature with buttons, extend to ~300.
 
 // What is the "frame rate" of the tube cleaning and display scrolling? up to 65535 ms
 const word cleanSpeed = 200; //ms
