@@ -78,15 +78,18 @@ If your clock has an **Alt** button, it will do one of two things (depending on 
 | 10 | Alarm auto-skip | 0 = alarm triggers every day<br/>1 = work week only, skipping weekends (per settings below)<br/>2 = weekend only, skipping work week |
 | 11 | Alarm signal | 0 = beeper<br/>1 = relay (if in switch mode, will stay on for 2 hours)<br/>(Clocks with both beeper and relay only) |
 | 12 | Alarm beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>(Clocks with beeper only) |
-| 13 | Alarm snooze | 0–60 minutes. 0 disables snooze. |
+| 13 | Alarm beeper pattern | 0 = long (1/2-second pulse)<br/>1 = short (1/4-second pulse)<br/>2 = double (two 1/8-second pulses)<br/>3 = cuckoo (two 1/8-second pulses, descending major third)<br/>4 = quad (four 1/16-second pulses)<br/>5 = Fibonacci (unimplemented): wakes you gradually with short pulses at increasingly shorter intervals, per the [Fibonacci sequence](https://en.wikipedia.org/wiki/Fibonacci_number) in reverse (610 seconds, then 377, then 233...). It takes a little over 25 minutes to reach once-per-second beeping, so set the alarm about 25 minutes earlier than you would normally. Snooze does not apply to this pattern; once it starts, any button press will silence the alarm for the day.<br/>(Clocks with beeper and/or pulse relay only) |
+| 14 | Alarm snooze | 0–60 minutes. 0 disables snooze. |
 |  | **Timer** |  |
 | 20 | Timer interval mode | 0 = count down and stop<br/>1 = count down and restart (interval mode)<br/>(Clocks with beeper and/or pulse relay only) |
 | 21 | Timer signal | 0 = beeper<br/>1 = relay (if in switch mode, will stay on until timer runs down)</br>(Clocks with both beeper and relay only) |
 | 22 | Timer beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>(Clocks with beeper only) |
+| 23 | Timer beeper pattern | Same options as alarm beeper pattern, except Fibonacci.<br/>(Clocks with beeper and/or pulse relay only) |
 |  | **Chime** |  |
-| 30 | Chime | Make noise on the hour:<br/>0 = off<br/>1 = single beep<br/>2 = pips<br/>3 = Chime the hour (1 to 12)<br/>4 = ship’s bell (hour and half hour)<br/>Will not sound during night/away shutoff (except when off starts at top of hour)<br/>(Clocks with beeper or pulse relay only) |
+| 30 | Chime | Make noise on the hour:<br/>0 = off<br/>1 = single beep<br/>2 = [the pips](https://en.wikipedia.org/wiki/Greenwich_Time_Signal) (overrides pitch and pattern settings)<br/>3 = chime the hour (1 to 12)<br/>4 = ship’s bell (hour and half hour)<br/>Will not sound during night/away shutoff (except when off starts at top of hour)<br/>(Clocks with beeper or pulse relay only) |
 | 31 | Chime signal | 0 = beeper<br/>1 = relay<br/>(Clocks with both beeper and pulse relay only) |
-| 32 | Chime beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>TIP: If using pips, 63 (987Hz) is closest to the real BBC pips frequency (1000Hz).<br/>(Clocks with beeper only) |
+| 32 | Chime beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>(Clocks with beeper only) |
+| 33 | Chime beeper pattern | Same options as alarm beeper pattern, except Fibonacci.<br/>(Clocks with beeper and/or pulse relay only) |
 |  | **Night/away shutoff** |  |
 | 40 | Night shutoff | To save tube life and/or preserve your sleep, dim or shut off tubes nightly when you’re not around or sleeping.<br/>0 = none (tubes fully on at night)<br/>1 = dim tubes at night<br/>2 = shut off tubes at night<br/>When off, you can press **Select** to illuminate the tubes briefly. |
 | 41 | Night starts at | Time of day. |
