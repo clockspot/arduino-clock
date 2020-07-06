@@ -38,8 +38,10 @@ The calendar cycles through several displays, before returning to the time of da
 The alarm is always shown in 24h format so you can tell AM from PM.
 
 * Use **Up/Down** to switch the alarm between **on, skip, and off** (indicated by `1`/`01`/`0` on the seconds tubes, and/or high/medium/low beeps).
+  * If your clock has an **Alt button** and it’s [set as the alarm preset](#the-alt-button), it will switch the alarm as well – so you can display and switch the alarm with a few presses of a single button.
+* **Skip** silences the next alarm in advance – useful if you’re taking a day off, or you wake up before your alarm. In the [options menu](#options-menu), you can program the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back on.
 * When the alarm sounds, press any button – once to snooze, and again to cancel the snooze / silence the alarm for the day (it will give a short low beep, and the display will blink once).
-* **Skip** silences the next alarm in advance – useful if you’re taking a day off, or you wake up before your alarm. In the [options menu](#options-menu), you can program the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back on. The [Alt button](#the-alt-button) can be set to toggle the skip setting.
+  * In **Fibonacci mode** (see [options menu](#options-menu)), snooze does not take effect; any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet.
 
 ### Countdown Timer
 
@@ -55,7 +57,7 @@ If your clock has an **Alt** button, it will do one of two things (depending on 
 
 * If your clock has a switched relay with soft power switch enabled (such as for a radio), **Alt** acts as that switch.
 * Otherwise, it works as a preset button. While viewing the display you want quick access to (such as the alarm or countdown timer), hold **Alt** until it beeps twice; then you can use **Alt** to jump straight there.
-  * TIP: If used with the alarm, the **Alt** button will also toggle the skip setting – so to skip (or unskip) the next alarm, you only need to press the **Alt** button twice: once to display it, and once to change it.
+  * TIP: If **Alt** is set as the alarm preset, it will switch the alarm as well – so you can display and switch the alarm with a few presses of a single button.
 
 ### Options Menu
 
@@ -78,8 +80,9 @@ If your clock has an **Alt** button, it will do one of two things (depending on 
 | 10 | Alarm auto-skip | 0 = alarm triggers every day<br/>1 = work week only, skipping weekends (per settings below)<br/>2 = weekend only, skipping work week |
 | 11 | Alarm signal | 0 = beeper<br/>1 = relay (if in switch mode, will stay on for 2 hours)<br/>(Clocks with both beeper and relay only) |
 | 12 | Alarm beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>(Clocks with beeper only) |
-| 13 | Alarm beeper pattern | 0 = long (1/2-second pulse)<br/>1 = short (1/4-second pulse)<br/>2 = double (two 1/8-second pulses)<br/>3 = cuckoo (two 1/8-second pulses, descending major third)<br/>4 = quad (four 1/16-second pulses)<br/>5 = Fibonacci (unimplemented): wakes you gradually with short pulses at increasingly shorter intervals, per the [Fibonacci sequence](https://en.wikipedia.org/wiki/Fibonacci_number) in reverse (610 seconds, then 377, then 233...). It takes a little over 25 minutes to reach once-per-second beeping, so set the alarm about 25 minutes earlier than you would normally. Snooze does not apply to this pattern; once it starts, any button press will silence the alarm for the day.<br/>(Clocks with beeper and/or pulse relay only) |
+| 13 | Alarm beeper pattern | 0 = long (1/2-second beep)<br/>1 = short (1/4-second beep)<br/>2 = double (two 1/8-second beeps)<br/>3 = cuckoo (two 1/8-second beeps, descending major third)<br/>4 = quad (four 1/16-second beeps)<br/>(Clocks with beeper and/or pulse relay only) |
 | 14 | Alarm snooze | 0–60 minutes. 0 disables snooze. |
+| 15 | Fibonacci mode | 0 = off<br/>1 = on<br/>To wake you more gradually, starting about half an hour before the set time, the clock will beep at intervals per the [Fibonacci sequence](https://en.wikipedia.org/wiki/Fibonacci_number) (610 seconds, then 337, then 233...). In this mode, snooze does not take effect; any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet.<br/>(Clocks with beeper and/or pulse relay only)
 |  | **Timer** |  |
 | 20 | Timer interval mode | 0 = count down and stop<br/>1 = count down and restart (interval mode)<br/>(Clocks with beeper and/or pulse relay only) |
 | 21 | Timer signal | 0 = beeper<br/>1 = relay (if in switch mode, will stay on until timer runs down)</br>(Clocks with both beeper and relay only) |
