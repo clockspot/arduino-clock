@@ -713,6 +713,7 @@ void checkRTC(bool force){
       int alarmTime = readEEPROM(0,true);
       if(tod.second()==23){ alarmTime-=27; if(alarmTime<0) alarmTime+=1440; } //set min to n-27 with midnight rollover
       if(tod.hour()*60+tod.minute()==alarmTime){
+        //Serial.println(tod.second()==31?F("It's fibonacci time"):F("It's regular alarm time"));
         if(alarmOn && !alarmSkip) { //if the alarm is on and not skipped, sound it!
           fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1);
           //This will set the signalRemain (and relay in switched mode) and signalPattern,
@@ -795,6 +796,7 @@ void checkRTC(bool force){
       //Won't check alarm skip status here, as it reflects tomorrow
       if(snoozeRemain>0) {
         snoozeRemain--;
+        //Serial.print("sr "); Serial.println(snoozeRemain,DEC);
         if(snoozeRemain<=0 && alarmOn) {
           fnSetPg = 0; fn = fnIsTime; signalStart(fnIsAlarm,1);
         }
@@ -811,26 +813,34 @@ void checkRTC(bool force){
           if(signalSource==fnIsAlarm && readEEPROM(50,false)){
             //Find difference between next alarm time and current time, in minutes, with midnight rollover
             int diff = readEEPROM(0,true)-(tod.hour()*60+tod.minute()); if(diff<=0) diff+=1440;
+            //Serial.print(F("diff min ")); Serial.print(diff,DEC);
             //If we are within 30 minutes of next alarm time but haven't reached it yet, do Fibonacci stuff
             if(diff<30){
               signalRemain=0;
               //Find which number we're on, and if we find one, snooze for that
-              diff*=60; //convert to seconds
+              diff*=60; diff-=tod.second(); //convert to seconds and add seconds component
+              //Serial.print(F(", diff sec ")); Serial.print(diff,DEC);
+              int nnn = 0;
               int nn = 1;
               int n = 1;
               while(n<1600){ //failsafe – diff starts at 1597s (26m37s)
-                n  = n+nn;
-                nn = n-nn;
+                //Serial.print(F(", ")); Serial.print(n,DEC); Serial.print(F("+")); Serial.print(nn,DEC); Serial.print(F("="));
+                n   = n+nn;
+                nn  = n-nn;
+                nnn = nn-nnn;
+                //Serial.print(n,DEC);
                 if(diff<=n) {
                   signalPattern = 1; //short beep
                   signalPulseStart();
-                  snoozeRemain = n;
+                  snoozeRemain = nnn;
+                  //Serial.print(F(" SR")); Serial.print(snoozeRemain,DEC);
                   break;
                 }
               }
             }
             //Otherwise pulse as normal
             else signalPulseStart();
+            //Serial.println();
           }
           //If not alarm or not Fibonacci mode, pulse as normal
           else signalPulseStart();
