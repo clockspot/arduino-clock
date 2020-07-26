@@ -354,13 +354,13 @@ void ctrlEvt(byte ctrl, byte evt){
           checkRTC(true); //updates display
         }
         else if(ctrl==mainAdjUp || ctrl==mainAdjDn) {
-          if(fn==fnIsAlarm) switchAlarm(ctrl==mainAdjUp?1:-1); //switch alarm
+          if(fn==fnIsAlarm) switchAlarm(ctrl==mainAdjUp?1:0); //switch alarm
           //if(fn==fnIsTime) TODO volume in I2C radio
         }
       }
       else if(altSel>0 && ctrl==altSel) { //alt sel press
         //if switched relay, and soft switch enabled, we'll switch power.
-        if(enableSoftPowerSwitch && relayPin>=0 && relayMode==0) { switchPower(0); btnStop(); }
+        if(enableSoftPowerSwitch && relayPin>=0 && relayMode==0) { switchPower(2); btnStop(); }
         //Otherwise, this becomes our function preset.
         else {
           //On long hold, if this is not currently the preset, we'll set it, double beep, and btnStop.
@@ -379,8 +379,8 @@ void ctrlEvt(byte ctrl, byte evt){
             btnStop();
             if(fn!=readEEPROM(7,false)) fn=readEEPROM(7,false);
             else {
-              //Special case: if this is the alarm and it's on, toggle the alarm switch
-              if(fn==fnIsAlarm && alarmOn) switchAlarm(0);
+              //Special case: if this is the alarm, toggle the alarm switch
+              if(fn==fnIsAlarm) switchAlarm(2);
             }
             fnPg = 0; //reset page counter in case we were in a paged display
             updateDisplay();
@@ -956,12 +956,13 @@ int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp){
 }
 
 void switchAlarm(byte dir){
+  //0=down, 1=up, 2=toggle
   if(enableSoftAlarmSwitch){
     signalStop(); //snoozeRemain = 0;
     //There are three alarm states - on, on with skip (skips the next alarm trigger), and off.
     //Currently we use up/down buttons or a rotary control, rather than a binary switch, so we can cycle up/down through these states.
     //On/off is stored in EEPROM to survive power loss; skip is volatile, not least because it can change automatically and I don't like making automated writes to EEPROM if I can help it. Skip state doesn't matter when alarm is off.
-    if(dir==0) dir=(alarmOn?-1:1); //If alarm is off, cycle button goes up; otherwise down.
+    if(dir==2) dir=(alarmOn?0:1); //If alarm is off, cycle button goes up; otherwise down.
     if(dir==1){
       if(!alarmOn){ //if off, go straight to on, no skip
         alarmOn=1; writeEEPROM(2,alarmOn,false); alarmSkip=0; quickBeep(76); //C7
@@ -970,7 +971,7 @@ void switchAlarm(byte dir){
         alarmSkip=0; quickBeep(76); //C7
       }
     }
-    if(dir==-1){
+    if(dir==0){
       if(alarmOn){ //if on
         if(!alarmSkip){ //if not skip, go to skip
           alarmSkip=1; quickBeep(71); //G6
@@ -985,6 +986,7 @@ void switchAlarm(byte dir){
   //TODO don't make alarm permanent until leaving setting to minimize writes to eeprom as user cycles through options?
 }
 void switchPower(byte dir){
+  //0=down, 1=up, 2=toggle
   signalRemain = 0; snoozeRemain = 0; //in case alarm is going now - alternatively use signalStop()?
   //If the timer is running and is using the switched relay, this instruction conflicts with it, so cancel it
   if(timerRemain>0 && readEEPROM(43,false)==1) {
@@ -994,8 +996,8 @@ void switchPower(byte dir){
   //relayPin state is the reverse of the appliance state: LOW = device on, HIGH = device off
   //Serial.print(millis(),DEC);
   //Serial.print(F(" Relay requested to "));
-  if(dir==0) { //toggle
-    dir = (digitalRead(relayPin)?1:-1); //LOW = device on, so this effectively does our dir reversion for us
+  if(dir==2) { //toggle
+    dir = (digitalRead(relayPin)?1:0); //LOW = device on, so this effectively does our dir reversion for us
     //Serial.print(dir==1?F("toggle on"):F("toggle off"));
   } else {
     //Serial.print(dir==1?F("switch on"):F("switch off"));
