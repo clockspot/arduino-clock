@@ -620,16 +620,16 @@ void switchPower(byte dir){
     updateDisplay();
   }
   //relayPin state is the reverse of the appliance state: LOW = device on, HIGH = device off
-  Serial.print(ms(),DEC);
-  Serial.print(F(" Relay requested to "));
+  // Serial.print(ms(),DEC);
+  // Serial.print(F(" Relay requested to "));
   if(dir==2) { //toggle
     dir = (digitalRead(relayPin)?1:0); //LOW = device on, so this effectively does our dir reversion for us
-    Serial.print(dir==1?F("toggle on"):F("toggle off"));
+    //Serial.print(dir==1?F("toggle on"):F("toggle off"));
   } else {
-    Serial.print(dir==1?F("switch on"):F("switch off"));
+    //Serial.print(dir==1?F("switch on"):F("switch off"));
   }
   digitalWrite(relayPin,(dir==1?0:1)); //LOW = device on
-  Serial.println(F(", switchPower"));
+  //Serial.println(F(", switchPower"));
   updateLEDs(); //LEDs following switch relay
 }
 
@@ -763,25 +763,25 @@ void millisCorrectForDrift(){
   if(millisAtLastRTCTick){ //if this has a value, we know millis should have advanced by millisCorrectInterval*1000.
     unsigned long millisDrift = now-(millisAtLastRTCTick+(millisCorrectInterval*1000));
     millisDriftOffset -= millisDrift;
-    tod = rtc.now();
-    if(tod.hour()<10) Serial.print(F("0"));
-    Serial.print(tod.hour(),DEC);
-    Serial.print(F(":"));
-    if(tod.minute()<10) Serial.print(F("0"));
-    Serial.print(tod.minute(),DEC);
-    Serial.print(F(":"));
-    if(tod.second()<10) Serial.print(F("0"));
-    Serial.print(tod.second(),DEC);
-    Serial.print(F("  millis: "));
-    Serial.print(now,DEC);
-    Serial.print(F("  drift: "));
-    Serial.print(millisDrift,DEC);
-    Serial.print(F(" (")); Serial.print(~millisDrift,DEC); //in case of wraparound, this is more human-readable
-    Serial.print(F(")  new offset: "));
-    Serial.print(millisDriftOffset,DEC);
-    Serial.print(F(" (")); Serial.print(~millisDriftOffset,DEC); //in case of wraparound, this is more human-readable
-    Serial.print(F(")"));
-    Serial.println();
+    // tod = rtc.now();
+    // if(tod.hour()<10) Serial.print(F("0"));
+    // Serial.print(tod.hour(),DEC);
+    // Serial.print(F(":"));
+    // if(tod.minute()<10) Serial.print(F("0"));
+    // Serial.print(tod.minute(),DEC);
+    // Serial.print(F(":"));
+    // if(tod.second()<10) Serial.print(F("0"));
+    // Serial.print(tod.second(),DEC);
+    // Serial.print(F("  millis: "));
+    // Serial.print(now,DEC);
+    // Serial.print(F("  drift: "));
+    // Serial.print(millisDrift,DEC);
+    // Serial.print(F(" (")); Serial.print(~millisDrift,DEC); //in case of wraparound, this is more human-readable
+    // Serial.print(F(")  new offset: "));
+    // Serial.print(millisDriftOffset,DEC);
+    // Serial.print(F(" (")); Serial.print(~millisDriftOffset,DEC); //in case of wraparound, this is more human-readable
+    // Serial.print(F(")"));
+    // Serial.println();
   }
   millisAtLastRTCTick = now;
 }
@@ -1190,9 +1190,9 @@ void timerSwitchSleepRelay(bool on){
   //This doesn't count as a signal (using signal methods) so that other signals might not interrupt it. TODO confirm
   if(relayPin>=0 && relayMode==0 && readEEPROM(43,false)==1) { //start "radio sleep"
     digitalWrite(relayPin,(on?LOW:HIGH)); //LOW = device on
-    Serial.print(ms(),DEC);
-    if(on) Serial.println(F(" Relay on, timerSwitchSleepRelay (radio sleep)"));
-    else   Serial.println(F(" Relay off, timerSwitchSleepRelay (radio sleep)"));
+    // Serial.print(ms(),DEC);
+    // if(on) Serial.println(F(" Relay on, timerSwitchSleepRelay (radio sleep)"));
+    // else   Serial.println(F(" Relay off, timerSwitchSleepRelay (radio sleep)"));
     updateLEDs(); //LEDs following switch relay
   }
 }
@@ -1710,7 +1710,7 @@ void signalStart(byte sigFn, byte sigDur){ //make some noise! or switch on an ap
     if(getSignalOutput()==1 && relayPin>=0 && relayMode==0) { //switched relay: turn it on now
       signalRemain = (sigFn==fnIsAlarm? switchDur: sigDur); //For alarm signal, use switched relay duration (eg 2hr)
       digitalWrite(relayPin,LOW); //LOW = device on
-      Serial.print(ms(),DEC); Serial.println(F(" Relay on, signalStart"));
+      //Serial.print(ms(),DEC); Serial.println(F(" Relay on, signalStart"));
     } else { //start pulsing. If there is no beeper or pulsed relay, this will have no effect since cycleSignal will clear it
       signalRemain = (sigFn==fnIsAlarm? signalDur: sigDur); //For alarm signal, use pulse signal duration (eg 2min)
       signalPulseStartTime = ms();
@@ -1725,7 +1725,7 @@ void signalStop(){ //stop current signal and clear out signal timer if applicabl
   if(getSignalOutput()==0 && piezoPin>=0) noTone(piezoPin);
   if(getSignalOutput()==1 && relayPin>=0){
     digitalWrite(relayPin,HIGH); //LOW = device on
-    Serial.print(ms(),DEC); Serial.println(F(" Relay off, signalStop"));
+    //Serial.print(ms(),DEC); Serial.println(F(" Relay off, signalStop"));
     updateLEDs(); //LEDs following relay
   }
 }
@@ -1794,12 +1794,12 @@ void cycleSignal(){
       }
       if(signalPulseStep==1){ //start the relay
         digitalWrite(relayPin,LOW); //LOW = device on
-        Serial.print(ms(),DEC); Serial.println(F(" Relay on, cycleSignal"));
+        //Serial.print(ms(),DEC); Serial.println(F(" Relay on, cycleSignal"));
         signalPulseStep = 2; //set it up to stop
       } else { //stop the relay, when it's been on long enough
         if((unsigned long)(ms()-signalPulseStartTime)>=relayPulse) {
           digitalWrite(relayPin,HIGH); //LOW = device on
-          Serial.print(ms(),DEC); Serial.println(F(" Relay off, cycleSignal"));
+          //Serial.print(ms(),DEC); Serial.println(F(" Relay off, cycleSignal"));
           if(signalRemain) { signalRemain--; signalPulseStep=255; } //set up to start another pulse
           else signalStop(); //idle
         }
