@@ -17,5 +17,6 @@
 * Metronome function
 * Alarm option should be beeping patterns, including a slow wake which defeats the 2 minute delay
 * Signalstart should create a situation where there's time on the counter, but doesn't make sound since the rtc can do that. Other beepable actions would probably cancel that counter anyway
+* Why does the display flicker sometimes? are we doubling up on a display cycle call?
 
 See other TODOs throughout code.

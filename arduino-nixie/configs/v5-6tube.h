@@ -66,7 +66,7 @@ const word cleanSpeed = 200; //ms
 const word scrollSpeed = 100; //ms - e.g. scroll-in-and-out date at :30 - to give the illusion of a slow scroll that doesn't pause, use (timeoutTempFn*1000)/(displaySize+1) - e.g. 714 for displaySize=6 and timeoutTempFn=5
 
 // What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
-const unsigned long timeoutSet = 120; //sec
+const unsigned long timeoutSet = 300; //sec
 const unsigned long timeoutTempFn = 5; //sec
 
 //This clock is 2x3 multiplexed: two tubes powered at a time.
