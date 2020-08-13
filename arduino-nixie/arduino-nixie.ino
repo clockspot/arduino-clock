@@ -346,7 +346,7 @@ void ctrlEvt(byte ctrl, byte evt){
           case fnIsAlarm: //set mins
             startSet(readEEPROM(0,true),0,1439,1); break;
           case fnIsTimer: //set mins
-            if(timerTime!=0 || timerState&1) { quickBeep(57); timerClear(); updateDisplay(); break; } //If the timer is nonzero or running, zero it
+            if(timerTime!=0 || timerState&1) { timerClear(); } // updateDisplay(); break; } //If the timer is nonzero or running, zero it. But rather than stop there, just go straight into setting – since adjDn (or cycling fns) can reset to zero
             startSet(timerInitialMins,0,5999,1); break; //minutes
           //fnIsDayCount removed in favor of paginated calendar
           case fnIsTemp: //could do calibration here if so inclined
@@ -357,7 +357,7 @@ void ctrlEvt(byte ctrl, byte evt){
       }
       else if((ctrl==mainSel && evt==0) || ((ctrl==mainAdjUp || ctrl==mainAdjDn) && evt==1)) { //sel release or adj press
         //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
-        if(ctrl==mainSel && !(fn==fnIsTimer && btnCurHeld==2)){ //sel release - except after a timer short hold (possibly to clear timer)
+        if(ctrl==mainSel){ //sel release
           if(fn==fnIsTimer && !(timerState&1)) timerClear(); //if timer is stopped, clear it
           fnScroll(1); //Go to next fn in the cycle
           fnPg = 0; //reset page counter in case we were in a paged display
@@ -380,13 +380,14 @@ void ctrlEvt(byte ctrl, byte evt){
             } else { //mainAdjDown
               if(!(timerState&1)){ //stopped
                 if(mainAdjType!=2) { //button
-                  quickBeep(57); timerClear();
-                  //same as //save timer secs
-                  timerTime = (timerInitialMins*60000)+(timerInitialSecs*1000); //set timer duration
-                  if(timerTime!=0){
-                    bitWrite(timerState,1,0); //set timer direction (bit 1) to down (0)
-                    //timerStart(); //we won't automatically start, we'll let the user do that
-                  }
+                  timerClear();
+                  //if we wanted to reset to the previous time, we could use this; but sel hold is easy enough to get there
+                  // //same as //save timer secs
+                  // timerTime = (timerInitialMins*60000)+(timerInitialSecs*1000); //set timer duration
+                  // if(timerTime!=0){
+                  //   bitWrite(timerState,1,0); //set timer direction (bit 1) to down (0)
+                  //   //timerStart(); //we won't automatically start, we'll let the user do that
+                  // }
                   updateDisplay();
                 }
               } else { //running
@@ -1166,7 +1167,7 @@ void timerRunoutToggle(){
     if(!((timerState>>2)&1)) timerState ^= (1<<3); //if it's 0, toggle runout chrono bit
     //do a quick signal to indicate the selection
     signalPattern = ((timerState>>2)&3)+1; //convert 00/01/10/11 to 1/2/3/4
-    signalSource = fnIsTimer; //we'll get the piezo pitch even if timer isn't using it
+    signalSource = fnIsTimer;
     signalStart(-1,0); //Play pulse using above pattern and source
   }
 }
@@ -1769,7 +1770,7 @@ void cycleSignal(){
   //Each pulse is made up of steps such as triggering beeps or starting/stopping the pulse relay
   //signalPulseStep keeps track of those steps, or -1 (255) if waiting for next pulse, or 0 if not signaling
   if(signalPulseStep){ //if there's a pulse going
-    if((getSignalOutput()==0 || (signalRemain==0 && signalSource==fnIsTimer)) && piezoPin>=0) { //beeper, or single pulse for fnIsTimer
+    if((getSignalOutput()==0 || (signalRemain==0 && signalSource==fnIsTimer)) && piezoPin>=0) { // beeper, or single pulse for fnIsTimer runout setting
       //Since tone() handles the duration of each beep,
       //we only need to use signalPulseStep to track beep starts; they'll stop on their own.
       byte bc = 0; //this many beeps
@@ -1797,11 +1798,13 @@ void cycleSignal(){
         signalPulseStep = 1;
       }
       if((unsigned long)(ms()-signalPulseStartTime)>=(signalPulseStep-1)*bd*2){
-        word piezoPitch = (
-          signalPattern==5 && signalPulseStep==2? getSignalPitch()*0.7937: ( //cuckoo: go down a major third (2^(-4/12)) on second beep
-          signalPattern==255? 1000: //the pips: use 1000Hz just like the Beeb
-          getSignalPitch() //usual: get pitch from user settings
-        ));
+        word piezoPitch = (signalPattern==5 && signalPulseStep==2? getSignalPitch()*0.7937: //cuckoo: go down major third (2^(-4/12)) on 2nd beep
+          (signalPattern==255? 1000: //the pips: use 1000Hz just like the Beeb
+            (signalRemain==0 && signalSource==fnIsTimer? getHz(73): //fnIsTimer runout setting: use timer lap pitch
+              getSignalPitch() //usual: get pitch from user settings
+            )
+          )
+        );
         noTone(piezoPin); tone(piezoPin, piezoPitch, bd);
         //Serial.print(F("Starting beep, sPS "));
         //Serial.print(signalPulseStep,DEC);
