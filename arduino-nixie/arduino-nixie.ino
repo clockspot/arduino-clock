@@ -11,7 +11,7 @@
 
 ////////// Software version //////////
 const byte vMajor = 1;
-const byte vMinor = 6;
+const byte vMinor = 7;
 const byte vPatch = 0;
 
 ////////// Other includes, global consts, and vars //////////
