@@ -521,6 +521,7 @@ void ctrlEvt(byte ctrl, byte evt){
                   if(timerTime!=0){
                     bitWrite(timerState,1,0); //set timer direction (bit 1) to down (0)
                     //timerStart(); //we won't automatically start, we'll let the user do that
+                    //TODO: in timer radio mode, skip setting setting the seconds (display placeholder) and start when done. May even want to skip runout options even if the beeper is there. Or could make it an option in the settings file.
                   }
                   clearSet(); break;
                 default: break;
@@ -1194,6 +1195,7 @@ void cycleTimer(){
             timerClear();
             //If switched relay (radio sleep), go to time of day; otherwise go to empty timer to appear with signal
             fnSetPg = 0; fn = (relayPin>=0 && relayMode==0 && readEEPROM(43,false)==1 ? fnIsTime: fnIsTimer);
+            updateDisplay();
           }
         }
         //signal (if not switched relay)
