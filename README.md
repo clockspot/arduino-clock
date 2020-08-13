@@ -47,18 +47,28 @@ The alarm is always shown in 24h format so you can tell AM from PM.
 
 This feature can count down (timer) or up (chrono) to 100 hours. When idle, it displays `0` (or `000000` if you have leading zeros enabled).
 
-* To start and stop, use **Up/Down**. While at `0`, **Up** will start the chrono.
-  * While the chrono is running, **Up** will briefly display a lap time.
-* To set the timer, hold **Select** while at `0`. You can set it to the nearest minute, up to 100 hours. For convenience, it will recall the last set time. As soon as you press **Select** to finish setting, it will begin to count down.
-  * While the timer is running, press **Up** to choose what the timer should do when it runs out:
+* To start and stop, use **Up**. While at `0`, this will start the chrono.
+  * While the chrono is running, **Down** will briefly display a lap time.
+* To set the timer, hold **Select** while at `0`. It will prompt for hours/minutes first, then seconds. For convenience, it will recall the last-used time.
+  * While the timer is running, **Down** will cycle through the runout options (what the timer will do when it runs out – clocks with beeper only):
     * 1 beep: simply stop, with a long signal (default)
     * 2 beeps: restart, with a short signal (makes a great interval timer!)
     * 3 beeps: start the chrono, with a long signal
     * 4 beeps: start the chrono, with a short signal
-  * If your clock has a [switched relay](#hardware-configuration) and the timer/chrono is set to use it (in the [options menu](#options-menu)), it will switch on while the timer/chrono is running, like the “sleep” function on a clock radio. In this case, the runout options above are not available.
-* To reset to `0`, hold **Select**.
+* To reset to `0`, use **Down** while the timer/chrono is stopped, or hold **Select**.
 * When the timer signal sounds, press **Select** to silence it.
 * You can switch displays while the timer/chrono is running, and it will continue to run in the background. If you switch displays while it is stopped, it will reset. It will also reset if it is stopped for an hour, if it reaches 100 hours, or if power is lost.
+
+Some variations may apply, depending on your [hardware configuration](#hardware-configuration):
+
+* If your clock has a switched relay and the timer/chrono is set to use it (in the [options menu](#options-menu)), it will switch on while the timer/chrono is running, like the “sleep” function on a clock radio.
+* If your clock does not have a beeper, the runout options are not available.
+* If your clock uses a rotary encoder for **Up/Down** rather than buttons, the controls are slightly different:
+  * To start, use **Up**.
+    * While the chrono is running, **Up** will briefly display a lap time.
+    * While the timer is running, **Up** will cycle through the runout options.
+  * To stop, use **Down**.
+  * To reset, hold **Select**.
 
 ### The Alt button
 

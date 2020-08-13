@@ -365,21 +365,30 @@ void ctrlEvt(byte ctrl, byte evt){
         else if(ctrl==mainAdjUp || ctrl==mainAdjDn) {
           if(fn==fnIsAlarm) switchAlarm(ctrl==mainAdjUp?1:0); //switch alarm
           if(fn==fnIsTimer){
-            if(ctrl==mainAdjUp){ //"start button"
-              if(timerState&1){ //running
-                if((timerState>>1)&1){ //counting up
-                  timerLap();
-                } else { //counting down
-                  timerRunoutToggle();
-                }
-              } else { //stopped: start
+            if(ctrl==mainAdjUp){
+              if(!(timerState&1)){ //stopped
                 timerStart();
+              } else { //running
+                if(mainAdjType==2) { //rotary encoder
+                  if((timerState>>1)&1) timerLap(); //chrono: lap
+                  else timerRunoutToggle(); //timer: runout option
+                } else { //button
+                  timerStop();
+                }
               }
-            } else { //"stop button"
-              if(timerState&1){ //running
-                timerStop();
-              } else { //stopped
-                //timerClear(); //I think it is a little too easy to clear the timer when this is enabled
+            } else { //mainAdjDown
+              if(!(timerState&1)){ //stopped
+                if(mainAdjType!=2) { //button only
+                  timerClear();
+                  updateDisplay();
+                }
+              } else { //running
+                if(mainAdjType==2) { //rotary encoder
+                  timerStop();
+                } else { //button
+                  if((timerState>>1)&1) timerLap(); //chrono: lap
+                  else timerRunoutToggle(); //timer: runout option
+                }
               }
             }
           } //end if fnIsTimer
