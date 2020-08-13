@@ -291,8 +291,8 @@ void ctrlEvt(byte ctrl, byte evt){
   if(signalRemain>0 && evt==1){
     signalStop();
     if(signalSource==fnIsAlarm) { //If this was the alarm
-      //If the alarm is using the switched relay and this is the Alt button; or if Fibonacci mode; don't set the snooze
-      if((relayMode==0 && readEEPROM(42,false)==1 && altSel!=0 && ctrl==altSel) || readEEPROM(50,false)) {
+      //If the alarm is using the switched relay and this is the Alt button; or if alarm is *not* using the switched relay and this is Fibonacci mode; don't set the snooze
+      if((relayMode==0 && readEEPROM(42,false)==1 && altSel!=0 && ctrl==altSel) || (readEEPROM(50,false) && !(relayPin>=0 && relayMode==0 && readEEPROM(42,false)==1))) {
         quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
         displayBlink(); //to indicate this as well
       } else { //start snooze
@@ -664,9 +664,8 @@ void switchPower(byte dir){
   } else {
     //Serial.print(dir==1?F("switch on"):F("switch off"));
   }
-  digitalWrite(relayPin,(dir==1?0:1)); //LOW = device on
+  digitalWrite(relayPin,(dir==1?0:1)); updateLEDs(); //LOW = device on
   //Serial.println(F(", switchPower"));
-  updateLEDs(); //LEDs following switch relay
 }
 
 void startSet(int n, int m, int x, byte p){ //Enter set state at page p, and start setting a value
@@ -859,6 +858,27 @@ void checkRTC(bool force){
     
     //First run things
     if(rtcSecLast==61) { autoDST(); calcSun(tod.year(),tod.month(),tod.day()); }
+    
+    //Things to do every natural second (decrementing real-time counters)
+    if(rtcSecLast != tod.second()) {
+      //If alarm snooze has time on it, decrement, and if we reach zero and alarm is still on, resume
+      //Won't check alarm skip status here, as it reflects tomorrow
+      if(snoozeRemain>0) {
+        snoozeRemain--;
+        //Serial.print("sr "); Serial.println(snoozeRemain,DEC);
+        if(snoozeRemain<=0 && alarmOn) {
+          fnSetPg = 0; fn = fnIsTime;
+          if((readEEPROM(50,false) && !(relayPin>=0 && relayMode==0 && readEEPROM(42,false)==1))) fibonacci(tod.hour(),tod.minute(),tod.second()); //fibonacci sequence
+          else signalStart(fnIsAlarm,1); //regular alarm
+        }
+      }
+      if(unoffRemain>0) {
+        unoffRemain--; //updateDisplay will naturally put it back to off state if applicable
+      }
+      if(versionRemain>0) {
+        versionRemain--;
+      }
+    } //end natural second
   
     //Things to do at specific times
     //Millis drift correction: per the millisCorrectInterval
@@ -868,8 +888,9 @@ void checkRTC(bool force){
     //DST change check: every 2am
     if(tod.second()==0 && tod.minute()==0 && tod.hour()==2) autoDST();
     //Alarm check: at top of minute for normal alarm, or 23 seconds past for fibonacci (which starts 26m37s early)
-    //TODO in fibonacci mode, make this trigger both, in case fibonacci is too soon to be started?
-    if((tod.second()==0 && !readEEPROM(50,false)) || (tod.second()==23 && readEEPROM(50,false))){
+    //Only do fibonacci if enabled and if the alarm is not using the switched relay - otherwise do regular
+    bool fibOK = readEEPROM(50,false) && !(relayPin>=0 && relayMode==0 && readEEPROM(42,false)==1);
+    if((tod.second()==0 && !fibOK) || (tod.second()==23 && fibOK)){
       int alarmTime = readEEPROM(0,true);
       if(tod.second()==23){ alarmTime-=27; if(alarmTime<0) alarmTime+=1440; } //set min to n-27 with midnight rollover
       if(tod.hour()*60+tod.minute()==alarmTime){
@@ -935,27 +956,6 @@ void checkRTC(bool force){
       } //end strike type
     } //end strike
     
-    //Things to do every natural second (decrementing real-time counters)
-    if(rtcSecLast != tod.second()) {
-      //If alarm snooze has time on it, decrement, and if we reach zero and alarm is still on, resume
-      //Won't check alarm skip status here, as it reflects tomorrow
-      if(snoozeRemain>0) {
-        snoozeRemain--;
-        //Serial.print("sr "); Serial.println(snoozeRemain,DEC);
-        if(snoozeRemain<=0 && alarmOn) {
-          fnSetPg = 0; fn = fnIsTime;
-          if(readEEPROM(50,false)) fibonacci(tod.hour(),tod.minute(),tod.second()); //fibonacci sequence
-          signalStart(fnIsAlarm,1); //regular alarm
-        }
-      }
-      if(unoffRemain>0) {
-        unoffRemain--; //updateDisplay will naturally put it back to off state if applicable
-      }
-      if(versionRemain>0) {
-        versionRemain--;
-      }
-    } //end natural second
-    
     //Finally, update the display, whether natural tick or not, as long as we're not setting or on a scrolled display (unless forced eg. fn change)
     //This also determines night/away shutoff, which is why strikes will happen if we go into off at top of hour, and not when we come into on at the top of the hour TODO find a way to fix this
     //Also skip updating the display if this is date and not being forced, since its pages take some calculating that cause it to flicker
@@ -968,10 +968,11 @@ void checkRTC(bool force){
 
 void fibonacci(byte h, byte m, byte s){
   //This powers the alarm fibonacci feature, using snooze and quick beeps.
-  //Find difference between next alarm time and current time, in minutes, with midnight rollover
-  int diff = readEEPROM(0,true)-(h*60+m); if(diff<=0) diff+=1440;
+  //Find difference between alarm time and current time, in minutes, with midnight rollover
+  int diff = readEEPROM(0,true)-(h*60+m); if(diff<0) diff+=1440;
   //Serial.print(F("diff min ")); Serial.print(diff,DEC);
-  //If we are within 30 minutes of next alarm time but haven't reached it yet, do Fibonacci stuff
+  //If we are within 30 minutes of alarm time, do Fibonacci stuff
+  //This is so the difference can stay an int once we convert it to seconds
   if(diff<30){
     signalRemain=0;
     //Find which number we're on, and if we find one, snooze for that
@@ -994,12 +995,14 @@ void fibonacci(byte h, byte m, byte s){
           snoozeRemain = nnn;
           //Serial.print(F(" SR")); Serial.print(snoozeRemain,DEC);
         } else { //Time for regular alarm
+          //Serial.print(F(" Alarm!"));
           signalStart(fnIsAlarm,1);
         }
         break;
       }
     }
   }
+  //Serial.println();
 } //end fibonacci()
 
 void autoDST(){
@@ -1227,11 +1230,10 @@ void timerSwitchSleepRelay(bool on){
   //When timer is set to use switched relay, it's on while timer is running, "radio sleep" style.
   //This doesn't count as a signal (using signal methods) so that other signals might not interrupt it. TODO confirm
   if(relayPin>=0 && relayMode==0 && readEEPROM(43,false)==1) { //start "radio sleep"
-    digitalWrite(relayPin,(on?LOW:HIGH)); //LOW = device on
+    digitalWrite(relayPin,(on?LOW:HIGH)); updateLEDs(); //LOW = device on
     // Serial.print(ms(),DEC);
     // if(on) Serial.println(F(" Relay on, timerSwitchSleepRelay (radio sleep)"));
     // else   Serial.println(F(" Relay off, timerSwitchSleepRelay (radio sleep)"));
-    updateLEDs(); //LEDs following switch relay
   }
 }
 
@@ -1617,7 +1619,7 @@ void initOutputs() {
   if(piezoPin>=0) pinMode(piezoPin, OUTPUT);
   if(relayPin>=0) {
     pinMode(relayPin, OUTPUT); digitalWrite(relayPin, HIGH); //LOW = device on
-    quickBeep(76); //"primes" the beeper, seems necessary when relay pin is spec'd, otherwise first intentional beep doesn't happen TODO still true?
+    quickBeep(71); //"primes" the beeper, seems necessary when relay pin is spec'd, otherwise first intentional beep doesn't happen TODO still true?
   }
   if(ledPin>=0) pinMode(ledPin, OUTPUT);
   updateLEDs(); //set to initial value
@@ -1764,8 +1766,7 @@ void signalStart(byte sigFn, byte sigDur){
     //If switched relay, except if this is a forced fnIsTimer signal (for signaling runout options)
     if(getSignalOutput()==1 && relayPin>=0 && relayMode==0 && !(sigFn==255 && signalSource==fnIsTimer)) { //turn it on now
       signalRemain = (sigFn==fnIsAlarm? switchDur: sigDur); //For alarm signal, use switched relay duration from config (eg 2hr)
-      digitalWrite(relayPin,LOW); //LOW = device on
-      updateLEDs(); //LEDs following signal or relay
+      digitalWrite(relayPin,LOW); updateLEDs(); //LOW = device on
       //Serial.print(ms(),DEC); Serial.println(F(" Relay on, signalStart"));
     } else { //start pulsing. If there is no beeper or pulsed relay, this will have no effect since cycleSignal will clear it
       signalRemain = (sigFn==fnIsAlarm? signalDur: sigDur); //For alarm signal, use signal duration from config (eg 2min)
@@ -1778,9 +1779,8 @@ void signalStop(){ //stop current signal and clear out signal timer if applicabl
   signalRemain = 0; snoozeRemain = 0; signalMeasureStep = 0;
   if(getSignalOutput()==0 && piezoPin>=0) noTone(piezoPin);
   if(getSignalOutput()==1 && relayPin>=0){
-    digitalWrite(relayPin,HIGH); //LOW = device on
+    digitalWrite(relayPin,HIGH); updateLEDs(); //LOW = device on
     //Serial.print(ms(),DEC); Serial.println(F(" Relay off, signalStop"));
-    updateLEDs(); //LEDs following relay
   }
 } //end signalStop()
 void cycleSignal(){
@@ -1826,14 +1826,15 @@ void cycleSignal(){
         //Serial.print(F("Starting beep, sPS "));
         //Serial.print(signalMeasureStep,DEC);
         //Serial.print(F(" -> "));
+        //Set up for the next event
         if(signalMeasureStep<bc) {
           signalMeasureStep++; //set up for another beep in this measure
           //Serial.println(signalMeasureStep,DEC);
         }
         else {
-          if(signalRemain) signalRemain--;
-          if(signalRemain) signalMeasureStep = 255; //set up to start another measure
-          else signalMeasureStep = 0; //idle - not using signalStop so as to let the beep expire on its own
+          if(signalRemain) signalRemain--; //this measure is done
+          if(signalRemain) signalMeasureStep = 255; //if more measures, set up to start another measure
+          else signalMeasureStep = 0; //otherwise, go idle - not using signalStop so as to let the beep expire on its own & fibonacci snooze continue
           //Serial.println(signalMeasureStep,DEC);
         }
       }
@@ -1847,18 +1848,20 @@ void cycleSignal(){
         signalMeasureStartTime += measureDur;
         signalMeasureStep = 1;
       }
-      if(signalMeasureStep==1){ //start the relay immediately on a new measure
-        digitalWrite(relayPin,LOW); //LOW = device on
+      //Upon new measure, start the pulse immediately
+      if(signalMeasureStep==1){
+        digitalWrite(relayPin,LOW); updateLEDs(); //LOW = device on
         //Serial.print(ms(),DEC); Serial.println(F(" Relay on, cycleSignal"));
         signalMeasureStep = 2; //set it up to stop
-      } else { //stop the relay, when it's been on long enough
-        if((unsigned long)(ms()-signalMeasureStartTime)>=relayPulse) {
-          digitalWrite(relayPin,HIGH); //LOW = device on
-          //Serial.print(ms(),DEC); Serial.println(F(" Relay off, cycleSignal"));
-          if(signalRemain) signalRemain--;
-          if(signalRemain) signalMeasureStep = 255; //set up to start another measure
-          else signalStop(); //idle
-        }
+      }
+      //See if it's time to stop the pulse
+      else if(signalMeasureStep==2 && (unsigned long)(ms()-signalMeasureStartTime)>=relayPulse) {
+        digitalWrite(relayPin,HIGH); updateLEDs(); //LOW = device on
+        //Serial.print(ms(),DEC); Serial.println(F(" Relay off, cycleSignal"));
+        //Set up for the next event
+        if(signalRemain) signalRemain--; //this measure is done
+        if(signalRemain) signalMeasureStep = 255; //if more measures, set up to start another measure
+        else signalMeasureStep = 0; //otherwise, go idle - not using signalStop so as to let the beep expire on its own & fibonacci snooze continue
       }
     } //end pulsed relay
     else { //switched relay / default
@@ -1868,8 +1871,9 @@ void cycleSignal(){
         //Serial.println(F("Starting new measure, sPS -1 -> 1"));
         signalMeasureStartTime += measureDur;
       }
-      if(signalRemain) signalRemain--;
-      if(!signalRemain) signalStop(); //idle
+      //Set up for the next event
+      if(signalRemain) signalRemain--; //this measure is done - but no need to change signalMeasureStep as we haven't changed it
+      if(!signalRemain) signalStop(); //go idle - will kill the relay
     } //end switched relay
   } //end if there's a measure going
 } //end cycleSignal()
