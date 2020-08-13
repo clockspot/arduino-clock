@@ -12,7 +12,7 @@
 
 [The latest release can be downloaded here.](https://github.com/clockspot/arduino-nixie/releases/latest) Skip to [Hardware Configuration](#hardware-configuration) for details on tweaking the sketch.
 
-## Operating instructions, v1.6.0
+## Operating instructions, v1.7.0
 
 The clock displays its software version when powered up (as of v1.6). [Instructions for earlier versions are here.](https://github.com/clockspot/arduino-nixie/releases)
 
