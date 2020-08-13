@@ -49,13 +49,13 @@ This feature can count down (timer) or up (chrono) to 100 hours. When idle, it d
 
 * To start and stop, use **Up**. While at `0`, this will start the chrono.
   * While the chrono is running, **Down** will briefly display a lap time.
-* To set the timer, hold **Select** while at `0`. It will prompt for hours/minutes first, then seconds. For convenience, it will recall the last-used time.
+* To set the timer, hold **Select** while at `0`. It will prompt for hours/minutes first, then seconds. For convenience, it will recall the last-used time. Once the timer is set, use **Up** to start it.
   * While the timer is running, **Down** will cycle through the runout options (what the timer will do when it runs out – clocks with beeper only):
     * 1 beep: simply stop, with a long signal (default)
     * 2 beeps: restart, with a short signal (makes a great interval timer!)
     * 3 beeps: start the chrono, with a long signal
     * 4 beeps: start the chrono, with a short signal
-* To reset to `0`, use **Down** while the timer/chrono is stopped, or hold **Select**.
+* To reset to `0`, hold **Select**.
 * When the timer signal sounds, press **Select** to silence it.
 * You can switch displays while the timer/chrono is running, and it will continue to run in the background. If you switch displays while it is stopped, it will reset. It will also reset if it is stopped for an hour, if it reaches 100 hours, or if power is lost.
 
@@ -68,7 +68,6 @@ Some variations may apply, depending on your [hardware configuration](#hardware-
     * While the chrono is running, **Up** will briefly display a lap time.
     * While the timer is running, **Up** will cycle through the runout options.
   * To stop, use **Down**.
-  * To reset, hold **Select**.
 
 ### The Alt button
 

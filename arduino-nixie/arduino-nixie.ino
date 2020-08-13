@@ -132,8 +132,9 @@ byte signalSource = 0; //which function triggered the signal - fnIsTime (chime),
 byte signalPattern = 0; //the pattern for that source
 word signalRemain = 0; //alarm/timer signal timeout counter, seconds
 word snoozeRemain = 0; //snooze timeout counter, seconds
-word timerInitial = 0; //timer original countdown setting, minutes - up to 99:59 (6000 minutes)
 byte timerState = 0; //bit 0 is stop/run, bit 1 is down/up, bit 2 is runout repeat / short signal, bit 3 is runout chrono, bit 4 is lap display
+word timerInitialMins = 0; //timer original countdown setting, minutes - up to 99h 59m (5999m)
+byte timerInitialSecs = 0; //timer original countdown setting, seconds - up to 59s
 unsigned long timerTime = 0;
 //While timer is running, this holds a timestamp in the past (countdown) or future (countup),
 //and the timer continuously calculates and displays the difference between that and the current time.
@@ -338,15 +339,15 @@ void ctrlEvt(byte ctrl, byte evt){
             } else if(fnPg==fnDateCounter){ //month, date, direction
               startSet(readEEPROM(5,false),1,12,1);
             } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
-              //TODO
+              //TODO these pages will need different IDs to be told apart from fnDateCounter
             } else if(fnPg==fnDateWeathernow || fnDateWeathernext){ //temperature units??
-              //TODO
+              //TODO these pages will need different IDs to be told apart from fnDateCounter
             } break;
           case fnIsAlarm: //set mins
             startSet(readEEPROM(0,true),0,1439,1); break;
           case fnIsTimer: //set mins
             if(timerTime!=0 || timerState&1) { timerClear(); btnStop(); updateDisplay(); break; } //If the timer is nonzero or running, zero it out.
-            startSet(timerInitial,0,5999,1); break; //99h 59m
+            startSet(timerInitialMins,0,5999,1); break; //minutes
           //fnIsDayCount removed in favor of paginated calendar
           case fnIsTemp: //could do calibration here if so inclined
           case fnIsTubeTester:
@@ -378,7 +379,7 @@ void ctrlEvt(byte ctrl, byte evt){
               }
             } else { //mainAdjDown
               if(!(timerState&1)){ //stopped
-                if(mainAdjType!=2) { //button only
+                if(mainAdjType!=2 && false) { //button only - I think it's too easy to reset the timer like this
                   timerClear();
                   updateDisplay();
                 }
@@ -493,14 +494,23 @@ void ctrlEvt(byte ctrl, byte evt){
             case fnIsAlarm:
               writeEEPROM(0,fnSetVal,true);
               clearSet(); break;
-            case fnIsTimer: //timer
-              timerInitial = fnSetVal; //minutes, up to 5999 (99m 59s)
-              timerTime = timerInitial*60000; //set timer duration
-              if(timerTime!=0){
-                bitWrite(timerState,1,0); //set timer direction (bit 1) to down (0)
-                timerStart();
+            case fnIsTimer: //timer - depends what page we're on
+              switch(fnSetPg){
+                case 1: //save mins, set secs
+                  delay(300); //blink display to indicate save. See fnIsDate for details
+                  timerInitialMins = fnSetVal; //minutes, up to 5999 (99m 59s)
+                  startSet(timerInitialSecs,0,59,2); break;
+                case 2: //save secs
+                  timerInitialSecs = fnSetVal;
+                  timerTime = (timerInitialMins*60000)+(timerInitialSecs*1000); //set timer duration
+                  if(timerTime!=0){
+                    bitWrite(timerState,1,0); //set timer direction (bit 1) to down (0)
+                    //timerStart(); //we won't automatically start, we'll let the user do that
+                  }
+                  clearSet(); break;
+                default: break;
               }
-              clearSet(); break;
+              break;
             //fnIsDayCount removed in favor of paginated calendar
             case fnIsTemp:
               break;
@@ -1163,7 +1173,7 @@ void cycleTimer(){
           fnSetPg = 0; fn = fnIsTimer;
         } else {
           if((timerState>>2)&1){ //runout repeat - keep direction, change target, keep sleep, don't change display
-            timerTime += timerInitial*60000; //advance timerTime by the initial setting (not per ms() to avoid drift)
+            timerTime += (timerInitialMins*60000)+(timerInitialSecs*1000); //set timer duration ahead by initial setting
           } else { //runout clear - clear timer, change display
             timerClear();
             //If switched relay (radio sleep), go to time of day; otherwise go to empty timer to appear with signal
@@ -1268,12 +1278,16 @@ void updateDisplay(){
     blankDisplay(4, 5, false);
     byte fnOptCurLoc = (fn>=fnOpts? optsLoc[fn-fnOpts]: 0); //current option index loc, to tell what's being set
     if(fnSetValMax==1439) { //Time of day (0-1439 mins, 0:00–23:59): show hrs/mins
-      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero
+      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero per options
       editDisplay(fnSetVal%60, 2, 3, true, false);
-    } else if(fnSetValMax==5999) { //Timer duration (0-5999 mins, up to 99:59): show hrs/mins w/minimal leading
-      if(fnSetVal>=60) editDisplay(fnSetVal/60, 0, 1, false, false); else blankDisplay(0,1,false); //hour only if present, else blank
-      editDisplay(fnSetVal%60, 2, 3, (fnSetVal>=60?true:false), false); //leading zero only if hour present
-      editDisplay(0,4,5,true,false); //placeholder seconds
+    } else if(fnSetValMax==5999) { //Timer duration mins (0-5999 mins, up to 99:59): show hrs/mins w/regular leading
+      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero per options
+      editDisplay(fnSetVal%60, 2, 3, true, false); //minutes with leading zero always
+    } else if(fnSetValMax==59) { //Timer duration secs: show with leading
+      //If 6 tubes (0-5), display on 4-5
+      //If 4 tubes (0-3), dislpay on 2-3
+      blankDisplay(0, 3, false);
+      editDisplay(fnSetVal, (displaySize>4? 4: 2), (displaySize>4? 5: 3), true, false);
     } else if(fnSetValMax==88) { //A piezo pitch. Play a short demo beep.
       editDisplay(fnSetVal, 0, 3, false, false);
       if(piezoPin>=0) { noTone(piezoPin); tone(piezoPin, getHz(fnSetVal), 100); } //Can't use signalStart since we need to specify pitch directly
