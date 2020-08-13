@@ -16,7 +16,7 @@
 
 The clock displays its software version when powered up (as of v1.6). [Instructions for earlier versions are here.](https://github.com/clockspot/arduino-nixie/releases)
 
-* Press **Select** to cycle through [time of day](#time-of-day), [calendar](#calendar), [alarm](#alarm), and [chrono/timer](#chrono/timer).
+* Press **Select** to cycle through [time of day](#time-of-day), [calendar](#calendar), [alarm](#alarm), and [chrono/timer](#chronotimer).
 * To set anything, simply hold **Select** until the display blinks; use **Up/Down** to set, and **Select** to save. Additional settings are available in the [options menu](#options-menu).
 
 ## Time of day
@@ -50,7 +50,8 @@ The alarm is always shown in 24h format so you can tell AM from PM.
 
 This feature can count up (chrono) or down (timer), up to 100 hours each way. When idle, it displays `0` (or if you have leading zeros enabled, `000000`).
 
-* To start and stop, press **Up**. When at `0`, this will start the chrono.
+* To start and stop, press **Up**.
+  * When at `0`, this will start the chrono.
   * While the chrono is running, **Down** will briefly display a lap time.
 * To reset to `0`, press **Down** when stopped.
 * To set the timer, hold **Select**. It will prompt for hours/minutes first, then seconds. For convenience, it will recall the last-used time – to reuse this time, simply press **Select** twice. Once the timer is set, press **Up** to start it.
@@ -60,7 +61,7 @@ This feature can count up (chrono) or down (timer), up to 100 hours each way. Wh
     * 3 beeps: start the chrono, with a long signal
     * 4 beeps: start the chrono, with a short signal
 * When the timer signal sounds, press any button to silence it.
-* The chrono/timer will automatically clear if you switch to a different function while it’s stopped, if it’s left stopped for an hour, if the chrono reaches 100 hours, or if power is lost. However, you can switch functions while it’s running, and it will continue to run in the background.
+* You can switch displays while the chrono/timer is running, and it will continue to run in the background. It will reset to `0` if you switch displays while it’s stopped, if it’s stopped for an hour, if the chrono reaches 100 hours, or if power is lost.
 
 > **Hardware variations**
 > * If your clock has a [switched relay](#hardware-configuration) and the chrono/timer is [set to use it](#optionstimer), it will switch on while the timer is running, like the “sleep” function on a clock radio. The runout options will still work, but won’t signal.
