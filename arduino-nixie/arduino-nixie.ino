@@ -51,7 +51,7 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   16 Time format
   17 Date format 
   18 Display date during time
-  19 Leading zeros in time hour, calendar, and timer/chrono
+  19 Leading zeros in time hour, calendar, and chrono/timer
   20 Digit fade duration
   21 Strike - skipped when no piezo and relay is switch (start=0)
   22 Auto DST
@@ -294,7 +294,7 @@ void ctrlEvt(byte ctrl, byte evt){
       //If the alarm is using the switched relay and this is the Alt button; or if Fibonacci mode; don't set the snooze
       if((relayMode==0 && readEEPROM(42,false)==1 && altSel!=0 && ctrl==altSel) || readEEPROM(50,false)) {
         quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
-        delay(250); //to flash the display to indicate this as well
+        displayBlink(); //to indicate this as well
       } else { //start snooze
         snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
       }
@@ -306,8 +306,15 @@ void ctrlEvt(byte ctrl, byte evt){
   if(snoozeRemain>0 && evt==1){
     snoozeRemain = 0;
     quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
-    delay(250); //to flash the display
+    displayBlink(); //to indicate this as well
     btnStop();
+    return;
+  }
+  //If the clean is going, any press should cancel it, with a display update
+  if(cleanRemain>0 && evt==1){
+    cleanRemain = 0;
+    btnStop();
+    updateDisplay();
     return;
   }
   
@@ -415,9 +422,8 @@ void ctrlEvt(byte ctrl, byte evt){
             if(readEEPROM(7,false)!=fn) {
               btnStop();
               writeEEPROM(7,fn,false);
-              quickBeep(76); //beep 1
-              delay(250); //to flash the display and delay beep 2
-              quickBeep(76); //beep 2
+              quickBeep(76);
+              displayBlink();
             }
           }
           //On short release, jump to the preset fn.
@@ -460,12 +466,11 @@ void ctrlEvt(byte ctrl, byte evt){
               if(fnPg==0){ //regular date display: save in RTC
                 switch(fnSetPg){
                   case 1: //save year, set month
-                    delay(200); //blink display to indicate save. Safe b/c we've btnStopped. See below for why
-                    //TODO find another way to do this bc it could briefly screw up the ms() calibration by up to 200ms, the way cycleDisplay does
+                    displayBlink(); //to indicate save. Safe b/c we've btnStopped. See below for why
                     fnSetValDate[0]=fnSetVal;
                     startSet(fnSetValDate[1],1,12,2); break; 
                   case 2: //save month, set date
-                    delay(200); //blink display to indicate save. Needed if set month == date: without blink, nothing changes.
+                    displayBlink(); //to indicate save. Needed if set month == date: without blink, nothing changes.
                     fnSetValDate[1]=fnSetVal;
                     startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
                   case 3: //write year/month/date to RTC
@@ -481,12 +486,12 @@ void ctrlEvt(byte ctrl, byte evt){
               } else if(fnPg==fnDateCounter){ //set like date, save in eeprom like finishOpt
                 switch(fnSetPg){
                   case 1: //save month, set date
-                    delay(200); //blink display to indicate save. Safe b/c we've btnStopped.
+                    displayBlink(); //to indicate save.
                     //Needed if set month == date: without blink, nothing changes. Also just good feedback.
                     writeEEPROM(5,fnSetVal,false);
                     startSet(readEEPROM(6,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),2); break;
                   case 2: //save date, set direction
-                    delay(200);
+                    displayBlink(); //to indicate save.
                     writeEEPROM(6,fnSetVal,false);
                     startSet(readEEPROM(4,false),0,1,3); break;
                   case 3: //save date
@@ -506,11 +511,11 @@ void ctrlEvt(byte ctrl, byte evt){
             case fnIsTimer: //timer - depends what page we're on
               switch(fnSetPg){
                 case 1: //save timer mins, set timer secs
-                  delay(200); //blink display to indicate save. See fnIsDate for details
+                  displayBlink(); //to indicate save.
                   timerInitialMins = fnSetVal; //minutes, up to 5999 (99m 59s)
                   startSet(timerInitialSecs,0,59,2); break;
                 case 2: //save timer secs
-                  delay(200);
+                  displayBlink(); //to indicate save.
                   timerInitialSecs = fnSetVal;
                   timerTime = (timerInitialMins*60000)+(timerInitialSecs*1000); //set timer duration
                   if(timerTime!=0){
@@ -783,7 +788,7 @@ void findFnAndPageNumbers(){
 
 ////////// Timing and timed events //////////
 
-// There are two RTCs in here – the standard Arduino one (millis()), which gives subsecond precision but not very accurate, so only good for short term – and the DS3231, which is very accurate but only gives seconds (TODO really true?), so only good for long term. In order to combine long-term accuracy with short-term precision (especially for the timer/chrono), with each tick of the DS3231 we'll check how much millis() has drifted, and apply the difference to a running offset to correct for it, accessible to other code by calling ms() instead of millis().
+// There are two RTCs in here – the standard Arduino one (millis()), which gives subsecond precision but not very accurate, so only good for short term – and the DS3231, which is very accurate but only gives seconds (TODO really true?), so only good for long term. In order to combine long-term accuracy with short-term precision (especially for the chrono), with each tick of the DS3231 we'll check how much millis() has drifted, and apply the difference to a running offset to correct for it, accessible to other code by calling ms() instead of millis().
 unsigned long millisDriftOffset = 0; //unsigned, but that's ok since all code using ms() (as with millis()) should handle wraparound.
 //unsigned long millisAtLastRTCTick (defined at top) will be zero when unreliable (at start and after RTC set).
 const byte millisCorrectInterval = 30; //seconds between corrections - 60 must be evenly divisible by this
@@ -984,7 +989,7 @@ void fibonacci(byte h, byte m, byte s){
         if(diff>0) { //Beep and snooze
           signalPattern = 1; //short beep
           signalSource = fnIsAlarm;
-          signalStart(-1,0); //Play pulse using above pattern and source
+          signalStart(-1,0); //Play a signal measure using above pattern and source
           snoozeRemain = nnn;
           //Serial.print(F(" SR")); Serial.print(snoozeRemain,DEC);
         } else { //Time for regular alarm
@@ -1168,7 +1173,7 @@ void timerRunoutToggle(){
     //do a quick signal to indicate the selection
     signalPattern = ((timerState>>2)&3)+1; //convert 00/01/10/11 to 1/2/3/4
     signalSource = fnIsTimer;
-    signalStart(-1,0); //Play pulse using above pattern and source
+    signalStart(-1,0); //Play a signal measure using above pattern and source
   }
 }
 void cycleTimer(){
@@ -1193,7 +1198,8 @@ void cycleTimer(){
         }
         //signal (if not switched relay)
         if((timerState>>2)&1){ //short signal (piggybacks on runout repeat flag)
-          if(relayPin<0 || relayMode!=0 || readEEPROM(43,false)!=1) signalStart(fnIsTimer,0);
+          if(relayPin<0 || relayMode!=0 || readEEPROM(43,false)!=1) signalStart(fnIsTimer,1);
+          //using 1 instead of 0, because in signalStart, fnIsTimer "quick measure" has a custom pitch for runout option setting
         } else { //long signal
           if(relayPin<0 || relayMode!=0 || readEEPROM(43,false)!=1) signalStart(fnIsTimer,signalDur);
         }
@@ -1302,7 +1308,7 @@ void updateDisplay(){
     } else if(fnSetValMax==88) { //A piezo pitch. Play a short demo beep.
       editDisplay(fnSetVal, 0, 3, false, false);
       if(piezoPin>=0) { noTone(piezoPin); tone(piezoPin, getHz(fnSetVal), 100); } //Can't use signalStart since we need to specify pitch directly
-    } else if(fnOptCurLoc==47 || fnOptCurLoc==48 || fnOptCurLoc==49) { //Signal pattern. Play a demo pulse.
+    } else if(fnOptCurLoc==47 || fnOptCurLoc==48 || fnOptCurLoc==49) { //Signal pattern. Play a demo measure.
       editDisplay(fnSetVal, 0, 3, false, false);
       signalPattern = fnSetVal;
       signalSource = (fnOptCurLoc==49?fnIsTime:(fnOptCurLoc==48?fnIsTimer:fnIsAlarm));
@@ -1601,6 +1607,7 @@ int fadeNextDur = 0; //ms - during fade, incoming digit's portion of fadeDur
 int fadeLastDur = 0; //ms - during fade, outgoing digit's portion of fadeDur
 unsigned long fadeStartLast = 0; //millis - when the last digit fade was started
 unsigned long setStartLast = 0; //to control flashing during start
+unsigned long displayBlinkStart = 0; //when nonzero, display should briefly blank
 
 void initOutputs() {
   for(byte i=0; i<4; i++) { pinMode(binOutA[i],OUTPUT); pinMode(binOutB[i],OUTPUT); }
@@ -1614,8 +1621,16 @@ void initOutputs() {
   updateLEDs(); //set to initial value
 }
 
+void displayBlink(){
+  displayBlinkStart = ms();
+}
 void cycleDisplay(){
   unsigned long now = ms();
+  
+  if(displayBlinkStart){
+    if((unsigned long)(now-displayBlinkStart)<250) return;
+    else displayBlinkStart = 0;
+  }
   
   //Other display code decides whether we should dim per function or time of day
   bool dim = (displayDim==1?1:0);
@@ -1711,12 +1726,16 @@ void decToBin(bool binVal[], byte i){
   binVal[0] = i%2;
 } //end decToBin()
 
-unsigned long signalPulseStartTime = 0; //to keep track of individual pulses
-byte signalPulseStep = 0; //to keep track of stages inside the pulse
-void signalStart(byte sigFn, byte sigDur){ //make some noise! or switch on an appliance!
+//Signals are like songs played on the beeper or relay, when the alarm/timer runs out or as an indicator.
+//Like songs, a signal is made up of measures (usually 1sec each) tracked by the signalRemain counter.
+//Measures are made up of steps such as beeps and relay pulses, tracked by signalMeasureStep.
+//When used with switched relay, it simply turns on at the start, and off at the end, like a clock radio – the measures just wait it out.
+unsigned long signalMeasureStartTime = 0; //to keep track of individual measures
+byte signalMeasureStep = 0; //step number, or 255 if waiting for next measure, or 0 if not signaling
+void signalStart(byte sigFn, byte sigDur){
   //sigFn isn't necessarily the current fn, just the one generating the signal
-  //sigDur is the number of seconds to put on signalRemain (for switched or pulsed signal),
-  //   or 0 for a single pulse as applicable (i.e. skipped in radio mode).
+  //sigDur is the number of measures to put on signalRemain,
+  //   or 0 for a single "quick measure" as applicable (i.e. skipped in radio mode).
   //Special case: if sigFn==fnIsAlarm, and sigDur>0, we'll use signalDur or switchDur as appropriate.
   //If sigFn is given as -1 (255), we will use both the existing signalSource and signalPattern for purposes of configs and fibonacci.
   if(!(sigFn==255 && signalSource==fnIsTimer)) signalStop(); // if there is a signal going per the current signalSource, stop it - can only have one signal at a time – except if this is a forced fnIsTimer signal (for signaling runout options) which is cool to overlap timer sleep
@@ -1736,26 +1755,25 @@ void signalStart(byte sigFn, byte sigDur){ //make some noise! or switch on an ap
   // Serial.print(signalPattern,DEC);
   // Serial.println();
   
-  //Set up for a single pulse - no signalRemain
-  signalPulseStartTime = ms();
-  signalPulseStep = 1;
-  if(sigDur!=0){ //long-duration signal (alarm, sleep, etc)
+  //Start a measure for cycleSignal to pick up. For "quick measures" we won't set signalRemain.
+  signalMeasureStartTime = ms();
+  signalMeasureStep = 1; //waiting to start a new measure
+  if(sigDur!=0){ //long-duration signal (alarm, sleep, etc) - set signalRemain
     //If switched relay, except if this is a forced fnIsTimer signal (for signaling runout options)
     if(getSignalOutput()==1 && relayPin>=0 && relayMode==0 && !(sigFn==255 && signalSource==fnIsTimer)) { //turn it on now
-      signalRemain = (sigFn==fnIsAlarm? switchDur: sigDur); //For alarm signal, use switched relay duration (eg 2hr)
-      signalPulseStep = -1; //it will be perpetually waiting for the next pulse
+      signalRemain = (sigFn==fnIsAlarm? switchDur: sigDur); //For alarm signal, use switched relay duration from config (eg 2hr)
       digitalWrite(relayPin,LOW); //LOW = device on
       updateLEDs(); //LEDs following signal or relay
       //Serial.print(ms(),DEC); Serial.println(F(" Relay on, signalStart"));
     } else { //start pulsing. If there is no beeper or pulsed relay, this will have no effect since cycleSignal will clear it
-      signalRemain = (sigFn==fnIsAlarm? signalDur: sigDur); //For alarm signal, use pulse signal duration (eg 2min)
+      signalRemain = (sigFn==fnIsAlarm? signalDur: sigDur); //For alarm signal, use signal duration from config (eg 2min)
     }
   }
   //cycleSignal will pick up from here
 } //end signalStart()
 void signalStop(){ //stop current signal and clear out signal timer if applicable
   //Serial.println(F("signalStop"));
-  signalRemain = 0; snoozeRemain = 0; signalPulseStep = 0;
+  signalRemain = 0; snoozeRemain = 0; signalMeasureStep = 0;
   if(getSignalOutput()==0 && piezoPin>=0) noTone(piezoPin);
   if(getSignalOutput()==1 && relayPin>=0){
     digitalWrite(relayPin,HIGH); //LOW = device on
@@ -1765,17 +1783,14 @@ void signalStop(){ //stop current signal and clear out signal timer if applicabl
 } //end signalStop()
 void cycleSignal(){
   //Called on every loop to control the signal.
-  //The signal is made up of a series of pulses of a given duration
-  word pulseDur = 1000; //Pulse interval (between starts) in ms, by default
-  //Each pulse is made up of steps such as triggering beeps or starting/stopping the pulse relay
-  //signalPulseStep keeps track of those steps, or -1 (255) if waiting for next pulse, or 0 if not signaling
-  if(signalPulseStep){ //if there's a pulse going
-    if((getSignalOutput()==0 || (signalRemain==0 && signalSource==fnIsTimer)) && piezoPin>=0) { // beeper, or single pulse for fnIsTimer runout setting
+  word measureDur = 1000; //interval between measure starts, ms - beep pattern can customize this
+  if(signalMeasureStep){ //if there's a measure going (or waiting for a new one)
+    if((getSignalOutput()==0 || (signalRemain==0 && signalSource==fnIsTimer)) && piezoPin>=0) { // beeper, or single measure for fnIsTimer runout setting
       //Since tone() handles the duration of each beep,
-      //we only need to use signalPulseStep to track beep starts; they'll stop on their own.
+      //we only need to use signalMeasureStep to track beep starts; they'll stop on their own.
       byte bc = 0; //this many beeps
       word bd = 0; //of this ms duration and separation
-      //Could also set a custom value for the pulse interval, if we wanted it to go faster or slower than 1/sec
+      //Could also set a custom value for the measure interval, if we wanted it to go faster or slower than 1/sec
       switch(signalPattern){
         case 255: //the pips: 100ms, except the last is 500ms
           bc = 1; bd = (signalRemain>0? 100: 500); break;
@@ -1790,15 +1805,15 @@ void cycleSignal(){
         case 4: //quad (four 1/16-second beeps)
           bc = 4; bd = 62; break;
       }
-      //If we're waiting to start a new pulse, see if it's time to do that yet.
-      if(signalPulseStep==255 && (unsigned long)(ms()-signalPulseStartTime)>=pulseDur){
-        //Serial.println(F("Starting new pulse, sPS -1 -> 1"));
-        if(signalRemain) signalRemain--;
-        signalPulseStartTime += pulseDur;
-        signalPulseStep = 1;
+      //See if it's time to start a new measure
+      if(signalMeasureStep==255 && (unsigned long)(ms()-signalMeasureStartTime)>=measureDur){
+        //Serial.println(F("Starting new measure, sPS -1 -> 1"));
+        signalMeasureStartTime += measureDur;
+        signalMeasureStep = 1;
       }
-      if((unsigned long)(ms()-signalPulseStartTime)>=(signalPulseStep-1)*bd*2){
-        word piezoPitch = (signalPattern==5 && signalPulseStep==2? getSignalPitch()*0.7937: //cuckoo: go down major third (2^(-4/12)) on 2nd beep
+      //See if it's time to start a new beep
+      if((unsigned long)(ms()-signalMeasureStartTime)>=(signalMeasureStep-1)*bd*2){
+        word piezoPitch = (signalPattern==5 && signalMeasureStep==2? getSignalPitch()*0.7937: //cuckoo: go down major third (2^(-4/12)) on 2nd beep
           (signalPattern==255? 1000: //the pips: use 1000Hz just like the Beeb
             (signalRemain==0 && signalSource==fnIsTimer? getHz(73): //fnIsTimer runout setting: use timer lap pitch
               getSignalPitch() //usual: get pitch from user settings
@@ -1807,46 +1822,54 @@ void cycleSignal(){
         );
         noTone(piezoPin); tone(piezoPin, piezoPitch, bd);
         //Serial.print(F("Starting beep, sPS "));
-        //Serial.print(signalPulseStep,DEC);
+        //Serial.print(signalMeasureStep,DEC);
         //Serial.print(F(" -> "));
-        if(signalPulseStep<bc) {
-          signalPulseStep++; //set up for another beep in this pulse
-          //Serial.println(signalPulseStep,DEC);
+        if(signalMeasureStep<bc) {
+          signalMeasureStep++; //set up for another beep in this measure
+          //Serial.println(signalMeasureStep,DEC);
         }
         else {
-          if(signalRemain) { signalRemain--; signalPulseStep=255; } //set up to start another pulse
-          else { signalPulseStep=0; } //idle - not using signalStop since the beep will expire on its own
-          //Serial.println(signalPulseStep,DEC);
+          if(signalRemain) signalRemain--;
+          if(signalRemain) signalMeasureStep = 255; //set up to start another measure
+          else signalMeasureStep = 0; //idle - not using signalStop so as to let the beep expire on its own
+          //Serial.println(signalMeasureStep,DEC);
         }
       }
     } //end beeper
     else if(getSignalOutput()==1 && relayPin>=0 && relayMode==1){ //pulsed relay
       //We don't follow the beep pattern here, we simply energize the relay for relayPulse time
-      //Unlike beeper, we need to use a signalPulseStep (2) to stop the relay.
-      //If we're waiting to start a new pulse, see if it's time to do that yet.
-      if(signalPulseStep==255 && (unsigned long)(ms()-signalPulseStartTime)>=pulseDur){
-        signalPulseStartTime += pulseDur;
-        signalPulseStep = 1;
+      //Unlike beeper, we need to use a signalMeasureStep (2) to stop the relay.
+      //See if it's time to start a new measure
+      if(signalMeasureStep==255 && (unsigned long)(ms()-signalMeasureStartTime)>=measureDur){
+        //Serial.println(F("Starting new measure, sPS -1 -> 1"));
+        signalMeasureStartTime += measureDur;
+        signalMeasureStep = 1;
       }
-      if(signalPulseStep==1){ //start the relay
+      if(signalMeasureStep==1){ //start the relay immediately on a new measure
         digitalWrite(relayPin,LOW); //LOW = device on
         //Serial.print(ms(),DEC); Serial.println(F(" Relay on, cycleSignal"));
-        signalPulseStep = 2; //set it up to stop
+        signalMeasureStep = 2; //set it up to stop
       } else { //stop the relay, when it's been on long enough
-        if((unsigned long)(ms()-signalPulseStartTime)>=relayPulse) {
+        if((unsigned long)(ms()-signalMeasureStartTime)>=relayPulse) {
           digitalWrite(relayPin,HIGH); //LOW = device on
           //Serial.print(ms(),DEC); Serial.println(F(" Relay off, cycleSignal"));
-          if(signalRemain) { signalRemain--; signalPulseStep=255; } //set up to start another pulse
+          if(signalRemain) signalRemain--;
+          if(signalRemain) signalMeasureStep = 255; //set up to start another measure
           else signalStop(); //idle
         }
       }
     } //end pulsed relay
     else { //switched relay / default
-      //Simply decrement signalRemain until it runs out
-      if(signalRemain) { signalRemain--; signalPulseStep=-1; } //set up to start another pulse
-      else signalStop(); //idle
+      //Simply decrement signalRemain until it runs out - signalMeasureStep doesn't matter as long as it stays nonzero as at start
+      //See if it's time to start a new measure
+      if((unsigned long)(ms()-signalMeasureStartTime)>=measureDur){
+        //Serial.println(F("Starting new measure, sPS -1 -> 1"));
+        signalMeasureStartTime += measureDur;
+      }
+      if(signalRemain) signalRemain--;
+      if(!signalRemain) signalStop(); //idle
     } //end switched relay
-  } //end if there's a pulse going
+  } //end if there's a measure going
 } //end cycleSignal()
 word getSignalPitch(){ //for current signal: chime, timer, or (default) alarm
   return getHz(readEEPROM((signalSource==fnIsTime?41:(signalSource==fnIsTimer?40:39)),false));

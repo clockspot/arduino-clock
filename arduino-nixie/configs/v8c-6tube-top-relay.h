@@ -41,7 +41,7 @@ const byte relayMode = 0; //If relay is equipped, what does it do?
 // 0 = switched mode: the relay will be switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in switchDur.
 // 1 = pulsed mode: the relay will be pulsed, like the beeper is, to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in relayPulse.
 const word signalDur = 180; //sec - when pulsed signal is going, pulses are sent once/sec for this period (e.g. 180 = 3min)
-const word switchDur = 30; //7200; //sec - when alarm triggers switched relay, it's switched on for this period (e.g. 7200 = 2hr)
+const word switchDur = 7200; //sec - when alarm triggers switched relay, it's switched on for this period (e.g. 7200 = 2hr)
 const word piezoPulse = 250; //ms - used with piezo via tone()
 const word relayPulse = 200; //ms - used with pulsed relay
 

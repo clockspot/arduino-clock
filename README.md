@@ -4,7 +4,7 @@
 
 **A digital clock for the Arduino Nano and a nixie tube display.**
 
-* Features perpetual calendar with day counter/sunrise/sunset, alarm with skip/snooze, and timer/chrono.
+* Features perpetual calendar with day counter/sunrise/sunset, alarm with skip/snooze, and chrono/timer.
 * Supports four- or six-digit displays of Nixie tubes multiplexed in pairs via two SN74141 driver chips.
 * Can do auto DST change, tube shutoff, and chimes, and can control PWM LEDs, piezo beeper, and/or relay.
 * Timekeeping requires a DS3231 real-time clock via I2C, which is battery-backed and thermocompensated.
@@ -16,8 +16,8 @@
 
 The clock displays its software version when powered up (as of v1.6). [Instructions for earlier versions are here.](https://github.com/clockspot/arduino-nixie/releases)
 
-* Press **Select** to cycle through [time of day](#time-of-day), [calendar](#calendar), [alarm](#alarm), and [timer/chrono](#timer/chrono).
-* To set anything, simply hold **Select** until the display flashes; use **Up/Down** to set, and **Select** to save. Additional settings are available in the [options menu](#options-menu).
+* Press **Select** to cycle through [time of day](#time-of-day), [calendar](#calendar), [alarm](#alarm), and [chrono/timer](#chrono/timer).
+* To set anything, simply hold **Select** until the display blinks; use **Up/Down** to set, and **Select** to save. Additional settings are available in the [options menu](#options-menu).
 
 ## Time of day
 
@@ -38,14 +38,17 @@ The calendar cycles through several displays, before returning to the time of da
 The alarm is always shown in 24h format so you can tell AM from PM.
 
 * Use **Up/Down** to switch the alarm between **on, skip, and off** (indicated by `1`/`01`/`0` on the seconds tubes, and/or high/medium/low beeps).
-  * If your clock has an **Alt** button and it’s [set as the alarm preset](#the-alt-button), it will switch the alarm as well – so you can display and switch the alarm with a few presses of a single button.
+  * If your clock has an **Alt** button and it’s [set as the alarm preset](#the-alt-button), it will switch the alarm as well – so you can check and switch it with a few presses of a single button.
 * **Skip** silences the next alarm in advance – useful if you’re taking a day off, or you wake up before your alarm. In the [options menu](#options-menu), you can program the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back on.
 * When the alarm sounds, press any button – once to snooze, and again to cancel the snooze / silence the alarm for the day (it will give a short low beep, and the display will blink once).
-  * In **Fibonacci mode** (see [options menu](#options-menu)), snooze does not take effect; any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet.
+  * In **Fibonacci mode** (see [options menu](#options-menu)), snooze will not take effect; any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet.
+  
+> **Hardware variations**
+> * If your clock has a [switched relay](#hardware-configuration) and the alarm is [set to use it](#options-menu), it will work like a clock radio, and switch on for two hours. In this case, the **Alt** button will silence it immediately; snooze will not take effect.
 
-## Timer/Chrono
+## Chrono/Timer
 
-This feature can count down (timer) or up (chrono) to 100 hours. When idle, it displays `0` (or `000000` if you have leading zeros enabled).
+This feature can count up (chrono) or down (timer), up to 100 hours each way. When idle, it displays `0` (or if you have leading zeros enabled, `000000`).
 
 * To start and stop, press **Up**. When at `0`, this will start the chrono.
   * While the chrono is running, **Down** will briefly display a lap time.
@@ -57,26 +60,27 @@ This feature can count down (timer) or up (chrono) to 100 hours. When idle, it d
     * 3 beeps: start the chrono, with a long signal
     * 4 beeps: start the chrono, with a short signal
 * When the timer signal sounds, press any button to silence it.
-* The timer/chrono will automatically clear if you switch to a different function while it’s stopped, if it’s left stopped for an hour, if the chrono reaches 100 hours, or if power is lost. However, you can switch functions while it’s running, and it will continue to run in the background.
+* The chrono/timer will automatically clear if you switch to a different function while it’s stopped, if it’s left stopped for an hour, if the chrono reaches 100 hours, or if power is lost. However, you can switch functions while it’s running, and it will continue to run in the background.
 
-Some variations may apply, depending on your [hardware configuration](#hardware-configuration):
-
-* If your clock has a switched relay and the timer/chrono is set to use it (in the [options menu](#options-menu)), it will switch on while the timer is running, like the “sleep” function on a clock radio. The runout options will still work, but won’t signal.
-* If your clock does not have a beeper, the runout options cannot be set.
-* If your clock uses a rotary encoder for **Up/Down** rather than buttons, **Down** will stop the timer/chrono, and **Up** will display lap times (chrono) and cycle through runout options (timer).
+> **Hardware variations**
+> * If your clock has a [switched relay](#hardware-configuration) and the chrono/timer is [set to use it](#options-menu), it will switch on while the timer is running, like the “sleep” function on a clock radio. The runout options will still work, but won’t signal.
+> * If your clock does not have a beeper, the runout options cannot be set.
+> * If your clock uses a rotary encoder for **Up/Down** rather than buttons, **Down** will stop the chrono/timer, and **Up** will display lap times (chrono) and cycle through runout options (timer).
 
 ## The Alt button
 
-If your clock has an **Alt** button, it will do one of two things (depending on your [hardware configuration](#hardware-configuration)):
+If your clock has an **Alt** button, it typically works as a preset button.
 
-* If your clock has a switched relay with soft power switch enabled (such as for a radio), **Alt** acts as that switch.
-* Otherwise, it works as a preset button. While viewing the display you want quick access to (such as the alarm or timer/chrono), hold **Alt** until it beeps twice; then you can use **Alt** to jump straight there.
+* While viewing the display you want quick access to (such as the alarm or chrono/timer), hold **Alt** until it beeps and the display blinks once; then you can use **Alt** to jump straight there.
   * TIP: If **Alt** is set as the alarm preset, it will switch the alarm as well – so you can check and switch it with a few presses of a single button.
+  
+> **Hardware variation**
+> * If your clock has a [switched relay](#hardware-configuration) with soft power switch enabled (such as for a radio), **Alt** acts as that switch.
 
 ## Options menu
 
 * To enter the options menu, hold **Select** for 3 seconds until you see a single `1` on the hour tubes. This indicates option number 1.
-* Use **Up/Down** to go to the option number you want to set (see table below); press **Select** to open it for setting (display will flash); use **Up/Down** to set; and **Select** to save.
+* Use **Up/Down** to go to the option number you want to set (see table below); press **Select** to open it for setting (display will blink); use **Up/Down** to set; and **Select** to save.
 * When all done, hold **Select** to exit the options menu.
 
 |  | Option | Settings |
@@ -85,7 +89,7 @@ If your clock has an **Alt** button, it will do one of two things (depending on 
 | 1 | Time format | 1 = 12-hour<br/>2 = 24-hour<br/>(time-of-day display only; setting times is always done in 24h) |
 | 2 | Date format | 1 = month/date/weekday<br/>2 = date/month/weekday<br/>3 = month/date/year<br/>4 = date/month/year<br/>5 = year/month/date<br/>The weekday is displayed as a number from 0 (Sunday) to 6 (Saturday).<br/>Four-tube clocks will display only the first two values in each of these options. |
 | 3 | Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date each minute at :30 seconds<br/>3 = same as 2, but scrolls in and out |
-| 4 | Leading zeros in hour, date/month, and timer/chrono? | 0 = no<br/>1 = yes |
+| 4 | Leading zeros in hour, date/month, and chrono/timer? | 0 = no<br/>1 = yes |
 | 5 | Digit fade | 0–20 (in hundredths of a second) |
 | 6 | Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ)<br/>If the clock is not powered at the time, it will correct itself when powered up. |
 | 7 | LED behavior | 0 = always off<br/>1 = always on<br/>2 = on, but follow night/away shutoff if enabled<br/>3 = off, but on when alarm/timer sounds</br>4 = off, but on with switched relay (if equipped)<br/>(Clocks with LED lighting only) |
@@ -97,7 +101,7 @@ If your clock has an **Alt** button, it will do one of two things (depending on 
 | 13 | Alarm beeper pattern | 0 = long (1/2-second beep)<br/>1 = short (1/4-second beep)<br/>2 = double (two 1/8-second beeps)<br/>3 = triple (three 1/12-second beeps)<br/>4 = quad (four 1/16-second beeps)<br/>5 = cuckoo (two 1/8-second beeps, descending major third)<br/>(Clocks with beeper only) |
 | 14 | Alarm snooze | 0–60 minutes. 0 disables snooze. |
 | 15 | Fibonacci mode | 0 = off<br/>1 = on<br/>To wake you more gradually, starting about half an hour before the set time, the clock will beep at intervals per the [Fibonacci sequence](https://en.wikipedia.org/wiki/Fibonacci_number) (610 seconds, then 337, then 233...). In this mode, snooze does not take effect; any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet.<br/>(Clocks with beeper and/or pulse relay only)
-|  | **Timer/chrono** |  |
+|  | **Chrono/Timer** |  |
 | 21 | Timer signal | 0 = beeper (uses pitch and pattern below)<br/>1 = relay (if in switch mode, will stay on until timer runs down)</br>(Clocks with both beeper and relay only) |
 | 22 | Timer beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>(Clocks with beeper only) |
 | 23 | Timer beeper pattern | Same options as alarm beeper pattern.<br/>(Clocks with beeper only) |
