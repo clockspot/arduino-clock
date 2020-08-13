@@ -75,9 +75,9 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   44 Strike signal - skipped when no pulse relay (start=0) or no piezo (start=1)
   45 Temperature format - skipped when fnIsTemp is not in fnsEnabled TODO also useful for weather display
   46 Anti-cathode poisoning
-  47 Alarm beeper pattern
-  48 Timer beeper pattern
-  49 Strike beeper pattern
+  47 Alarm beeper pattern - skipped when no piezo
+  48 Timer beeper pattern - skipped when no piezo
+  49 Strike beeper pattern - skipped when no piezo
   50 Alarm Fibonacci mode
 */
 
@@ -585,8 +585,8 @@ void fnOptScroll(byte dir){
   //Certain options don't apply to some hardware configurations; skip those
   byte optLoc = optsLoc[fn-fnOpts];
   if(
-      (piezoPin<0 && (optLoc==39||optLoc==40||optLoc==41)) //no piezo: no signal pitches
-      || ((piezoPin<0 && relayMode==0) && (optLoc==21||optLoc==25||optLoc==47||optLoc==48||optLoc==49||optLoc==50)) //no piezo, and relay is switch: no strike, timer interval mode, alarm fibonacci mode, or alarm/timer/strike beeper pattern
+      (piezoPin<0 && (optLoc==39||optLoc==40||optLoc==41||optLoc==47||optLoc==48||optLoc==49)) //no piezo: no signal pitches or alarm/timer/strike beeper pattern
+      || ((piezoPin<0 && relayMode==0) && (optLoc==21||optLoc==25||optLoc==50)) //no piezo, and relay is switch: no strike, timer interval mode, or alarm fibonacci mode
       || ((relayPin<0 || piezoPin<0) && (optLoc==42||optLoc==43||optLoc==44)) //no relay or no piezo: no alarm/timer/strike signal
       || ((relayMode==0) && (optLoc==44)) //relay is switch: no strike signal
       || ((ledPin<0) && (optLoc==26)) //no led pin: no led control
