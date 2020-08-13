@@ -47,22 +47,23 @@ The alarm is always shown in 24h format so you can tell AM from PM.
 
 This feature can count down (timer) or up (chrono) to 100 hours. When idle, it displays `0` (or `000000` if you have leading zeros enabled).
 
-* To start and stop, use **Up**. While at `0`, this will start the chrono.
+* To start and stop, press **Up**. While at `0`, this will start the chrono.
   * While the chrono is running, **Down** will briefly display a lap time.
-* To set the timer, hold **Select** while at `0`. It will prompt for hours/minutes first, then seconds. For convenience, it will recall the last-used time. Once the timer is set, use **Up** to start it.
+* To set the timer, hold **Select** while at `0`. It will prompt for hours/minutes first, then seconds. For convenience, it will recall the last-used time. Once the timer is set, press **Up** to start it.
   * While the timer is running, **Down** will cycle through the runout options (what the timer will do when it runs out – clocks with beeper only):
     * 1 beep: simply stop, with a long signal (default)
     * 2 beeps: restart, with a short signal (makes a great interval timer!)
     * 3 beeps: start the chrono, with a long signal
     * 4 beeps: start the chrono, with a short signal
+* To reset the timer to the last-used time, press **Down** while stopped.
 * To reset to `0`, hold **Select**.
   * It will automatically reset if you switch to a different function while it’s stopped, if it’s left stopped for an hour, if the chrono reaches 100 hours, or if power is lost. However, you can switch functions while it’s running, and it will continue to run in the background.
 * When the timer signal sounds, press any button to silence it.
 
 Some variations may apply, depending on your [hardware configuration](#hardware-configuration):
 
-* If your clock has a switched relay and the timer/chrono is set to use it (in the [options menu](#options-menu)), it will switch on while the timer/chrono is running, like the “sleep” function on a clock radio.
-* If your clock does not have a beeper, the runout options are not available.
+* If your clock has a switched relay and the timer/chrono is set to use it (in the [options menu](#options-menu)), it will switch on while the timer is running, like the “sleep” function on a clock radio. The runout options will still work, but won’t signal.
+* If your clock does not have a beeper, the runout options cannot be set.
 * If your clock uses a rotary encoder for **Up/Down** rather than buttons, the controls are slightly different:
   * To start, use **Up**.
     * While the chrono is running, **Up** will briefly display a lap time.
