@@ -87,7 +87,7 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //                       General                    Alarm              Timer        Strike       Night and away shutoff           Lat   Long  UTC±*
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13,14,15, 21,22,23, 30,31,32,33, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52};
 const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,47,24,50, 43,40,48, 21,44,41,49, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14};
-const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,61, 4, 9, 0,  0,61, 2,  0, 0,61, 5,  0,1320, 360, 0, 1, 5, 480,1020,     0,    0,100};
+const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,76, 4, 9, 0,  0,76, 2,  0, 0,68, 5,  0,1320, 360, 0, 1, 5, 480,1020,     0,    0,100};
 const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0, 0, 0,  0,49, 0,  0, 0,49, 0,  0,   0,   0, 0, 0, 0,   0,   0,  -900,-1800, 52};
 const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88, 5,60, 1,  1,88, 5,  4, 1,88, 5,  2,1439,1439, 2, 6, 6,1439,1439,   900, 1800,156};
 
@@ -102,7 +102,7 @@ byte btnCur = 0; //Momentary button currently in use - only one allowed at a tim
 byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=set by btnStop()
 unsigned long inputLast = 0; //When a button was last pressed
 unsigned long inputLast2 = 0; //Second-to-last of above
-//TODO the math between these two may fail very rarely due to ms() rolling over while setting. Need to find a fix. I think it only applies to the rotary encoder though.
+//TODO the math between these two may fail very rarely due to millis() rolling over while setting. Need to find a fix. I think it only applies to the rotary encoder though.
 int inputLastTODMins = 0; //time of day, in minutes past midnight, when button was pressed. Used in paginated functions so they all reflect the same TOD.
 
 const byte fnOpts = 201; //fn values from here to 255 correspond to options in the options menu
@@ -133,22 +133,17 @@ byte signalPattern = 0; //the pattern for that source
 word signalRemain = 0; //alarm/timer signal timeout counter, seconds
 word snoozeRemain = 0; //snooze timeout counter, seconds
 byte timerState = 0; //bit 0 is stop/run, bit 1 is down/up, bit 2 is runout repeat / short signal, bit 3 is runout chrono, bit 4 is lap display
-word timerInitialMins = 0; //timer original countdown setting, minutes - up to 99h 59m (5999m)
-byte timerInitialSecs = 0; //timer original countdown setting, seconds - up to 59s
-unsigned long timerTime = 0;
-//While timer is running, this holds a timestamp in the past (countdown) or future (countup),
-//and the timer continuously calculates and displays the difference between that and the current time.
-//When the timer is stopped, this difference (duration) is saved into timerTime.
-//When timer is (re)started, a new timestamp is calculated per that duration and the current time.
-//TODO wrap ms() to calibrate it in real time against the DS3231
-unsigned long timerLapTime = 0;
+word timerInitialMins = 0; //timer original duration setting, minutes - up to 99h 59m (5999m)
+byte timerInitialSecs = 0; //timer original duration setting, seconds - up to 59s
+unsigned long timerTime = 0; //timestamp of timer target / chrono origin (while running) or duration (while stopped)
+unsigned long timerLapTime = 0; 
+const byte millisCorrectionInterval = 30; //used to calibrate millis() to RTC for timer/chrono purposes
+unsigned long millisAtLastCorrection = 0;
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night/away shutoff) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 byte cleanRemain = 0; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
 byte scrollRemain = 0; //"frames" of scroll – 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change
 byte versionRemain = 3; //display version at start
-
-unsigned long millisAtLastRTCTick = 0; //see millisCorrectForDrift()
 
 
 ////////// Main code control //////////
@@ -185,7 +180,7 @@ void setup(){
 unsigned long pollCleanLast = 0; //every cleanSpeed ms
 unsigned long pollScrollLast = 0; //every scrollSpeed ms
 void loop(){
-  unsigned long now = ms();
+  unsigned long now = millis();
   //If we're running a tube cleaning, advance it every cleanSpeed ms.
   if(cleanRemain && (unsigned long)(now-pollCleanLast)>=cleanSpeed) { //account for rollover
     pollCleanLast=now;
@@ -244,7 +239,7 @@ void checkBtn(byte btn){
   //Changes in momentary buttons, LOW = pressed.
   //When a button event has occurred, will call ctrlEvt
   bool bnow = readInput(btn);
-  unsigned long now = ms();
+  unsigned long now = millis();
   //If the button has just been pressed, and no other buttons are in use...
   if(btnCur==0 && bnow==LOW) {
     btnCur = btn; btnCurHeld = 0; inputLast2 = inputLast; inputLast = now; inputLastTODMins = tod.hour()*60+tod.minute();
@@ -457,7 +452,7 @@ void ctrlEvt(byte ctrl, byte evt){
                 ds3231.setHour(fnSetVal/60);
                 ds3231.setMinute(fnSetVal%60);
                 ds3231.setSecond(0);
-                millisAtLastRTCTick = 0; //see ms()
+                millisAtLastCorrection = 0; //see ms()
                 calcSun(tod.year(),tod.month(),tod.day());
                 isDSTByHour(tod.year(),tod.month(),tod.day(),fnSetVal/60,true);
               }
@@ -656,7 +651,7 @@ void switchPower(byte dir){
     return;
   }
   //relayPin state is the reverse of the appliance state: LOW = device on, HIGH = device off
-  // Serial.print(ms(),DEC);
+  // Serial.print(millis(),DEC);
   // Serial.print(F(" Relay requested to "));
   if(dir==2) { //toggle
     dir = (digitalRead(relayPin)?1:0); //LOW = device on, so this effectively does our dir reversion for us
@@ -683,7 +678,7 @@ unsigned long doSetHoldLast;
 void doSetHold(bool start){
   //When we're setting via an adj button that's passed a hold point, fire off doSet commands at intervals
   //TODO integrate this with checkInputs?
-  unsigned long now = ms();
+  unsigned long now = millis();
   //The interval used to be 250, but in order to make the value change by a full 9 values between btnShortHold and btnLongHold,
   //the interval is now that difference divided by 9. TODO divisor may need to be a bit higher in case btnLongHold ever fires before 9th.
   //It may be weird not being exactly quarter-seconds, but it doesn't line up with the blinking anyway.
@@ -788,49 +783,13 @@ void findFnAndPageNumbers(){
 
 ////////// Timing and timed events //////////
 
-// There are two RTCs in here – the standard Arduino one (millis()), which gives subsecond precision but not very accurate, so only good for short term – and the DS3231, which is very accurate but only gives seconds (TODO really true?), so only good for long term. In order to combine long-term accuracy with short-term precision (especially for the chrono), with each tick of the DS3231 we'll check how much millis() has drifted, and apply the difference to a running offset to correct for it, accessible to other code by calling ms() instead of millis().
-unsigned long millisDriftOffset = 0; //unsigned, but that's ok since all code using ms() (as with millis()) should handle wraparound.
-//unsigned long millisAtLastRTCTick (defined at top) will be zero when unreliable (at start and after RTC set).
-const byte millisCorrectInterval = 30; //seconds between corrections - 60 must be evenly divisible by this
-// TODO the adjustments are a little noisy in the short term, I think due to these adjustments having to be applied around the timing of cycleDisplay with its delays, given that the pattern changes with fadeDur. It's kind of academic since the variance is probably only around ±.02sec per adjustment, which I'd say is within the tolerance of display/button/human limitations, but no point doing it as quickly as once per second I think.
-void millisCorrectForDrift(){
-  unsigned long now = millis();
-  if(millisAtLastRTCTick){ //if this has a value, we know millis should have advanced by millisCorrectInterval*1000.
-    unsigned long millisDrift = now-(millisAtLastRTCTick+(millisCorrectInterval*1000));
-    millisDriftOffset -= millisDrift;
-    // tod = rtc.now();
-    // if(tod.hour()<10) Serial.print(F("0"));
-    // Serial.print(tod.hour(),DEC);
-    // Serial.print(F(":"));
-    // if(tod.minute()<10) Serial.print(F("0"));
-    // Serial.print(tod.minute(),DEC);
-    // Serial.print(F(":"));
-    // if(tod.second()<10) Serial.print(F("0"));
-    // Serial.print(tod.second(),DEC);
-    // Serial.print(F("  millis: "));
-    // Serial.print(now,DEC);
-    // Serial.print(F("  drift: "));
-    // Serial.print(millisDrift,DEC);
-    // Serial.print(F(" (")); Serial.print(~millisDrift,DEC); //in case of wraparound, this is more human-readable
-    // Serial.print(F(")  new offset: "));
-    // Serial.print(millisDriftOffset,DEC);
-    // Serial.print(F(" (")); Serial.print(~millisDriftOffset,DEC); //in case of wraparound, this is more human-readable
-    // Serial.print(F(")"));
-    // Serial.println();
-  }
-  millisAtLastRTCTick = now;
-}
-unsigned long ms(){ //replaces millis()
-  return (unsigned long)(millis()+millisDriftOffset);
-}
-
 byte rtcSecLast = 61;
-byte rtcDid = 0; //bitmask to indicate whether we just did things that would be bad to overdo, in case checkRTC is called multiple times during the trigger period (such as if fn is changed during second :00). bit 0 = millis drift correction. At this time other things are OK to overdo since they just restart the same action (alarm/chime signal triggering, date/anti-poisoning display routines) or have other means of canceling (DST change, per DST flag). TODO could get away from this if we move the force stuff into another method?
+byte rtcDid = 0; //bitmask to indicate whether we just did things that would be bad to overdo, in case checkRTC is called multiple times during the trigger period (such as if fn is changed during second :00). bit 0 = timer drift correction. At this time other things are OK to overdo since they just restart the same action (alarm/chime signal triggering, date/anti-poisoning display routines) or have other means of canceling (DST change, per DST flag). TODO could get away from this if we move the force stuff into another method?
 void checkRTC(bool force){
   //Checks display timeouts;
   //checks for new time-of-day second -> decrements timeouts and checks for timed events;
   //updates display for "running" functions.
-  unsigned long now = ms();
+  unsigned long now = millis();
   
   //Things to do every time this is called: timeouts to reset display. These may force a tick.
   //Option/setting timeout: if we're in the options menu, or we're setting a value
@@ -881,8 +840,8 @@ void checkRTC(bool force){
     } //end natural second
   
     //Things to do at specific times
-    //Millis drift correction: per the millisCorrectInterval
-    if(tod.second()%millisCorrectInterval==0){ //if time:
+    //Timer drift correction: per the millisCorrectionInterval
+    if(tod.second()%millisCorrectionInterval==0){ //if time:
       if(!(rtcDid&1)) millisCorrectForDrift(); bitWrite(rtcDid,0,1); //do if not done, set as done
     } else bitWrite(rtcDid,0,0); //if not time: set as not done
     //DST change check: every 2am
@@ -1107,50 +1066,63 @@ bool isDayInRange(byte dstart, byte dend, byte dtest) {
   return ( (dstart<=dend && dtest>=dstart && dtest<=dend) || (dstart>dend && (dtest>=dstart || dtest<=dend)) );
 }
 
+// Chrono/Timer
+// There are two timing sources in the UNDB – the Arduino itself (eg millis()), which gives subsecond precision but isn't very accurate, so it's only good for short-term timing and taking action in response to user activity (eg button press hold thresholds); and the DS3231, which is very accurate but only gives seconds (unless you're monitoring its square wave via a digital pin), so it's only good for long-term timing and taking action in response to time of day. The one place we need both short-term precision and long-term accuracy is in the chrono/timer – so I have based it on millis() but with an offset applied to correct for its drift, periodically adjusted per the DS3231.
+unsigned long millisDriftOffset = 0; //The cumulative running offset.
+//unsigned long millisAtLastCorrection (defined at top, so ctrlEvt can reset it when setting RTC). 0 when unreliable (at start and after RTC set).
+//const byte millisCorrectionInterval (defined at top, so checkRTC can see it)
+// TODO the adjustments are a little noisy in the short term, because of a rolling offset between the loop cycle (slowed down by cycleDisplay's delays) and the rtc ticks. It's kind of academic since the variance is probably only around ±.02sec per adjustment at most (largely the duration of cycleDisplay's delays), which I'd say is within the tolerance of display/button/human limitations, but no point doing it as quickly as once per second I think.
+void millisCorrectForDrift(){
+  unsigned long now = millis();
+  if(millisAtLastCorrection){ //if this has a value, check to see how much millis has drifted since then.
+    unsigned long millisDrift = now-(millisAtLastCorrection+(millisCorrectionInterval*1000));
+    millisDriftOffset -= millisDrift;
+    // tod = rtc.now();
+    // if(tod.hour()<10) Serial.print(F("0"));
+    // Serial.print(tod.hour(),DEC);
+    // Serial.print(F(":"));
+    // if(tod.minute()<10) Serial.print(F("0"));
+    // Serial.print(tod.minute(),DEC);
+    // Serial.print(F(":"));
+    // if(tod.second()<10) Serial.print(F("0"));
+    // Serial.print(tod.second(),DEC);
+    // Serial.print(F("  millis: "));
+    // Serial.print(now,DEC);
+    // Serial.print(F("  drift: "));
+    // Serial.print(millisDrift,DEC);
+    // Serial.print(F(" (")); Serial.print(~millisDrift,DEC); //in case of wraparound, this is more human-readable
+    // Serial.print(F(")  new offset: "));
+    // Serial.print(millisDriftOffset,DEC);
+    // Serial.print(F(" (")); Serial.print(~millisDriftOffset,DEC); //in case of wraparound, this is more human-readable
+    // Serial.print(F(")"));
+    // Serial.println();
+  }
+  millisAtLastCorrection = now;
+}
+unsigned long ms(){
+  // Returns millis() with the drift offset applied, for timer/chrono purposes.
+  // WARNING: Since the offset is being periodically adjusted, there is the possibility of a discontinuity in ms() output – if we give out a timestamp and then effectively set the clock back, the next timestamp might possibly be earlier than the last one, which could mess up duration math. I tried to think of a way to monitor for that discontinuity – e.g. if now-then is greater than then-now, due to overflow – but it gets tricky since millis() is effectively circular, and that condition occurs naturally at rollover as well – so I think we would need a flag that millisCorrectForDrift sets when it sets the offset backward, and ms clears when the real time has caught up.... or something like that.
+  // So for now we'll restrict use of ms() to the timer/chrono duration – the only place we really need it, and fortunately it's not a problem here, because that duration never exceeds 100 hours so we can easily detect that overflow. And the only time it might really be an issue is if it occurs immediately after the chrono starts, since it would briefly display the overflowed time – in that case we'll just reset the timer to 0 and keep going.
+  return (unsigned long)(millis()+millisDriftOffset);
+}
 void timerStart(){
   bitWrite(timerState,0,1); //set timer running (bit 0) to on (1)
   if(timerTime==0) bitWrite(timerState,1,1); //set timer direction (bit 1) to up (1) if we were idle
-  //Convert timer duration to timestamp
-  // Serial.print(F("timerStart: conv dur->ts "));
-  // if((timerState>>1)&1){ //counting up from
-  //   Serial.print(F("in past "));
-  //   Serial.print(ms(),DEC);
-  //   Serial.print(F("-"));
-  //   Serial.print(timerTime,DEC);
-  // }
-  // else { //counting down to
-  //   Serial.print(F("in future "));
-  //   Serial.print(ms(),DEC);
-  //   Serial.print(F("+"));
-  //   Serial.print(timerTime,DEC);
-  // }
+  //When the timer is stopped, timerTime holds a duration, independent of any start/stop time.
+  //Convert it to a timestamp:
+  //If chrono (count up), timestamp is an origin in the past: now minus duration.
+  //If timer (count down), timestamp is a destination in the future: now plus duration.
   timerTime = ((timerState>>1)&1? ms() - timerTime: ms() + timerTime);
-  // Serial.print(F("="));
-  // Serial.print(timerTime,DEC);
-  // Serial.println();
   if(!((timerState>>1)&1)) timerSwitchSleepRelay(1); //possibly switch the relay, but only if counting down
   quickBeep(69);
 } //end timerStart()
 void timerStop(){
   bitWrite(timerState,0,0); //set timer running (bit 0) to off (0)
-  //Convert timer timestamp to duration
-  // Serial.print(F("timerStop: conv dur<-ts "));
-  // if((timerState>>1)&1){ //counting up from
-  //   Serial.print(F("in past "));
-  //   Serial.print(ms(),DEC);
-  //   Serial.print(F("-"));
-  //   Serial.print(timerTime,DEC);
-  // }
-  // else { //counting down to
-  //   Serial.print(F("in future "));
-  //   Serial.print(timerTime,DEC);
-  //   Serial.print(F("-"));
-  //   Serial.print(ms(),DEC);
-  // }
+  //When the timer is running, timerTime holds a timestamp, which the current duration is continuously calculated from.
+  //Convert it to a duration:
+  //If chrono (count up), timestamp is an origin in the past: duration is now minus timestamp.
+  //If timer (count down), timestamp is a destination in the future: duration is timestamp minus now.
   timerTime = ((timerState>>1)&1? ms() - timerTime: timerTime - ms());
-  // Serial.print(F("="));
-  // Serial.print(timerTime,DEC);
-  // Serial.println();
   if(!((timerState>>1)&1)) timerSwitchSleepRelay(0); //possibly switch the relay, but only if counting down
   quickBeep(64);
   bitWrite(timerState,4,0); //set timer lap display (bit 4) to off (0)
@@ -1167,7 +1139,7 @@ void timerClear(){
 void timerLap(){
   timerLapTime = ms();
   bitWrite(timerState,4,1); //set timer lap display (bit 4) to on (1)
-  quickBeep(73);
+  quickBeep(81);
 }
 void timerRunoutToggle(){
   if(piezoPin>=0){ //if piezo equipped
@@ -1215,7 +1187,10 @@ void cycleTimer(){
       }
       if((unsigned long)(ms()-timerTime)>=360000000){ //find out if now is over the amount we can display (100h, or 360M ms)
         //chrono has maxed out
-        timerClear();
+        // if it has maxed out by a LOT, it was probably due to a rare overflow possibility right after starting (see ms()) – so just restart.
+        if((unsigned long)(ms()-timerTime)>=370000000) timerTime = ms();
+        else timerClear();
+        // I thought about restarting anytime the chrono maxes out, but I don't really want to support leaving the chrono running indefinitely, since the display has no good function indicator – an unfamiliar user might accidentally start the chrono, then later be looking for the idle `0` which is the surefire timer/chrono indicator and never find it. This is the same reason I make it reset if the user switches away while it's stopped.
         // Serial.print(F("Chrono has maxed out per "));
         // Serial.print(ms(),DEC);
         // Serial.print(F("-"));
@@ -1231,7 +1206,7 @@ void timerSwitchSleepRelay(bool on){
   //This doesn't count as a signal (using signal methods) so that other signals might not interrupt it. TODO confirm
   if(relayPin>=0 && relayMode==0 && readEEPROM(43,false)==1) { //start "radio sleep"
     digitalWrite(relayPin,(on?LOW:HIGH)); updateLEDs(); //LOW = device on
-    // Serial.print(ms(),DEC);
+    // Serial.print(millis(),DEC);
     // if(on) Serial.println(F(" Relay on, timerSwitchSleepRelay (radio sleep)"));
     // else   Serial.println(F(" Relay off, timerSwitchSleepRelay (radio sleep)"));
   }
@@ -1316,7 +1291,7 @@ void updateDisplay(){
       editDisplay(fnSetVal, 0, 3, false, false);
       signalPattern = fnSetVal;
       signalSource = (fnOptCurLoc==49?fnIsTime:(fnOptCurLoc==48?fnIsTimer:fnIsAlarm));
-      signalStart(-1,0); //Play a sample using the above source and pattern
+      signalStart(-1,1); //Play a sample using the above source and pattern
     } else if(fnSetValMax==156) { //Timezone offset from UTC in quarter hours plus 100 (since we're not set up to support signed bytes)
       editDisplay((abs(fnSetVal-100)*25)/100, 0, 1, fnSetVal<100, false); //hours, leading zero for negatives
       editDisplay((abs(fnSetVal-100)%4)*15, 2, 3, true, false); //minutes, leading zero always
@@ -1626,13 +1601,14 @@ void initOutputs() {
 }
 
 void displayBlink(){
-  displayBlinkStart = ms();
+  displayBlinkStart = millis();
 }
 void cycleDisplay(){
-  unsigned long now = ms();
+  unsigned long now = millis();
   
   if(displayBlinkStart){
-    if((unsigned long)(now-displayBlinkStart)<250) return;
+    if((unsigned long)(now-displayBlinkStart)<250){ delay(fadeDur*3); return; }
+    // The delay is to make cycleDisplay take up the same amount of loop time it usually does. Not sure if necessary.
     else displayBlinkStart = 0;
   }
   
@@ -1760,14 +1736,14 @@ void signalStart(byte sigFn, byte sigDur){
   // Serial.println();
   
   //Start a measure for cycleSignal to pick up. For "quick measures" we won't set signalRemain.
-  signalMeasureStartTime = ms();
+  signalMeasureStartTime = millis();
   signalMeasureStep = 1; //waiting to start a new measure
   if(sigDur!=0){ //long-duration signal (alarm, sleep, etc) - set signalRemain
     //If switched relay, except if this is a forced fnIsTimer signal (for signaling runout options)
     if(getSignalOutput()==1 && relayPin>=0 && relayMode==0 && !(sigFn==255 && signalSource==fnIsTimer)) { //turn it on now
       signalRemain = (sigFn==fnIsAlarm? switchDur: sigDur); //For alarm signal, use switched relay duration from config (eg 2hr)
       digitalWrite(relayPin,LOW); updateLEDs(); //LOW = device on
-      //Serial.print(ms(),DEC); Serial.println(F(" Relay on, signalStart"));
+      //Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalStart"));
     } else { //start pulsing. If there is no beeper or pulsed relay, this will have no effect since cycleSignal will clear it
       signalRemain = (sigFn==fnIsAlarm? signalDur: sigDur); //For alarm signal, use signal duration from config (eg 2min)
     }
@@ -1780,7 +1756,7 @@ void signalStop(){ //stop current signal and clear out signal timer if applicabl
   if(getSignalOutput()==0 && piezoPin>=0) noTone(piezoPin);
   if(getSignalOutput()==1 && relayPin>=0){
     digitalWrite(relayPin,HIGH); updateLEDs(); //LOW = device on
-    //Serial.print(ms(),DEC); Serial.println(F(" Relay off, signalStop"));
+    //Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalStop"));
   }
 } //end signalStop()
 void cycleSignal(){
@@ -1808,16 +1784,16 @@ void cycleSignal(){
           bc = 4; bd = 62; break;
       }
       //See if it's time to start a new measure
-      if(signalMeasureStep==255 && (unsigned long)(ms()-signalMeasureStartTime)>=measureDur){
+      if(signalMeasureStep==255 && (unsigned long)(millis()-signalMeasureStartTime)>=measureDur){
         //Serial.println(F("Starting new measure, sPS -1 -> 1"));
         signalMeasureStartTime += measureDur;
         signalMeasureStep = 1;
       }
       //See if it's time to start a new beep
-      if((unsigned long)(ms()-signalMeasureStartTime)>=(signalMeasureStep-1)*bd*2){
+      if((unsigned long)(millis()-signalMeasureStartTime)>=(signalMeasureStep-1)*bd*2){
         word piezoPitch = (signalPattern==5 && signalMeasureStep==2? getSignalPitch()*0.7937: //cuckoo: go down major third (2^(-4/12)) on 2nd beep
           (signalPattern==255? 1000: //the pips: use 1000Hz just like the Beeb
-            (signalRemain==0 && signalSource==fnIsTimer? getHz(73): //fnIsTimer runout setting: use timer lap pitch
+            (signalRemain==0 && signalSource==fnIsTimer? getHz(69): //fnIsTimer runout setting: use timer start pitch
               getSignalPitch() //usual: get pitch from user settings
             )
           )
@@ -1843,7 +1819,7 @@ void cycleSignal(){
       //We don't follow the beep pattern here, we simply energize the relay for relayPulse time
       //Unlike beeper, we need to use a signalMeasureStep (2) to stop the relay.
       //See if it's time to start a new measure
-      if(signalMeasureStep==255 && (unsigned long)(ms()-signalMeasureStartTime)>=measureDur){
+      if(signalMeasureStep==255 && (unsigned long)(millis()-signalMeasureStartTime)>=measureDur){
         //Serial.println(F("Starting new measure, sPS -1 -> 1"));
         signalMeasureStartTime += measureDur;
         signalMeasureStep = 1;
@@ -1851,13 +1827,13 @@ void cycleSignal(){
       //Upon new measure, start the pulse immediately
       if(signalMeasureStep==1){
         digitalWrite(relayPin,LOW); updateLEDs(); //LOW = device on
-        //Serial.print(ms(),DEC); Serial.println(F(" Relay on, cycleSignal"));
+        //Serial.print(millis(),DEC); Serial.println(F(" Relay on, cycleSignal"));
         signalMeasureStep = 2; //set it up to stop
       }
       //See if it's time to stop the pulse
-      else if(signalMeasureStep==2 && (unsigned long)(ms()-signalMeasureStartTime)>=relayPulse) {
+      else if(signalMeasureStep==2 && (unsigned long)(millis()-signalMeasureStartTime)>=relayPulse) {
         digitalWrite(relayPin,HIGH); updateLEDs(); //LOW = device on
-        //Serial.print(ms(),DEC); Serial.println(F(" Relay off, cycleSignal"));
+        //Serial.print(millis(),DEC); Serial.println(F(" Relay off, cycleSignal"));
         //Set up for the next event
         if(signalRemain) signalRemain--; //this measure is done
         if(signalRemain) signalMeasureStep = 255; //if more measures, set up to start another measure
@@ -1867,7 +1843,7 @@ void cycleSignal(){
     else { //switched relay / default
       //Simply decrement signalRemain until it runs out - signalMeasureStep doesn't matter as long as it stays nonzero as at start
       //See if it's time to start a new measure
-      if((unsigned long)(ms()-signalMeasureStartTime)>=measureDur){
+      if((unsigned long)(millis()-signalMeasureStartTime)>=measureDur){
         //Serial.println(F("Starting new measure, sPS -1 -> 1"));
         signalMeasureStartTime += measureDur;
       }
@@ -1906,7 +1882,9 @@ void quickBeep(int pitch){
   //F6 = 69
   //G6 = 71
   //A6 = 73
-  //C7 = 76
+  //B6 = 75 //second loudest
+  //C7 = 76 //loudest
+  //F7 = 81
   if(piezoPin>=0) { noTone(piezoPin); tone(piezoPin, getHz(pitch), 100); }
 }
 
