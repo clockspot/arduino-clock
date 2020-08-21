@@ -106,7 +106,8 @@ unsigned long inputLast2 = 0; //Second-to-last of above
 int inputLastTODMins = 0; //time of day, in minutes past midnight, when button was pressed. Used in paginated functions so they all reflect the same TOD.
 
 const byte fnOpts = 201; //fn values from here to 255 correspond to options in the options menu
-byte fn = fnIsTime; //currently displayed fn (per fnsEnabled)
+byte fn = fnIsTime; //currently displayed fn per fnsEnabled in config
+byte fnsOn = 0; //which fns are enabled per fnsEnabled in config - one bit per fn unique ID - this limits the available fn unique IDs to 0–7; otherwise it could be 0–200 – if you need more than 7, change from a byte to a bigger data type
 byte fnPg = 0; //allows a function to have multiple pages
 byte fnSetPg = 0; //whether this function is currently being set, and which option/page it's on
  int fnSetVal; //the value currently being set, if any
@@ -154,7 +155,7 @@ void setup(){
   initInputs();
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
   initEEPROM(readInput(mainSel)==LOW); //Do a hard init of EEPROM if button is held; else do a soft init to make sure vals in range
-  //Some options need to be set to a fixed value per the hardware configuration.
+  //Some options need to be set to a fixed value per the configuration.
   //These options will also be skipped in fnOptScroll so the user can't change them.
   if(relayPin<0 || piezoPin<0) { //If no relay or no piezo, set each signal output to [if no relay, then piezo; else relay]  
     writeEEPROM(42,(relayPin<0?0:1),false); //alarm
@@ -166,11 +167,37 @@ void setup(){
   }
   if(piezoPin<0 && relayMode==0) { //If switched relay and no piezo
     writeEEPROM(21,0,false); //turn off strike
-    //writeEEPROM(25,0,false); //turn off timer interval mode
     writeEEPROM(50,0,false); //turn off fibonacci mode
   }
-  if(!enableSoftAlarmSwitch) alarmOn = 1; //force alarm on if software switch is disabled
+  //Check to see which functions are enabled
+  for(byte fnct=0; fnct<sizeof(fnsEnabled); fnct++){
+    switch(fnsEnabled[fnct]){
+      case fnIsTime: bitWrite(fnsOn,fnIsTime,1); break;
+      case fnIsDate: bitWrite(fnsOn,fnIsDate,1); break;
+      case fnIsAlarm: bitWrite(fnsOn,fnIsAlarm,1); break;
+      case fnIsTimer: bitWrite(fnsOn,fnIsTimer,1); break;
+      case fnIsTemp: bitWrite(fnsOn,fnIsTemp,1); break;
+      case fnIsTubeTester: bitWrite(fnsOn,fnIsTubeTester,1); break;
+      default: break;
+    }
+  }
+  if(!((fnsOn>>fnIsAlarm)&1)) alarmOn = 0; //if alarm is disabled in config
+  else if(!enableSoftAlarmSwitch) alarmOn = 1; //force alarm on if software switch is disabled
   else alarmOn = (readEEPROM(2,false)>0); //otherwise set alarm per EEPROM backup
+  switch(readEEPROM(7,false)){ //if the preset is set to a function that is no longer enabled, use alarm if enabled, else use time
+    case fnIsDate: if(!((fnsOn>>fnIsDate)&1)) writeEEPROM(7,(((fnsOn>>fnIsAlarm)&1)?fnIsAlarm:fnIsTime),false); break;
+    case fnIsAlarm: if(!((fnsOn>>fnIsAlarm)&1)) writeEEPROM(7,fnIsTime,false); break;
+    case fnIsTimer: if(!((fnsOn>>fnIsTimer)&1)) writeEEPROM(7,(((fnsOn>>fnIsAlarm)&1)?fnIsAlarm:fnIsTime),false); break;
+    case fnIsTemp: if(!((fnsOn>>fnIsTemp)&1)) writeEEPROM(7,(((fnsOn>>fnIsAlarm)&1)?fnIsAlarm:fnIsTime),false); break;
+    case fnIsTubeTester: if(!((fnsOn>>fnIsTubeTester)&1)) writeEEPROM(7,(((fnsOn>>fnIsAlarm)&1)?fnIsAlarm:fnIsTime),false); break;
+  }
+  if(!enableAlarmAutoskip) writeEEPROM(23,0,false); //alarm autoskip off
+  if(!enableAlarmFibonacci) writeEEPROM(50,0,false); //fibonacci off
+  if(!enableChime) writeEEPROM(21,0,false); //chime off
+  if(!enableNightShutoff) writeEEPROM(27,0,false); //night shutoff off
+  if(!enableAwayShutoff) writeEEPROM(32,0,false); //away shutoff off
+  //TODO if fnAlarm is not enabled, force alarm off, else
+  
   dstOn = (readEEPROM(15,false)>0); //set last known DST state per EEPROM backup
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   findFnAndPageNumbers(); //initial values
@@ -342,9 +369,9 @@ void ctrlEvt(byte ctrl, byte evt){
             } else if(fnPg==fnDateCounter){ //month, date, direction
               startSet(readEEPROM(5,false),1,12,1);
             } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
-              //TODO these pages will need different IDs to be told apart from fnDateCounter
+              //TODO
             } else if(fnPg==fnDateWeathernow || fnDateWeathernext){ //temperature units??
-              //TODO these pages will need different IDs to be told apart from fnDateCounter
+              //TODO
             } break;
           case fnIsAlarm: //set mins
             startSet(readEEPROM(0,true),0,1439,1); break;
@@ -594,21 +621,31 @@ void fnOptScroll(byte dir){
   byte posLast = fnOpts+sizeof(optsLoc)-1;
   if(dir==1) fn = (fn==posLast? fnOpts: fn+1);
   if(dir==0) fn = (fn==fnOpts? posLast: fn-1);
-  //Certain options don't apply to some hardware configurations; skip those
+  //Certain options don't apply to some configurations; skip those.
   byte optLoc = optsLoc[fn-fnOpts];
   if(
+      //Hardware config
       (piezoPin<0 && (optLoc==39||optLoc==40||optLoc==41||optLoc==47||optLoc==48||optLoc==49)) //no piezo: no signal pitches or alarm/timer/strike beeper pattern
-      || ((piezoPin<0 && relayMode==0) && (optLoc==21||optLoc==25||optLoc==50)) //no piezo, and relay is switch: no strike, timer interval mode, or alarm fibonacci mode
+      || ((piezoPin<0 && relayMode==0) && (optLoc==21||optLoc==50)) //no piezo, and relay is switch: no strike, or alarm fibonacci mode
       || ((relayPin<0 || piezoPin<0) && (optLoc==42||optLoc==43||optLoc==44)) //no relay or no piezo: no alarm/timer/strike signal
       || ((relayMode==0) && (optLoc==44)) //relay is switch: no strike signal
       || ((ledPin<0) && (optLoc==26)) //no led pin: no led control
+      || ((ledPin<0) && (optLoc==26)) //no led pin: no led control
+      //Functions disabled
+      || (!((fnsOn>>fnIsDate)&1) && (optLoc==17||optLoc==18||optLoc==10||optLoc==12||optLoc==14)) //date fn disabled in config: skip date and geography options
+      || (!((fnsOn>>fnIsAlarm)&1) && (optLoc==23||optLoc==42||optLoc==39||optLoc==47||optLoc==24||optLoc==50)) //alarm fn disabled in config: skip alarm options
+      || (!((fnsOn>>fnIsTimer)&1) && (optLoc==43||optLoc==40||optLoc==48)) //timer fn disabled in config: skip timer options
+      || (!((fnsOn>>fnIsTemp)&1) && (optLoc==45)) //temp fn disabled in config: skip temp format TODO good for weather also
+      //Other functionality disabled
+      || (!enableDateSunriseSunset && (optLoc==10||optLoc==12||optLoc==14)) //date rise/set disabled in config: skip geography
+      || (!enableAlarmAutoskip && (optLoc==23)) //alarm autoskip disabled in config: skip autoskip switch
+      || (!enableAlarmFibonacci && (optLoc==50)) //fibonacci mode disabled in config: skip fibonacci switch
+      || (!enableChime && (optLoc==21||optLoc==44||optLoc==41||optLoc==49)) //chime disabled in config: skip chime
+      || (!enableNightShutoff && (optLoc==27||optLoc==28||optLoc==30)) //night shutoff disabled in config: skip night
+      || ((!enableNightShutoff || !enableAwayShutoff) && (optLoc==32||optLoc==35||optLoc==37)) //night or away shutoff disabled in config: skip away (except workweek)
+      || ((!enableNightShutoff || !enableAwayShutoff) && (!enableAlarmAutoskip || !((fnsOn>>fnIsAlarm)&1)) && (optLoc==33||optLoc==34)) //(night or away) and alarm autoskip disabled: skip workweek
     ) {
     fnOptScroll(dir);
-  }
-  if(optLoc==45) { //temp not in fnsEnabled: skip temp format option (and calib if we get to it TODO)
-    bool found = 0;
-    for(byte fnct=0; fnct<sizeof(fnsEnabled); fnct++) if(fnsEnabled[fnct]==fnIsTemp) found = 1;
-    if(found==0) fnOptScroll(dir);
   }
 }
 
@@ -681,9 +718,9 @@ void doSetHold(bool start){
   //TODO integrate this with checkInputs?
   unsigned long now = millis();
   //The interval used to be 250, but in order to make the value change by a full 9 values between btnShortHold and btnLongHold,
-  //the interval is now that difference divided by 9. TODO divisor may need to be a bit higher in case btnLongHold ever fires before 9th.
+  //the interval is now that difference divided by 9. TODO divisor may need to be a bit higher in case btnLongHold ever fires before 9th - it seems indeed it did, so 9.5.
   //It may be weird not being exactly quarter-seconds, but it doesn't line up with the blinking anyway.
-  if(start || (unsigned long)(now-doSetHoldLast)>=((btnLongHold-btnShortHold)/9)) {
+  if(start || (unsigned long)(now-doSetHoldLast)>=(((btnLongHold-btnShortHold)*2)/19)) { //(x*2)/19 = x/9.5
     doSetHoldLast = now;
     if(fnSetPg!=0 && (mainAdjType==1 && (btnCur==mainAdjUp || btnCur==mainAdjDn)) ){ //if we're setting, and this is an adj btn
       bool dir = (btnCur==mainAdjUp ? 1 : 0);
@@ -774,10 +811,10 @@ void writeEEPROM(int loc, int val, bool is2Byte){
 void findFnAndPageNumbers(){
   //Each function, and each page in a paged function, has a number. //TODO should pull from EEPROM 8
   fnDatePages = 1; //date function always has a page for the date itself
-  if(true){ fnDatePages++; fnDateCounter=fnDatePages-1; }
-  if(true){ fnDatePages++; fnDateSunlast=fnDatePages-1; }
+  if(enableDateCounter){ fnDatePages++; fnDateCounter=fnDatePages-1; }
+  if(enableDateSunriseSunset){ fnDatePages++; fnDateSunlast=fnDatePages-1; }
   if(false){ fnDatePages++; fnDateWeathernow=fnDatePages-1; }
-  if(true){ fnDatePages++; fnDateSunnext=fnDatePages-1; }
+  if(enableDateSunriseSunset){ fnDatePages++; fnDateSunnext=fnDatePages-1; }
   if(false){ fnDatePages++; fnDateWeathernext=fnDatePages-1; }
 }
 
@@ -798,9 +835,9 @@ void checkRTC(bool force){
     if((unsigned long)(now-inputLast)>=timeoutSet*1000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
   }
   //Paged-display function timeout //TODO change fnIsDate to consts? //TODO timeoutPageFn var
-  else if(fn==fnIsDate && (unsigned long)(now-inputLast)>=2500) {
+  else if(fn==fnIsDate && (unsigned long)(now-inputLast)>=3000) { //3sec per date page
     //Here we just have to increment the page and decide when to reset. updateDisplay() will do the rendering
-    fnPg++; inputLast+=2500; //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
+    fnPg++; inputLast+=3000; //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
     if(fnPg >= fnDatePages){ fnPg = 0; fn = fnIsTime; }
     force=true;
   }
@@ -883,15 +920,15 @@ void checkRTC(bool force){
           if(readEEPROM(27,false)>0? //is night shutoff enabled?
             tod.second()==0 && tod.hour()*60+tod.minute()==readEEPROM(28,true): //if so, at start of night shutoff (at second :00 before dim is in effect)
             tod.second()==1 && tod.hour()*60+tod.minute()==0) //if not, at 00:00:01
-              cleanRemain = 51; //run routine for five cycles
+              cleanRemain = 151; //run routine for fifteen cycles
           break;
         case 1: //every hour
           if(tod.second()==1 && tod.minute()==0) //at min/sec :00:01
-            cleanRemain = 51; //run routine for five cycles
+            cleanRemain = 101; //run routine for ten cycles
           break;
         case 2: //every minute
           if(tod.second()==1) //at second :01
-            cleanRemain = 11; //run routine for one cycle
+            cleanRemain = 21; //run routine for two cycles
           break;
         default: break;
       }

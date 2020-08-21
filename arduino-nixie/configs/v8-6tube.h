@@ -2,16 +2,25 @@
 
 const byte displaySize = 6; //number of tubes in display module. Small display adjustments are made for 4-tube clocks
 
-// available clock functions, and unique IDs (between 0 and 200)
-const byte fnIsTime = 0;
-const byte fnIsDate = 1;
-const byte fnIsAlarm = 2;
-const byte fnIsTimer = 3;
-const byte fnIsTemp = 4;
-const byte fnIsTubeTester = 5; //cycles all digits on all tubes 1/second, similar to anti-cathode-poisoning cleaner
-// functions enabled in this clock, in their display order. Only fnIsTime is required
-const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer}; //, fnIsTemp, fnIsTubeTester
-// To control which of these display persistently vs. switch back to Time after a few seconds, search "Temporary-display function timeout"
+// available clock functions (and unique IDs between 0 and 7)
+const byte fnIsTime = 0; //time of day
+const byte fnIsDate = 1; //date, with optional day counter and sunrise/sunset (per below)
+const byte fnIsAlarm = 2; //alarm time
+const byte fnIsTimer = 3; //countdown timer and chronograph
+const byte fnIsTemp = 4; //temperature per DS3231 – will likely read high
+const byte fnIsTubeTester = 5; //simply cycles all tubes
+
+// Which functions are enabled in this clock, and in what order? (fnIsTime is required)
+const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer};
+
+// Additional functionality
+const bool enableDateCounter = true; // Adds a "page" to the date with an anniversary counter
+const bool enableDateSunriseSunset = true; // Adds "pages" to the date with sunrise/sunset times
+const bool enableAlarmAutoskip = true;
+const bool enableAlarmFibonacci = true;
+const bool enableChime = true;
+const bool enableNightShutoff = true; // If disabled, tubes will be full brightness all the time.
+const bool enableAwayShutoff = true; // Requires night shutoff.
 
 // These are the RLB board connections to Arduino analog input pins.
 // S1/PL13 = Reset
