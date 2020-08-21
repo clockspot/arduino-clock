@@ -7,7 +7,7 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/v8-6tube.h"
+#include "configs/v9-6tube.h"
 
 ////////// Software version //////////
 const byte vMajor = 1;
@@ -73,7 +73,7 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   42 Alarm signal, 0=beeper, 1=relay - skipped when no relay (start=0) or no piezo (start=0)
   43 Timer signal - skipped when no relay (start=0) or no piezo (start=1)
   44 Strike signal - skipped when no pulse relay (start=0) or no piezo (start=1)
-  45 Temperature format - skipped when fnIsTemp is not in fnsEnabled TODO also useful for weather display
+  45 Temperature format - skipped when !enableTemp TODO also useful for weather display
   46 Anti-cathode poisoning
   47 Alarm beeper pattern - skipped when no piezo
   48 Timer beeper pattern - skipped when no piezo
@@ -105,9 +105,16 @@ unsigned long inputLast2 = 0; //Second-to-last of above
 //TODO the math between these two may fail very rarely due to millis() rolling over while setting. Need to find a fix. I think it only applies to the rotary encoder though.
 int inputLastTODMins = 0; //time of day, in minutes past midnight, when button was pressed. Used in paginated functions so they all reflect the same TOD.
 
+// Functions and pages
+// Unique IDs - see also fnScroll
+const byte fnIsTime = 0; //time of day
+const byte fnIsDate = 1; //date, with optional day counter and sunrise/sunset pages
+const byte fnIsAlarm = 2; //alarm time
+const byte fnIsTimer = 3; //countdown timer and chronograph
+const byte fnIsTemp = 4; //temperature per DS3231 – will likely read high
+const byte fnIsTest = 5; //simply cycles all tubes
 const byte fnOpts = 201; //fn values from here to 255 correspond to options in the options menu
-byte fn = fnIsTime; //currently displayed fn per fnsEnabled in config
-byte fnsOn = 0; //which fns are enabled per fnsEnabled in config - one bit per fn unique ID - this limits the available fn unique IDs to 0–7; otherwise it could be 0–200 – if you need more than 7, change from a byte to a bigger data type
+byte fn = 0; //currently displayed fn per above
 byte fnPg = 0; //allows a function to have multiple pages
 byte fnSetPg = 0; //whether this function is currently being set, and which option/page it's on
  int fnSetVal; //the value currently being set, if any
@@ -169,35 +176,22 @@ void setup(){
     writeEEPROM(21,0,false); //turn off strike
     writeEEPROM(50,0,false); //turn off fibonacci mode
   }
-  //Check to see which functions are enabled
-  for(byte fnct=0; fnct<sizeof(fnsEnabled); fnct++){
-    switch(fnsEnabled[fnct]){
-      case fnIsTime: bitWrite(fnsOn,fnIsTime,1); break;
-      case fnIsDate: bitWrite(fnsOn,fnIsDate,1); break;
-      case fnIsAlarm: bitWrite(fnsOn,fnIsAlarm,1); break;
-      case fnIsTimer: bitWrite(fnsOn,fnIsTimer,1); break;
-      case fnIsTemp: bitWrite(fnsOn,fnIsTemp,1); break;
-      case fnIsTubeTester: bitWrite(fnsOn,fnIsTubeTester,1); break;
-      default: break;
-    }
-  }
-  if(!((fnsOn>>fnIsAlarm)&1)) alarmOn = 0; //if alarm is disabled in config
+  if(!enableAlarm) alarmOn = 0; //if alarm is disabled in config
   else if(!enableSoftAlarmSwitch) alarmOn = 1; //force alarm on if software switch is disabled
   else alarmOn = (readEEPROM(2,false)>0); //otherwise set alarm per EEPROM backup
   switch(readEEPROM(7,false)){ //if the preset is set to a function that is no longer enabled, use alarm if enabled, else use time
-    case fnIsDate: if(!((fnsOn>>fnIsDate)&1)) writeEEPROM(7,(((fnsOn>>fnIsAlarm)&1)?fnIsAlarm:fnIsTime),false); break;
-    case fnIsAlarm: if(!((fnsOn>>fnIsAlarm)&1)) writeEEPROM(7,fnIsTime,false); break;
-    case fnIsTimer: if(!((fnsOn>>fnIsTimer)&1)) writeEEPROM(7,(((fnsOn>>fnIsAlarm)&1)?fnIsAlarm:fnIsTime),false); break;
-    case fnIsTemp: if(!((fnsOn>>fnIsTemp)&1)) writeEEPROM(7,(((fnsOn>>fnIsAlarm)&1)?fnIsAlarm:fnIsTime),false); break;
-    case fnIsTubeTester: if(!((fnsOn>>fnIsTubeTester)&1)) writeEEPROM(7,(((fnsOn>>fnIsAlarm)&1)?fnIsAlarm:fnIsTime),false); break;
+    case fnIsDate: if(!enableDate) writeEEPROM(7,(enableAlarm?fnIsAlarm:fnIsTime),false); break;
+    case fnIsAlarm: if(!enableAlarm) writeEEPROM(7,fnIsTime,false); break;
+    case fnIsTimer: if(!enableTimer) writeEEPROM(7,(enableAlarm?fnIsAlarm:fnIsTime),false); break;
+    case fnIsTemp: if(!enableTemp) writeEEPROM(7,(enableAlarm?fnIsAlarm:fnIsTime),false); break;
+    case fnIsTest: if(!enableTest) writeEEPROM(7,(enableAlarm?fnIsAlarm:fnIsTime),false); break;
+    default: writeEEPROM(7,(enableAlarm?fnIsAlarm:fnIsTime),false); break;
   }
   if(!enableAlarmAutoskip) writeEEPROM(23,0,false); //alarm autoskip off
   if(!enableAlarmFibonacci) writeEEPROM(50,0,false); //fibonacci off
   if(!enableChime) writeEEPROM(21,0,false); //chime off
   if(!enableNightShutoff) writeEEPROM(27,0,false); //night shutoff off
   if(!enableAwayShutoff) writeEEPROM(32,0,false); //away shutoff off
-  //TODO if fnAlarm is not enabled, force alarm off, else
-  
   dstOn = (readEEPROM(15,false)>0); //set last known DST state per EEPROM backup
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   findFnAndPageNumbers(); //initial values
@@ -380,7 +374,7 @@ void ctrlEvt(byte ctrl, byte evt){
             startSet(timerInitialMins,0,5999,1); break; //minutes
           //fnIsDayCount removed in favor of paginated calendar
           case fnIsTemp: //could do calibration here if so inclined
-          case fnIsTubeTester:
+          case fnIsTest:
           default: break;
         }
         return;
@@ -609,11 +603,27 @@ void ctrlEvt(byte ctrl, byte evt){
 
 void fnScroll(byte dir){
   //0=down, 1=up
-  //Switch to the next (up) or previous (down) fn in fnsEnabled
-  byte pos;
-  byte posLast = sizeof(fnsEnabled)-1;
-  if(dir==1) for(pos=0; pos<=posLast; pos++) if(fnsEnabled[pos]==fn) { fn = (pos==posLast?0:fnsEnabled[pos+1]); break; }
-  if(dir==0) for(pos=posLast; pos>=0; pos--) if(fnsEnabled[pos]==fn) { fn = (pos==0?posLast:fnsEnabled[pos-1]); break; }
+  //Switch to the next (up) or previous (down) enabled function. This determines the order.
+  //We'll use switch blocks *without* breaks to cascade to the next enabled function
+  if(dir) { // up
+    switch(fn) {
+      case fnIsTime: if(enableDate) { fn = fnIsDate; break; }
+      case fnIsDate: if(enableAlarm) { fn = fnIsAlarm; break; }
+      case fnIsAlarm: if(enableTimer) { fn = fnIsTimer; break; }
+      case fnIsTimer: if(enableTemp) { fn = fnIsTemp; break; }
+      case fnIsTemp: if(enableTest) { fn = fnIsTest; break; }
+      case fnIsTest: default: fn = fnIsTime; break;
+    }
+  } else { // down
+    switch(fn) {
+      case fnIsTime: if(enableTest) { fn = fnIsTest; break; } 
+      case fnIsTest: if(enableTemp) { fn = fnIsTemp; break; }
+      case fnIsTemp: if(enableTimer) { fn = fnIsTimer; break; }
+      case fnIsTimer: if(enableAlarm) { fn = fnIsAlarm; break; }
+      case fnIsAlarm: if(enableDate) { fn = fnIsDate; break; }
+      case fnIsDate: default: fn = fnIsTime; break;
+    }
+  }
 }
 void fnOptScroll(byte dir){
   //0=down, 1=up
@@ -632,10 +642,10 @@ void fnOptScroll(byte dir){
       || ((ledPin<0) && (optLoc==26)) //no led pin: no led control
       || ((ledPin<0) && (optLoc==26)) //no led pin: no led control
       //Functions disabled
-      || (!((fnsOn>>fnIsDate)&1) && (optLoc==17||optLoc==18||optLoc==10||optLoc==12||optLoc==14)) //date fn disabled in config: skip date and geography options
-      || (!((fnsOn>>fnIsAlarm)&1) && (optLoc==23||optLoc==42||optLoc==39||optLoc==47||optLoc==24||optLoc==50)) //alarm fn disabled in config: skip alarm options
-      || (!((fnsOn>>fnIsTimer)&1) && (optLoc==43||optLoc==40||optLoc==48)) //timer fn disabled in config: skip timer options
-      || (!((fnsOn>>fnIsTemp)&1) && (optLoc==45)) //temp fn disabled in config: skip temp format TODO good for weather also
+      || (!enableDate && (optLoc==17||optLoc==18||optLoc==10||optLoc==12||optLoc==14)) //date fn disabled in config: skip date and geography options
+      || (!enableAlarm && (optLoc==23||optLoc==42||optLoc==39||optLoc==47||optLoc==24||optLoc==50)) //alarm fn disabled in config: skip alarm options
+      || (!enableTimer && (optLoc==43||optLoc==40||optLoc==48)) //timer fn disabled in config: skip timer options
+      || (!enableTemp && (optLoc==45)) //temp fn disabled in config: skip temp format TODO good for weather also
       //Other functionality disabled
       || (!enableDateSunriseSunset && (optLoc==10||optLoc==12||optLoc==14)) //date rise/set disabled in config: skip geography
       || (!enableAlarmAutoskip && (optLoc==23)) //alarm autoskip disabled in config: skip autoskip switch
@@ -643,7 +653,7 @@ void fnOptScroll(byte dir){
       || (!enableChime && (optLoc==21||optLoc==44||optLoc==41||optLoc==49)) //chime disabled in config: skip chime
       || (!enableNightShutoff && (optLoc==27||optLoc==28||optLoc==30)) //night shutoff disabled in config: skip night
       || ((!enableNightShutoff || !enableAwayShutoff) && (optLoc==32||optLoc==35||optLoc==37)) //night or away shutoff disabled in config: skip away (except workweek)
-      || ((!enableNightShutoff || !enableAwayShutoff) && (!enableAlarmAutoskip || !((fnsOn>>fnIsAlarm)&1)) && (optLoc==33||optLoc==34)) //(night or away) and alarm autoskip disabled: skip workweek
+      || ((!enableNightShutoff || !enableAwayShutoff) && (!enableAlarmAutoskip || !enableAlarm) && (optLoc==33||optLoc==34)) //(night or away) and alarm autoskip disabled: skip workweek
     ) {
     fnOptScroll(dir);
   }
@@ -741,7 +751,8 @@ void clearSet(){ //Exit set state
 //EEPROM values are exclusively bytes (0-255) or words (unsigned ints, 0-65535)
 //If it's a word, high byte is in loc, low byte is in loc+1
 void initEEPROM(bool hard){
-  //Set EEPROM and clock to defaults
+  //If hard, set EEPROM and clock to defaults
+  //Otherwise, just make sure stuff is in range
   //First prevent the held button from doing anything else
   btnCur = mainSel; btnStop();
   //If a hard init, set the clock
@@ -755,14 +766,12 @@ void initEEPROM(bool hard){
     ds3231.setSecond(0);
   }
   if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //0-1: alarm at 7am
-  if(hard){ alarmOn = !enableSoftAlarmSwitch; writeEEPROM(2,alarmOn,false); } //2: alarm is off, or on if no software switch
-  //3 is free
+  //2: alarm on, handled by init
+  //3: free
   if(hard || readEEPROM(4,false)<0 || readEEPROM(4,false)>1) writeEEPROM(4,1,false); //4: day counter direction: count up...
   if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) writeEEPROM(5,12,false); //5: ...December...
   if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) writeEEPROM(6,31,false); //6: ...31st. (This gives the day of the year)
-  bool foundAltFn = false;
-  for(byte fni=0; fni<sizeof(fnsEnabled); fni++) { if(fnsEnabled[fni]==readEEPROM(7,false)) { foundAltFn = true; break; }}
-  if(hard || !foundAltFn) writeEEPROM(7,0,false); //7: Alt function preset – make sure it is not set to a function that isn't enabled in this clock
+  if(hard) writeEEPROM(7,0,false); //7: Alt function preset
   //8: TODO functions/pages enabled (bitmask)
   //9: free
   //15: DST on flag (will be set at first RTC check)
@@ -1474,7 +1483,7 @@ void updateDisplay(){
         editDisplay(abs(temp)/100,1,3,(temp<0?true:false),true); //leading zeros if negative
         editDisplay(abs(temp)%100,4,5,true,true);
         break;
-      case fnIsTubeTester:
+      case fnIsTest:
         editDisplay(tod.second(),0,0,true,false);
         editDisplay(tod.second(),1,1,true,false);
         editDisplay(tod.second(),2,2,true,false);
