@@ -2,16 +2,20 @@
 
 const byte displaySize = 6; //number of tubes in display module. Small display adjustments are made for 4-tube clocks
 
-// available clock functions, and unique IDs (between 0 and 200)
-const byte fnIsTime = 0;
-const byte fnIsDate = 1;
-const byte fnIsAlarm = 2;
-const byte fnIsTimer = 3;
-const byte fnIsTemp = 5;
-const byte fnIsTubeTester = 6; //cycles all digits on all tubes 1/second, similar to anti-cathode-poisoning cleaner
-// functions enabled in this clock, in their display order. Only fnIsTime is required
-const byte fnsEnabled[] = {fnIsTime, fnIsDate, fnIsAlarm, fnIsTimer}; //, fnIsTemp, fnIsTubeTester
-// To control which of these display persistently vs. switch back to Time after a few seconds, search "Temporary-display function timeout"
+// Which functionality is enabled in this clock?
+// Related options will also be enabled in the options menu.
+const bool enableDate = true;
+const bool enableDateCounter = true; // Adds a "page" to the date with an anniversary counter
+const bool enableDateSunriseSunset = true; // Adds "pages" to the date with sunrise/sunset times
+const bool enableAlarm = true;
+const bool enableAlarmAutoskip = true;
+const bool enableAlarmFibonacci = true;
+const bool enableTimer = true;
+const bool enableChime = true;
+const bool enableNightShutoff = true; // If disabled, tubes will be full brightness all the time.
+const bool enableAwayShutoff = true; // Requires night shutoff.
+const bool enableTemp = false; //Temperature per DS3231 - will read high – leave false for production
+const bool enableTest = false; //Cycles through all tubes – leave false for production
 
 // These are the UNDB v5 board connections to Arduino analog input pins.
 // S1/PL13 = Reset

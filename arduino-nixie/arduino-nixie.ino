@@ -7,11 +7,11 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/v8-6tube.h"
+#include "configs/v9-6tube.h"
 
 ////////// Software version //////////
 const byte vMajor = 1;
-const byte vMinor = 7;
+const byte vMinor = 8;
 const byte vPatch = 0;
 
 ////////// Other includes, global consts, and vars //////////
@@ -73,7 +73,7 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   42 Alarm signal, 0=beeper, 1=relay - skipped when no relay (start=0) or no piezo (start=0)
   43 Timer signal - skipped when no relay (start=0) or no piezo (start=1)
   44 Strike signal - skipped when no pulse relay (start=0) or no piezo (start=1)
-  45 Temperature format - skipped when fnIsTemp is not in fnsEnabled TODO also useful for weather display
+  45 Temperature format - skipped when !enableTemp TODO also useful for weather display
   46 Anti-cathode poisoning
   47 Alarm beeper pattern - skipped when no piezo
   48 Timer beeper pattern - skipped when no piezo
@@ -105,8 +105,16 @@ unsigned long inputLast2 = 0; //Second-to-last of above
 //TODO the math between these two may fail very rarely due to millis() rolling over while setting. Need to find a fix. I think it only applies to the rotary encoder though.
 int inputLastTODMins = 0; //time of day, in minutes past midnight, when button was pressed. Used in paginated functions so they all reflect the same TOD.
 
+// Functions and pages
+// Unique IDs - see also fnScroll
+const byte fnIsTime = 0; //time of day
+const byte fnIsDate = 1; //date, with optional day counter and sunrise/sunset pages
+const byte fnIsAlarm = 2; //alarm time
+const byte fnIsTimer = 3; //countdown timer and chronograph
+const byte fnIsTemp = 4; //temperature per DS3231 – will likely read high
+const byte fnIsTest = 5; //simply cycles all tubes
 const byte fnOpts = 201; //fn values from here to 255 correspond to options in the options menu
-byte fn = fnIsTime; //currently displayed fn (per fnsEnabled)
+byte fn = 0; //currently displayed fn per above
 byte fnPg = 0; //allows a function to have multiple pages
 byte fnSetPg = 0; //whether this function is currently being set, and which option/page it's on
  int fnSetVal; //the value currently being set, if any
@@ -138,7 +146,7 @@ byte timerInitialSecs = 0; //timer original duration setting, seconds - up to 59
 unsigned long timerTime = 0; //timestamp of timer target / chrono origin (while running) or duration (while stopped)
 unsigned long timerLapTime = 0; 
 const byte millisCorrectionInterval = 30; //used to calibrate millis() to RTC for timer/chrono purposes
-unsigned long millisAtLastCorrection = 0;
+unsigned long millisAtLastCheck = 0;
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night/away shutoff) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 byte cleanRemain = 0; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
@@ -154,7 +162,7 @@ void setup(){
   initInputs();
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
   initEEPROM(readInput(mainSel)==LOW); //Do a hard init of EEPROM if button is held; else do a soft init to make sure vals in range
-  //Some options need to be set to a fixed value per the hardware configuration.
+  //Some options need to be set to a fixed value per the configuration.
   //These options will also be skipped in fnOptScroll so the user can't change them.
   if(relayPin<0 || piezoPin<0) { //If no relay or no piezo, set each signal output to [if no relay, then piezo; else relay]  
     writeEEPROM(42,(relayPin<0?0:1),false); //alarm
@@ -166,11 +174,24 @@ void setup(){
   }
   if(piezoPin<0 && relayMode==0) { //If switched relay and no piezo
     writeEEPROM(21,0,false); //turn off strike
-    //writeEEPROM(25,0,false); //turn off timer interval mode
     writeEEPROM(50,0,false); //turn off fibonacci mode
   }
-  if(!enableSoftAlarmSwitch) alarmOn = 1; //force alarm on if software switch is disabled
+  if(!enableAlarm) alarmOn = 0; //if alarm is disabled in config
+  else if(!enableSoftAlarmSwitch) alarmOn = 1; //force alarm on if software switch is disabled
   else alarmOn = (readEEPROM(2,false)>0); //otherwise set alarm per EEPROM backup
+  switch(readEEPROM(7,false)){ //if the preset is set to a function that is no longer enabled, use alarm if enabled, else use time
+    case fnIsDate: if(!enableDate) writeEEPROM(7,(enableAlarm?fnIsAlarm:fnIsTime),false); break;
+    case fnIsAlarm: if(!enableAlarm) writeEEPROM(7,fnIsTime,false); break;
+    case fnIsTimer: if(!enableTimer) writeEEPROM(7,(enableAlarm?fnIsAlarm:fnIsTime),false); break;
+    case fnIsTemp: if(!enableTemp) writeEEPROM(7,(enableAlarm?fnIsAlarm:fnIsTime),false); break;
+    case fnIsTest: if(!enableTest) writeEEPROM(7,(enableAlarm?fnIsAlarm:fnIsTime),false); break;
+    default: writeEEPROM(7,(enableAlarm?fnIsAlarm:fnIsTime),false); break;
+  }
+  if(!enableAlarmAutoskip) writeEEPROM(23,0,false); //alarm autoskip off
+  if(!enableAlarmFibonacci) writeEEPROM(50,0,false); //fibonacci off
+  if(!enableChime) writeEEPROM(21,0,false); //chime off
+  if(!enableNightShutoff) writeEEPROM(27,0,false); //night shutoff off
+  if(!enableAwayShutoff) writeEEPROM(32,0,false); //away shutoff off
   dstOn = (readEEPROM(15,false)>0); //set last known DST state per EEPROM backup
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   findFnAndPageNumbers(); //initial values
@@ -200,6 +221,7 @@ void loop(){
   }
   //Every loop cycle, check the RTC and inputs (previously polled, but works fine without and less flicker)
   checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
+  millisApplyDrift();
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
   doSetHold(false); //if inputs have been held, this will do more things + updateDisplay as needed
   cycleTimer();
@@ -341,9 +363,9 @@ void ctrlEvt(byte ctrl, byte evt){
             } else if(fnPg==fnDateCounter){ //month, date, direction
               startSet(readEEPROM(5,false),1,12,1);
             } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
-              //TODO these pages will need different IDs to be told apart from fnDateCounter
+              //TODO
             } else if(fnPg==fnDateWeathernow || fnDateWeathernext){ //temperature units??
-              //TODO these pages will need different IDs to be told apart from fnDateCounter
+              //TODO
             } break;
           case fnIsAlarm: //set mins
             startSet(readEEPROM(0,true),0,1439,1); break;
@@ -352,7 +374,7 @@ void ctrlEvt(byte ctrl, byte evt){
             startSet(timerInitialMins,0,5999,1); break; //minutes
           //fnIsDayCount removed in favor of paginated calendar
           case fnIsTemp: //could do calibration here if so inclined
-          case fnIsTubeTester:
+          case fnIsTest:
           default: break;
         }
         return;
@@ -452,7 +474,7 @@ void ctrlEvt(byte ctrl, byte evt){
                 ds3231.setHour(fnSetVal/60);
                 ds3231.setMinute(fnSetVal%60);
                 ds3231.setSecond(0);
-                millisAtLastCorrection = 0; //see ms()
+                millisAtLastCheck = 0; //see ms()
                 calcSun(tod.year(),tod.month(),tod.day());
                 isDSTByHour(tod.year(),tod.month(),tod.day(),fnSetVal/60,true);
               }
@@ -581,11 +603,27 @@ void ctrlEvt(byte ctrl, byte evt){
 
 void fnScroll(byte dir){
   //0=down, 1=up
-  //Switch to the next (up) or previous (down) fn in fnsEnabled
-  byte pos;
-  byte posLast = sizeof(fnsEnabled)-1;
-  if(dir==1) for(pos=0; pos<=posLast; pos++) if(fnsEnabled[pos]==fn) { fn = (pos==posLast?0:fnsEnabled[pos+1]); break; }
-  if(dir==0) for(pos=posLast; pos>=0; pos--) if(fnsEnabled[pos]==fn) { fn = (pos==0?posLast:fnsEnabled[pos-1]); break; }
+  //Switch to the next (up) or previous (down) enabled function. This determines the order.
+  //We'll use switch blocks *without* breaks to cascade to the next enabled function
+  if(dir) { // up
+    switch(fn) {
+      case fnIsTime: if(enableDate) { fn = fnIsDate; break; }
+      case fnIsDate: if(enableAlarm) { fn = fnIsAlarm; break; }
+      case fnIsAlarm: if(enableTimer) { fn = fnIsTimer; break; }
+      case fnIsTimer: if(enableTemp) { fn = fnIsTemp; break; }
+      case fnIsTemp: if(enableTest) { fn = fnIsTest; break; }
+      case fnIsTest: default: fn = fnIsTime; break;
+    }
+  } else { // down
+    switch(fn) {
+      case fnIsTime: if(enableTest) { fn = fnIsTest; break; } 
+      case fnIsTest: if(enableTemp) { fn = fnIsTemp; break; }
+      case fnIsTemp: if(enableTimer) { fn = fnIsTimer; break; }
+      case fnIsTimer: if(enableAlarm) { fn = fnIsAlarm; break; }
+      case fnIsAlarm: if(enableDate) { fn = fnIsDate; break; }
+      case fnIsDate: default: fn = fnIsTime; break;
+    }
+  }
 }
 void fnOptScroll(byte dir){
   //0=down, 1=up
@@ -593,21 +631,31 @@ void fnOptScroll(byte dir){
   byte posLast = fnOpts+sizeof(optsLoc)-1;
   if(dir==1) fn = (fn==posLast? fnOpts: fn+1);
   if(dir==0) fn = (fn==fnOpts? posLast: fn-1);
-  //Certain options don't apply to some hardware configurations; skip those
+  //Certain options don't apply to some configurations; skip those.
   byte optLoc = optsLoc[fn-fnOpts];
   if(
+      //Hardware config
       (piezoPin<0 && (optLoc==39||optLoc==40||optLoc==41||optLoc==47||optLoc==48||optLoc==49)) //no piezo: no signal pitches or alarm/timer/strike beeper pattern
-      || ((piezoPin<0 && relayMode==0) && (optLoc==21||optLoc==25||optLoc==50)) //no piezo, and relay is switch: no strike, timer interval mode, or alarm fibonacci mode
+      || ((piezoPin<0 && relayMode==0) && (optLoc==21||optLoc==50)) //no piezo, and relay is switch: no strike, or alarm fibonacci mode
       || ((relayPin<0 || piezoPin<0) && (optLoc==42||optLoc==43||optLoc==44)) //no relay or no piezo: no alarm/timer/strike signal
       || ((relayMode==0) && (optLoc==44)) //relay is switch: no strike signal
       || ((ledPin<0) && (optLoc==26)) //no led pin: no led control
+      || ((ledPin<0) && (optLoc==26)) //no led pin: no led control
+      //Functions disabled
+      || (!enableDate && (optLoc==17||optLoc==18||optLoc==10||optLoc==12||optLoc==14)) //date fn disabled in config: skip date and geography options
+      || (!enableAlarm && (optLoc==23||optLoc==42||optLoc==39||optLoc==47||optLoc==24||optLoc==50)) //alarm fn disabled in config: skip alarm options
+      || (!enableTimer && (optLoc==43||optLoc==40||optLoc==48)) //timer fn disabled in config: skip timer options
+      || (!enableTemp && (optLoc==45)) //temp fn disabled in config: skip temp format TODO good for weather also
+      //Other functionality disabled
+      || (!enableDateSunriseSunset && (optLoc==10||optLoc==12||optLoc==14)) //date rise/set disabled in config: skip geography
+      || (!enableAlarmAutoskip && (optLoc==23)) //alarm autoskip disabled in config: skip autoskip switch
+      || (!enableAlarmFibonacci && (optLoc==50)) //fibonacci mode disabled in config: skip fibonacci switch
+      || (!enableChime && (optLoc==21||optLoc==44||optLoc==41||optLoc==49)) //chime disabled in config: skip chime
+      || (!enableNightShutoff && (optLoc==27||optLoc==28||optLoc==30)) //night shutoff disabled in config: skip night
+      || ((!enableNightShutoff || !enableAwayShutoff) && (optLoc==32||optLoc==35||optLoc==37)) //night or away shutoff disabled in config: skip away (except workweek)
+      || ((!enableNightShutoff || !enableAwayShutoff) && (!enableAlarmAutoskip || !enableAlarm) && (optLoc==33||optLoc==34)) //(night or away) and alarm autoskip disabled: skip workweek
     ) {
     fnOptScroll(dir);
-  }
-  if(optLoc==45) { //temp not in fnsEnabled: skip temp format option (and calib if we get to it TODO)
-    bool found = 0;
-    for(byte fnct=0; fnct<sizeof(fnsEnabled); fnct++) if(fnsEnabled[fnct]==fnIsTemp) found = 1;
-    if(found==0) fnOptScroll(dir);
   }
 }
 
@@ -680,9 +728,9 @@ void doSetHold(bool start){
   //TODO integrate this with checkInputs?
   unsigned long now = millis();
   //The interval used to be 250, but in order to make the value change by a full 9 values between btnShortHold and btnLongHold,
-  //the interval is now that difference divided by 9. TODO divisor may need to be a bit higher in case btnLongHold ever fires before 9th.
+  //the interval is now that difference divided by 9. TODO divisor may need to be a bit higher in case btnLongHold ever fires before 9th - it seems indeed it did, so 9.5.
   //It may be weird not being exactly quarter-seconds, but it doesn't line up with the blinking anyway.
-  if(start || (unsigned long)(now-doSetHoldLast)>=((btnLongHold-btnShortHold)/9)) {
+  if(start || (unsigned long)(now-doSetHoldLast)>=(((btnLongHold-btnShortHold)*2)/19)) { //(x*2)/19 = x/9.5
     doSetHoldLast = now;
     if(fnSetPg!=0 && (mainAdjType==1 && (btnCur==mainAdjUp || btnCur==mainAdjDn)) ){ //if we're setting, and this is an adj btn
       bool dir = (btnCur==mainAdjUp ? 1 : 0);
@@ -703,7 +751,8 @@ void clearSet(){ //Exit set state
 //EEPROM values are exclusively bytes (0-255) or words (unsigned ints, 0-65535)
 //If it's a word, high byte is in loc, low byte is in loc+1
 void initEEPROM(bool hard){
-  //Set EEPROM and clock to defaults
+  //If hard, set EEPROM and clock to defaults
+  //Otherwise, just make sure stuff is in range
   //First prevent the held button from doing anything else
   btnCur = mainSel; btnStop();
   //If a hard init, set the clock
@@ -717,14 +766,12 @@ void initEEPROM(bool hard){
     ds3231.setSecond(0);
   }
   if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //0-1: alarm at 7am
-  if(hard){ alarmOn = !enableSoftAlarmSwitch; writeEEPROM(2,alarmOn,false); } //2: alarm is off, or on if no software switch
-  //3 is free
+  //2: alarm on, handled by init
+  //3: free
   if(hard || readEEPROM(4,false)<0 || readEEPROM(4,false)>1) writeEEPROM(4,1,false); //4: day counter direction: count up...
   if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) writeEEPROM(5,12,false); //5: ...December...
   if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) writeEEPROM(6,31,false); //6: ...31st. (This gives the day of the year)
-  bool foundAltFn = false;
-  for(byte fni=0; fni<sizeof(fnsEnabled); fni++) { if(fnsEnabled[fni]==readEEPROM(7,false)) { foundAltFn = true; break; }}
-  if(hard || !foundAltFn) writeEEPROM(7,0,false); //7: Alt function preset – make sure it is not set to a function that isn't enabled in this clock
+  if(hard) writeEEPROM(7,0,false); //7: Alt function preset
   //8: TODO functions/pages enabled (bitmask)
   //9: free
   //15: DST on flag (will be set at first RTC check)
@@ -773,10 +820,10 @@ void writeEEPROM(int loc, int val, bool is2Byte){
 void findFnAndPageNumbers(){
   //Each function, and each page in a paged function, has a number. //TODO should pull from EEPROM 8
   fnDatePages = 1; //date function always has a page for the date itself
-  if(true){ fnDatePages++; fnDateCounter=fnDatePages-1; }
-  if(true){ fnDatePages++; fnDateSunlast=fnDatePages-1; }
+  if(enableDateCounter){ fnDatePages++; fnDateCounter=fnDatePages-1; }
+  if(enableDateSunriseSunset){ fnDatePages++; fnDateSunlast=fnDatePages-1; }
   if(false){ fnDatePages++; fnDateWeathernow=fnDatePages-1; }
-  if(true){ fnDatePages++; fnDateSunnext=fnDatePages-1; }
+  if(enableDateSunriseSunset){ fnDatePages++; fnDateSunnext=fnDatePages-1; }
   if(false){ fnDatePages++; fnDateWeathernext=fnDatePages-1; }
 }
 
@@ -797,15 +844,15 @@ void checkRTC(bool force){
     if((unsigned long)(now-inputLast)>=timeoutSet*1000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
   }
   //Paged-display function timeout //TODO change fnIsDate to consts? //TODO timeoutPageFn var
-  else if(fn==fnIsDate && (unsigned long)(now-inputLast)>=2500) {
+  else if(fn==fnIsDate && (unsigned long)(now-inputLast)>=3000) { //3sec per date page
     //Here we just have to increment the page and decide when to reset. updateDisplay() will do the rendering
-    fnPg++; inputLast+=2500; //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
+    fnPg++; inputLast+=3000; //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
     if(fnPg >= fnDatePages){ fnPg = 0; fn = fnIsTime; }
     force=true;
   }
-  //Temporary-display function timeout: if we're *not* in a permanent one (time, or running timer)
-  // Stopped timer shouldn't be permanent, but have a much longer timeout, mostly in case someone is waiting to start the chrono in sync with some event, so we'll give that an hour.
-  else if(fn!=fnIsTime && !(fn==fnIsTimer && timerState&1)){
+  //Temporary-display function timeout: if we're *not* in a permanent one (time, or running/signaling timer)
+  // Stopped/non-signaling timer shouldn't be permanent, but have a much longer timeout, mostly in case someone is waiting to start the chrono in sync with some event, so we'll give that an hour.
+  else if(fn!=fnIsTime && !(fn==fnIsTimer && (timerState&1 || signalRemain>0))){
     if((unsigned long)(now-inputLast)>=(fn==fnIsTimer?3600:timeoutTempFn)*1000) { fnSetPg = 0; fn = fnIsTime; force=true; }
   }
   
@@ -842,7 +889,7 @@ void checkRTC(bool force){
     //Things to do at specific times
     //Timer drift correction: per the millisCorrectionInterval
     if(tod.second()%millisCorrectionInterval==0){ //if time:
-      if(!(rtcDid&1)) millisCorrectForDrift(); bitWrite(rtcDid,0,1); //do if not done, set as done
+      if(!(rtcDid&1)) millisCheckDrift(); bitWrite(rtcDid,0,1); //do if not done, set as done
     } else bitWrite(rtcDid,0,0); //if not time: set as not done
     //DST change check: every 2am
     if(tod.second()==0 && tod.minute()==0 && tod.hour()==2) autoDST();
@@ -882,15 +929,15 @@ void checkRTC(bool force){
           if(readEEPROM(27,false)>0? //is night shutoff enabled?
             tod.second()==0 && tod.hour()*60+tod.minute()==readEEPROM(28,true): //if so, at start of night shutoff (at second :00 before dim is in effect)
             tod.second()==1 && tod.hour()*60+tod.minute()==0) //if not, at 00:00:01
-              cleanRemain = 51; //run routine for five cycles
+              cleanRemain = 151; //run routine for fifteen cycles
           break;
         case 1: //every hour
           if(tod.second()==1 && tod.minute()==0) //at min/sec :00:01
-            cleanRemain = 51; //run routine for five cycles
+            cleanRemain = 101; //run routine for ten cycles
           break;
         case 2: //every minute
           if(tod.second()==1) //at second :01
-            cleanRemain = 11; //run routine for one cycle
+            cleanRemain = 21; //run routine for two cycles
           break;
         default: break;
       }
@@ -1067,16 +1114,44 @@ bool isDayInRange(byte dstart, byte dend, byte dtest) {
 }
 
 // Chrono/Timer
-// There are two timing sources in the UNDB – the Arduino itself (eg millis()), which gives subsecond precision but isn't very accurate, so it's only good for short-term timing and taking action in response to user activity (eg button press hold thresholds); and the DS3231, which is very accurate but only gives seconds (unless you're monitoring its square wave via a digital pin), so it's only good for long-term timing and taking action in response to time of day. The one place we need both short-term precision and long-term accuracy is in the chrono/timer – so I have based it on millis() but with an offset applied to correct for its drift, periodically adjusted per the DS3231.
-unsigned long millisDriftOffset = 0; //The cumulative running offset.
-//unsigned long millisAtLastCorrection (defined at top, so ctrlEvt can reset it when setting RTC). 0 when unreliable (at start and after RTC set).
+// There are two timing sources in the UNDB – the Arduino itself (eg millis()), which gives subsecond precision but isn't very accurate, so it's only good for short-term timing and taking action in response to user activity (eg button press hold thresholds); and the DS3231, which is very accurate but only gives seconds (unless you're monitoring its square wave via a digital pin), so it's only good for long-term timing and taking action in response to time of day. The one place we need both short-term precision and long-term accuracy is in the chrono/timer – so I have based it on millis() but with an offset applied to correct for its drift, periodically adjusted per the DS3231. I also use it for the signal, so the 1/sec measure cycle stays in sync with real time; but we don't need to use it for stuff like button polling.
+unsigned long millisDriftOffset = 0; //The cumulative running offset. Since it's circular, doesn't matter whether signed or not.
+//unsigned long millisAtLastCheck (defined at top, so ctrlEvt can reset it when setting RTC). 0 when unreliable (at start and after RTC set).
 //const byte millisCorrectionInterval (defined at top, so checkRTC can see it)
+int millisDriftBuffer = 0; // Each time we calculate millis() drift, we add it to this signed buffer, which gets applied to millisDriftOffset slowly to smooth the correction and minimize (eliminate?) the chance of a discontinuity, which prevents unsightly glitches in the chrono/timer and the signal performance, and failures in eg detecting button presses.
 // TODO the adjustments are a little noisy in the short term, because of a rolling offset between the loop cycle (slowed down by cycleDisplay's delays) and the rtc ticks. It's kind of academic since the variance is probably only around ±.02sec per adjustment at most (largely the duration of cycleDisplay's delays), which I'd say is within the tolerance of display/button/human limitations, but no point doing it as quickly as once per second I think.
-void millisCorrectForDrift(){
+void millisCheckDrift(){
   unsigned long now = millis();
-  if(millisAtLastCorrection){ //if this has a value, check to see how much millis has drifted since then.
-    unsigned long millisDrift = now-(millisAtLastCorrection+(millisCorrectionInterval*1000));
-    millisDriftOffset -= millisDrift;
+  if(millisAtLastCheck){ // if this has a value, check to see how much millis has drifted since then. If this is 0, it means either the RTC was recently set (or the extremely unlikely case that the last sync occurred exactly at millis rollover) so we will hold off until next drift check.
+    long millisDrift = now-(millisAtLastCheck+(millisCorrectionInterval*1000)); // Converting difference to a signed long.
+    if(abs((long)(millisDrift+millisDriftBuffer))>32767){} // If adding drift to buffer would make it overflow, ignore it this time
+    else {
+      millisDriftBuffer -= millisDrift;
+      // tod = rtc.now();
+      // if(tod.hour()<10) Serial.print(F("0"));
+      // Serial.print(tod.hour(),DEC);
+      // Serial.print(F(":"));
+      // if(tod.minute()<10) Serial.print(F("0"));
+      // Serial.print(tod.minute(),DEC);
+      // Serial.print(F(":"));
+      // if(tod.second()<10) Serial.print(F("0"));
+      // Serial.print(tod.second(),DEC);
+      // Serial.print(F("  millis: "));
+      // Serial.print(now,DEC);
+      // Serial.print(F("  drift: "));
+      // Serial.print(millisDrift,DEC);
+      // Serial.print(F("  new buffer: "));
+      // Serial.print(millisDriftBuffer,DEC);
+      // Serial.println();
+    }
+  }
+  millisAtLastCheck = now;
+}
+void millisApplyDrift(){
+  //Applies millisDriftBuffer to millisDriftOffset at the rate of 1ms per loop. See above for details.
+  if(millisDriftBuffer){
+    millisDriftOffset += (millisDriftBuffer>0? 1: -1);
+    millisDriftBuffer -= (millisDriftBuffer>0? 1: -1);
     // tod = rtc.now();
     // if(tod.hour()<10) Serial.print(F("0"));
     // Serial.print(tod.hour(),DEC);
@@ -1086,22 +1161,16 @@ void millisCorrectForDrift(){
     // Serial.print(F(":"));
     // if(tod.second()<10) Serial.print(F("0"));
     // Serial.print(tod.second(),DEC);
-    // Serial.print(F("  millis: "));
-    // Serial.print(now,DEC);
-    // Serial.print(F("  drift: "));
-    // Serial.print(millisDrift,DEC);
-    // Serial.print(F(" (")); Serial.print(~millisDrift,DEC); //in case of wraparound, this is more human-readable
-    // Serial.print(F(")  new offset: "));
+    // Serial.print(F("  new offset: "));
     // Serial.print(millisDriftOffset,DEC);
-    // Serial.print(F(" (")); Serial.print(~millisDriftOffset,DEC); //in case of wraparound, this is more human-readable
-    // Serial.print(F(")"));
+    // Serial.print(F("  new buffer: "));
+    // Serial.print(millisDriftBuffer,DEC);
     // Serial.println();
   }
-  millisAtLastCorrection = now;
 }
 unsigned long ms(){
   // Returns millis() with the drift offset applied, for timer/chrono purposes.
-  // WARNING: Since the offset is being periodically adjusted, there is the possibility of a discontinuity in ms() output – if we give out a timestamp and then effectively set the clock back, the next timestamp might possibly be earlier than the last one, which could mess up duration math. I tried to think of a way to monitor for that discontinuity – e.g. if now-then is greater than then-now, due to overflow – but it gets tricky since millis() is effectively circular, and that condition occurs naturally at rollover as well – so I think we would need a flag that millisCorrectForDrift sets when it sets the offset backward, and ms clears when the real time has caught up.... or something like that.
+  // WARNING: Since the offset is being periodically adjusted, there is the possibility of a discontinuity in ms() output – if we give out a timestamp and then effectively set the clock back, the next timestamp might possibly be earlier than the last one, which could mess up duration math. I tried to think of a way to monitor for that discontinuity – e.g. if now-then is greater than then-now, due to overflow – but it gets tricky since millis() is effectively circular, and that condition occurs naturally at rollover as well – so I think we would need a flag that millisCheckDrift sets when it sets the offset backward, and ms clears when the real time has caught up.... or something like that.
   // So for now we'll restrict use of ms() to the timer/chrono duration – the only place we really need it, and fortunately it's not a problem here, because that duration never exceeds 100 hours so we can easily detect that overflow. And the only time it might really be an issue is if it occurs immediately after the chrono starts, since it would briefly display the overflowed time – in that case we'll just reset the timer to 0 and keep going.
   return (unsigned long)(millis()+millisDriftOffset);
 }
@@ -1414,7 +1483,7 @@ void updateDisplay(){
         editDisplay(abs(temp)/100,1,3,(temp<0?true:false),true); //leading zeros if negative
         editDisplay(abs(temp)%100,4,5,true,true);
         break;
-      case fnIsTubeTester:
+      case fnIsTest:
         editDisplay(tod.second(),0,0,true,false);
         editDisplay(tod.second(),1,1,true,false);
         editDisplay(tod.second(),2,2,true,false);
@@ -1710,6 +1779,7 @@ void decToBin(bool binVal[], byte i){
 //Like songs, a signal is made up of measures (usually 1sec each) tracked by the signalRemain counter.
 //Measures are made up of steps such as beeps and relay pulses, tracked by signalMeasureStep.
 //When used with switched relay, it simply turns on at the start, and off at the end, like a clock radio – the measures just wait it out.
+//Timed using ms() instead of millis() – see timer/chrono for details.
 unsigned long signalMeasureStartTime = 0; //to keep track of individual measures
 byte signalMeasureStep = 0; //step number, or 255 if waiting for next measure, or 0 if not signaling
 void signalStart(byte sigFn, byte sigDur){
@@ -1736,7 +1806,7 @@ void signalStart(byte sigFn, byte sigDur){
   // Serial.println();
   
   //Start a measure for cycleSignal to pick up. For "quick measures" we won't set signalRemain.
-  signalMeasureStartTime = millis();
+  signalMeasureStartTime = ms();
   signalMeasureStep = 1; //waiting to start a new measure
   if(sigDur!=0){ //long-duration signal (alarm, sleep, etc) - set signalRemain
     //If switched relay, except if this is a forced fnIsTimer signal (for signaling runout options)
@@ -1784,13 +1854,13 @@ void cycleSignal(){
           bc = 4; bd = 62; break;
       }
       //See if it's time to start a new measure
-      if(signalMeasureStep==255 && (unsigned long)(millis()-signalMeasureStartTime)>=measureDur){
+      if(signalMeasureStep==255 && (unsigned long)(ms()-signalMeasureStartTime)>=measureDur){
         //Serial.println(F("Starting new measure, sPS -1 -> 1"));
         signalMeasureStartTime += measureDur;
         signalMeasureStep = 1;
       }
       //See if it's time to start a new beep
-      if((unsigned long)(millis()-signalMeasureStartTime)>=(signalMeasureStep-1)*bd*2){
+      if((unsigned long)(ms()-signalMeasureStartTime)>=(signalMeasureStep-1)*bd*2){
         word piezoPitch = (signalPattern==5 && signalMeasureStep==2? getSignalPitch()*0.7937: //cuckoo: go down major third (2^(-4/12)) on 2nd beep
           (signalPattern==255? 1000: //the pips: use 1000Hz just like the Beeb
             (signalRemain==0 && signalSource==fnIsTimer? getHz(69): //fnIsTimer runout setting: use timer start pitch
@@ -1819,7 +1889,7 @@ void cycleSignal(){
       //We don't follow the beep pattern here, we simply energize the relay for relayPulse time
       //Unlike beeper, we need to use a signalMeasureStep (2) to stop the relay.
       //See if it's time to start a new measure
-      if(signalMeasureStep==255 && (unsigned long)(millis()-signalMeasureStartTime)>=measureDur){
+      if(signalMeasureStep==255 && (unsigned long)(ms()-signalMeasureStartTime)>=measureDur){
         //Serial.println(F("Starting new measure, sPS -1 -> 1"));
         signalMeasureStartTime += measureDur;
         signalMeasureStep = 1;
@@ -1831,7 +1901,7 @@ void cycleSignal(){
         signalMeasureStep = 2; //set it up to stop
       }
       //See if it's time to stop the pulse
-      else if(signalMeasureStep==2 && (unsigned long)(millis()-signalMeasureStartTime)>=relayPulse) {
+      else if(signalMeasureStep==2 && (unsigned long)(ms()-signalMeasureStartTime)>=relayPulse) {
         digitalWrite(relayPin,HIGH); updateLEDs(); //LOW = device on
         //Serial.print(millis(),DEC); Serial.println(F(" Relay off, cycleSignal"));
         //Set up for the next event
@@ -1843,7 +1913,7 @@ void cycleSignal(){
     else { //switched relay / default
       //Simply decrement signalRemain until it runs out - signalMeasureStep doesn't matter as long as it stays nonzero as at start
       //See if it's time to start a new measure
-      if((unsigned long)(millis()-signalMeasureStartTime)>=measureDur){
+      if((unsigned long)(ms()-signalMeasureStartTime)>=measureDur){
         //Serial.println(F("Starting new measure, sPS -1 -> 1"));
         signalMeasureStartTime += measureDur;
       }
