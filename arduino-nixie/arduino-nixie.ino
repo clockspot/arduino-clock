@@ -774,7 +774,7 @@ void initEEPROM(bool hard){
   if(hard) writeEEPROM(7,0,false); //7: Alt function preset
   //8: TODO functions/pages enabled (bitmask)
   //9: free
-  writeEEPROM(15,0,false); //15: DST on flag - will be set at first RTC check, but set to off to trigger tube display
+  if(hard) writeEEPROM(15,0,false); //15: last known DST on flag - clear on hard reset (to match the reset RTC/auto DST/anti-poisoning settings to trigger midnight tubes as a tube test)
   //then the options menu defaults
   bool isInt = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
