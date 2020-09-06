@@ -757,10 +757,10 @@ void initEEPROM(bool hard){
   btnCur = mainSel; btnStop();
   //If a hard init, set the clock
   if(hard) {
-    ds3231.setYear(18);
+    ds3231.setYear(20);
     ds3231.setMonth(1);
     ds3231.setDate(1);
-    ds3231.setDoW(1); //2018-01-01 is Monday. DS3231 will keep count from here
+    ds3231.setDoW(3); //2020-01-01 is Wednesday. DS3231 will keep count from here
     ds3231.setHour(0);
     ds3231.setMinute(0);
     ds3231.setSecond(0);
