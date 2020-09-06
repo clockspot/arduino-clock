@@ -774,7 +774,7 @@ void initEEPROM(bool hard){
   if(hard) writeEEPROM(7,0,false); //7: Alt function preset
   //8: TODO functions/pages enabled (bitmask)
   //9: free
-  //15: DST on flag (will be set at first RTC check)
+  writeEEPROM(15,0,false); //15: DST on flag - will be set at first RTC check, but set to off to trigger tube display
   //then the options menu defaults
   bool isInt = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
