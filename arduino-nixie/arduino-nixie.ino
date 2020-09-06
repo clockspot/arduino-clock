@@ -12,7 +12,7 @@
 ////////// Software version //////////
 const byte vMajor = 1;
 const byte vMinor = 8;
-const byte vPatch = 0;
+const byte vPatch = 1;
 
 ////////// Other includes, global consts, and vars //////////
 #include <Wire.h> //Arduino - GNU LPGL
