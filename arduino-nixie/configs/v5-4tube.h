@@ -67,7 +67,7 @@ const word velThreshold = 0; //ms
 
 // What is the "frame rate" of the tube cleaning and display scrolling? up to 65535 ms
 const word cleanSpeed = 200; //ms
-const word scrollSpeed = 100; //ms - e.g. scroll-in-and-out date at :30 - to give the illusion of a slow scroll that doesn't pause, use (timeoutTempFn*1000)/(displaySize+1) - e.g. 714 for displaySize=6 and timeoutTempFn=5
+const word scrollSpeed = 100; //ms - e.g. scroll-in-and-out date at :30
 
 // What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
 const unsigned long timeoutSet = 300; //sec
