@@ -847,6 +847,10 @@ void checkRTC(bool force){
   else if(fn==fnIsDate && (unsigned long)(now-inputLast)>=3000) { //3sec per date page
     //Here we just have to increment the page and decide when to reset. updateDisplay() will do the rendering
     fnPg++; inputLast+=3000; //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
+    while(fnPg<fnDatePages && fnPg<200 && ( //skip inapplicable date pages. The 200 is an extra failsafe
+        (!readEEPROM(10,true) && !readEEPROM(12,true) && //if no lat+long specified, skip weather/rise/set
+          (fnPg==fnDateWeathernow || fnPg==fnDateWeathernext || fnPg==fnDateSunlast || fnPg==fnDateSunnext))
+      )) fnPg++;
     if(fnPg >= fnDatePages){ fnPg = 0; fn = fnIsTime; }
     force=true;
   }

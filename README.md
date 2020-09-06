@@ -30,7 +30,8 @@ The calendar cycles through several displays, before returning to the time of da
 * **The date.** [Several formats](#optionsgeneral) are available. When setting, it will ask for the year, then the month, then the date.
 * **Day counter.** This will count down to, or up from, a date of your choice, repeating every year. When setting, it will ask for the month, then the date, then the direction (0 = count down, 1 = count up).
   * TIP: To display the day of the year, set it to count up from December 31.
-* **Sunrise/sunset.** These two displays show the previous and next apparent sunrise/sunset times (indicated by `1` or `0` on the seconds tubes – during the day, it shows sunrise then sunset; at night, sunset then sunrise). The times are calculated using the latitude, longitude, UTC offset, and auto DST rule specified in the [options](#optionsgeography), and shown in the same 12h/24h format as the time of day.
+* **Sunrise/sunset.** These two displays show the previous and next apparent sunrise/sunset times (indicated by `1` or `0` on the seconds tubes – during the day, it shows sunrise then sunset; at night, sunset then sunrise), in the same 12h/24h format as the time of day.
+  * Specify your latitude, longitude, and UTC offset in the [options menu](#optionsgeography). (From v1.8.1, sunrise/sunset is not displayed if latitude/longitude are left at 0.)
   * NOTE: At this writing, the times may be incorrect by a few minutes, depending on [your longitude and time of year](https://docs.google.com/spreadsheets/d/1dYchVCJAuhvosrCdtEeHLT3ZXcLZK8X0UtENItZR32M/edit#gid=0). I believe this to be a rounding error(s) in the [Dusk2Dawn library](https://github.com/dmkishi/Dusk2Dawn) (compared to the [NOAA Solar Calculator](https://www.esrl.noaa.gov/gmd/grad/solcalc/) it’s based on) and plan to investigate.
 
 ## Alarm
@@ -90,7 +91,7 @@ This feature can count up (chrono) or down (timer), up to 100 hours each way. Wh
 | 3 | Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date each minute at :30 seconds<br/>3 = same as 2, but scrolls in and out |
 | 4 | Leading zeros | 0 = no<br/>1 = yes |
 | 5 | Digit fade | 0–20 (in hundredths of a second) |
-| 6 | Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ)<br/>If the clock is not powered at the time, it will correct itself when powered up. |
+| 6 | Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ)<br/>If the clock is not powered at the time, it will correct itself when powered up.<br/>If you observe DST but your locale’s rules are not represented here, leave this set to 0 and set the clock manually (and the [DST offset](#optionsgeography) if applicable). |
 | 7 | LED behavior | 0 = always off<br/>1 = always on<br/>2 = on, but follow night/away shutoff if enabled<br/>3 = off, but on when alarm/timer sounds</br>4 = off, but on with switched relay (if equipped)<br/>(Clocks with LED lighting only) |
 | 8 | Anti-cathode poisoning | Briefly cycles all digits to prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)<br/>0 = once a day, either at midnight or when night shutoff starts (if enabled)<br/>1 = at the top of every hour<br/>2 = at the top of every minute<br/>(Will not trigger during night/away shutoff) |
 |  | <a name="optionsalarm"></a>**Alarm** |  |
@@ -121,7 +122,7 @@ This feature can count up (chrono) or down (timer), up to 100 hours each way. Wh
 |  | <a name="optionsgeography"></a>**Geography** |  |
 | 50 | Latitude | Your latitude, in tenths of a degree; negative (south) values are indicated with leading zeroes. (Example: Dallas is at 32.8°N, set as `328`.) |
 | 51 | Longitude | Your longitude, in tenths of a degree; negative (west) values are indicated with leading zeroes. (Example: Dallas is at 96.7°W, set as `00967`.) |
-| 52 | UTC offset | Your time zone’s offset from UTC (non-DST), in hours and minutes; negative (west) values are indicated with leading zeroes. (Example: Dallas is UTC–6, set as `0600`.) |
+| 52 | UTC offset | Your time zone’s offset from UTC (non-DST), in hours and minutes; negative (west) values are indicated with leading zeroes. (Example: Dallas is UTC–6, set as `0600`.)<br/>If you observe DST but set the clock manually rather than using the [auto DST feature](#optionsgeneral), you must add an hour to the UTC offset during DST, or the sunrise/sunset times will be an hour early. |
 
 To reset the clock to “factory” defaults, hold **Select** while powering up the clock.
 
