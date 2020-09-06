@@ -150,7 +150,7 @@ unsigned long millisAtLastCheck = 0;
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night/away shutoff) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 byte cleanRemain = 0; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
-byte scrollRemain = 0; //"frames" of scroll – 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change
+int8_t scrollRemain = 0; //"frames" of scroll – signed byte - 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change.
 byte versionRemain = 3; //display version at start
 
 
@@ -1323,7 +1323,7 @@ void updateDisplay(){
   */
   else if(scrollRemain>0) { //scrolling display: value coming in - these don't use editDisplay as we're going array to array
     for(byte i=0; i<displaySize; i++) {
-      byte isrc = i-scrollRemain;
+      int8_t isrc = i-scrollRemain; //needs to support negative
       displayNext[i] = (isrc<0? 15: scrollDisplay[isrc]); //allow to fade
     }
   }
