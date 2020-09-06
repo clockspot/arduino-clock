@@ -12,7 +12,7 @@
 ////////// Software version //////////
 const byte vMajor = 1;
 const byte vMinor = 8;
-const byte vPatch = 0;
+const byte vPatch = 1;
 
 ////////// Other includes, global consts, and vars //////////
 #include <Wire.h> //Arduino - GNU LPGL
@@ -150,7 +150,7 @@ unsigned long millisAtLastCheck = 0;
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night/away shutoff) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 byte cleanRemain = 0; //anti-cathode-poisoning clean timeout counter, increments at cleanSpeed ms (see loop()). Start at 11 to run at clock startup
-byte scrollRemain = 0; //"frames" of scroll – 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change
+int8_t scrollRemain = 0; //"frames" of scroll – signed byte - 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change.
 byte versionRemain = 3; //display version at start
 
 
@@ -198,28 +198,9 @@ void setup(){
   initOutputs(); //depends on some EEPROM settings
 }
 
-unsigned long pollCleanLast = 0; //every cleanSpeed ms
-unsigned long pollScrollLast = 0; //every scrollSpeed ms
 void loop(){
-  unsigned long now = millis();
-  //If we're running a tube cleaning, advance it every cleanSpeed ms.
-  if(cleanRemain && (unsigned long)(now-pollCleanLast)>=cleanSpeed) { //account for rollover
-    pollCleanLast=now;
-    cleanRemain--;
-    if(cleanRemain<1) calcSun(tod.year(),tod.month(),tod.day()); //take this opportunity to perform a calculation that blanks the display for a bit
-    updateDisplay();
-  }
-  //If we're scrolling an animation, advance it every scrollSpeed ms.
-  else if(scrollRemain!=0 && scrollRemain!=-128 && (unsigned long)(now-pollScrollLast)>=scrollSpeed) {
-    pollScrollLast=now;
-    if(scrollRemain<0) {
-      scrollRemain++; updateDisplay();
-    } else {
-      scrollRemain--; updateDisplay();
-      if(scrollRemain==0) scrollRemain=-128;
-    }
-  }
   //Every loop cycle, check the RTC and inputs (previously polled, but works fine without and less flicker)
+  checkEffects(false); //cleaning and scrolling display effects - not handled by checkRTC since they have their own timing
   checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
   millisApplyDrift();
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
@@ -330,6 +311,25 @@ void ctrlEvt(byte ctrl, byte evt){
   //If the clean is going, any press should cancel it, with a display update
   if(cleanRemain>0 && evt==1){
     cleanRemain = 0;
+    btnStop();
+    updateDisplay();
+    return;
+  }
+  //If a scroll is waiting to scroll out, cancel it, and let the button event do what it will
+  if(scrollRemain==-128 && evt==1){
+    scrollRemain = 0;
+  }
+  //If a scroll is going, fast-forward to end of scroll in/out - see also checkRTC
+  else if(scrollRemain!=0 && evt==1){
+    btnStop();
+    if(scrollRemain>0) scrollRemain = 1;
+    else scrollRemain = -1;
+    checkEffects(true);
+    return;
+  }
+  //If the version display is going, any press should cancel it, with a display update
+  if(versionRemain>0 && evt==1){
+    versionRemain = 0;
     btnStop();
     updateDisplay();
     return;
@@ -757,10 +757,10 @@ void initEEPROM(bool hard){
   btnCur = mainSel; btnStop();
   //If a hard init, set the clock
   if(hard) {
-    ds3231.setYear(18);
+    ds3231.setYear(20);
     ds3231.setMonth(1);
     ds3231.setDate(1);
-    ds3231.setDoW(1); //2018-01-01 is Monday. DS3231 will keep count from here
+    ds3231.setDoW(3); //2020-01-01 is Wednesday. DS3231 will keep count from here
     ds3231.setHour(0);
     ds3231.setMinute(0);
     ds3231.setSecond(0);
@@ -774,7 +774,7 @@ void initEEPROM(bool hard){
   if(hard) writeEEPROM(7,0,false); //7: Alt function preset
   //8: TODO functions/pages enabled (bitmask)
   //9: free
-  //15: DST on flag (will be set at first RTC check)
+  if(hard) writeEEPROM(15,0,false); //15: last known DST on flag - clear on hard reset (to match the reset RTC/auto DST/anti-poisoning settings to trigger midnight tubes as a tube test)
   //then the options menu defaults
   bool isInt = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
@@ -845,9 +845,18 @@ void checkRTC(bool force){
   }
   //Paged-display function timeout //TODO change fnIsDate to consts? //TODO timeoutPageFn var
   else if(fn==fnIsDate && (unsigned long)(now-inputLast)>=3000) { //3sec per date page
+    //If a scroll in is going, fast-forward to end - see also ctrlEvt
+    if(scrollRemain>0) {
+      scrollRemain = 1;
+      checkEffects(true);
+    }
     //Here we just have to increment the page and decide when to reset. updateDisplay() will do the rendering
     fnPg++; inputLast+=3000; //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
-    if(fnPg >= fnDatePages){ fnPg = 0; fn = fnIsTime; }
+    while(fnPg<fnDatePages && fnPg<200 && ( //skip inapplicable date pages. The 200 is an extra failsafe
+        (!readEEPROM(10,true) && !readEEPROM(12,true) && //if no lat+long specified, skip weather/rise/set
+          (fnPg==fnDateWeathernow || fnPg==fnDateWeathernext || fnPg==fnDateSunlast || fnPg==fnDateSunnext))
+      )) fnPg++;
+    if(fnPg >= fnDatePages){ fnPg = 0; fn = fnIsTime; } // when we run out of pages, go back to time. When the half-minute date is triggered, fnPg is set to 254, so it will be 255 here and be cancelled after just the one page.
     force=true;
   }
   //Temporary-display function timeout: if we're *not* in a permanent one (time, or running/signaling timer)
@@ -918,7 +927,7 @@ void checkRTC(bool force){
       } //end alarm trigger
     }
     //At bottom of minute, see if we should show the date
-    if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0) {
+    if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0 && cleanRemain==0 && scrollRemain==0 && versionRemain==0) {
       if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = now; inputLastTODMins = tod.hour()*60+tod.minute(); fnPg = 254; updateDisplay(); }
       if(readEEPROM(18,false)==3) { startScroll(); }
     }
@@ -1288,6 +1297,30 @@ byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display.
 byte displayLast[6] = {11,11,11,11,11,11}; //for noticing changes to displayNext and fading the display to it
 byte scrollDisplay[6] = {15,15,15,15,15,15}; //For animating a value into displayNext from right, and out to left
 
+unsigned long pollCleanLast = 0; //every cleanSpeed ms
+unsigned long pollScrollLast = 0; //every scrollSpeed ms
+void checkEffects(bool force){
+  //control the cleaning/scrolling effects - similar to checkRTC but it has its own timings
+  unsigned long now = millis();
+  //If we're running a tube cleaning, advance it every cleanSpeed ms.
+  if(cleanRemain && (unsigned long)(now-pollCleanLast)>=cleanSpeed) { //account for rollover
+    pollCleanLast=now;
+    cleanRemain--;
+    if(cleanRemain<1) calcSun(tod.year(),tod.month(),tod.day()); //take this opportunity to perform a calculation that blanks the display for a bit
+    updateDisplay();
+  }
+  //If we're scrolling an animation, advance it every scrollSpeed ms.
+  else if(scrollRemain!=0 && scrollRemain!=-128 && ((unsigned long)(now-pollScrollLast)>=scrollSpeed || force)) {
+    pollScrollLast=now;
+    if(scrollRemain<0) {
+      scrollRemain++; updateDisplay();
+    } else {
+      scrollRemain--; updateDisplay();
+      if(scrollRemain==0) scrollRemain = -128;
+    }
+  }
+}
+
 void updateDisplay(){
   //Run as needed to update display when the value being shown on it has changed
   //This formats the new value and puts it in displayNext[] for cycleDisplay() to pick up
@@ -1323,7 +1356,7 @@ void updateDisplay(){
   */
   else if(scrollRemain>0) { //scrolling display: value coming in - these don't use editDisplay as we're going array to array
     for(byte i=0; i<displaySize; i++) {
-      byte isrc = i-scrollRemain;
+      int8_t isrc = i-scrollRemain; //needs to support negative
       displayNext[i] = (isrc<0? 15: scrollDisplay[isrc]); //allow to fade
     }
   }
