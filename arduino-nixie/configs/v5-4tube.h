@@ -1,21 +1,21 @@
 //UNDB v5, 4-tube display
 
-const byte displaySize = 4; //number of tubes in display module. Small display adjustments are made for 4-tube clocks
+#define DISPLAY_SIZE 4 //number of tubes in display module. Small display adjustments are made for 4-tube clocks
 
 // Which functionality is enabled in this clock?
 // Related options will also be enabled in the options menu.
-const bool enableDate = true;
-const bool enableDateCounter = true; // Adds a "page" to the date with an anniversary counter
-const bool enableDateSunriseSunset = true; // Adds "pages" to the date with sunrise/sunset times
-const bool enableAlarm = true;
-const bool enableAlarmAutoskip = true;
-const bool enableAlarmFibonacci = true;
-const bool enableTimer = true;
-const bool enableChime = true;
-const bool enableNightShutoff = true; // If disabled, tubes will be full brightness all the time.
-const bool enableAwayShutoff = true; // Requires night shutoff.
-const bool enableTemp = false; //Temperature per DS3231 - will read high – leave false for production
-const bool enableTest = false; //Cycles through all tubes – leave false for production
+#define ENABLE_DATE_FN true // Date function, optionally including pages below
+#define ENABLE_DATE_COUNTER true // Adds date page with an anniversary counter
+#define ENABLE_DATE_RISESET true // Adds date pages with sunrise/sunset times. Requires DM Kichi's Dusk2Dawn library to be installed in IDE.
+#define ENABLE_ALARM_FN true
+#define ENABLE_ALARM_AUTOSKIP true
+#define ENABLE_ALARM_FIBONACCI true
+#define ENABLE_TIMER_FN true
+#define ENABLE_TIME_CHIME true
+#define ENABLE_SHUTOFF_NIGHT true // If disabled, tubes will be full brightness all the time.
+#define ENABLE_SHUTOFF_AWAY true // Requires night shutoff.
+#define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
+#define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 
 // These are the UNDB v5 board connections to Arduino analog input pins.
 // S1/PL13 = Reset
@@ -28,64 +28,64 @@ const bool enableTest = false; //Cycles through all tubes – leave false for pr
 // A6-A7 are analog-only pins that aren't quite as responsive and require a physical pullup resistor (1K to +5V), and can't be used with rotary encoders because they don't support pin change interrupts.
 
 // What input is associated with each control?
-const byte mainSel = A2; //main select button - must be equipped
-const byte mainAdjUp = A1; //main up/down buttons or rotary encoder - must be equipped
-const byte mainAdjDn = A0;
-const byte altSel = 0; //alt select button - if unequipped, set to 0
+#define CTRL_SEL A2 //main select button - must be equipped
+#define CTRL_UP A1 //main up/down buttons or rotary encoder - must be equipped
+#define CTRL_DN A0
+#define CTRL_ALT 0 //alt select button - if unequipped, set to 0
 
-// What type of adj controls are equipped?
-// 1 = momentary buttons. 2 = quadrature rotary encoder.
-const byte mainAdjType = 2;
-
-//What are the signal pin(s) connected to?
-const char piezoPin = 10;
-const char relayPin = -1; //don't change - not available until UNDB v8
-const byte relayMode = 0; //don't change - not available until UNDB v8
-const word signalDur = 180; //sec - when pulsed signal is going, pulses are sent once/sec for this period (e.g. 180 = 3min)
-const word switchDur = 7200; //sec - when alarm triggers switched relay, it's switched on for this period (e.g. 7200 = 2hr)
-const word piezoPulse = 250; //ms - used with piezo via tone()
-const word relayPulse = 200; //ms - used with pulsed relay
-
-//Soft power switches
-const byte enableSoftAlarmSwitch = 1;
-// 1 = yes. Alarm can be switched on and off when clock is displaying the alarm time (fnIsAlarm).
-// 0 = no. Alarm will be permanently on. Use with switched relay if the appliance has its own switch on this relay circuit.
-const byte enableSoftPowerSwitch = 0; //don't change - not available until UNDB v8
-
-//LED circuit control
-const char ledPin = -1; //don't change - not available until UNDB v8
-
-//When display is dim/off, a press will light the tubes for how long?
-const byte unoffDur = 10; //sec
+// What type of up/down controls are equipped?
+// 1 = momentary buttons. 2 = quadrature rotary encoder: requires Paul Stoffregen's Encoder library to be installed in IDE.
+#define CTRL_UPDN_TYPE 1
+#define ROT_VEL_START 80 //Required if CTRL_UPDN_TYPE==2. If step rate falls below this, kick into high velocity set (x10)
+#define ROT_VEL_STOP 500 //Required if CTRL_UPDN_TYPE==2. If encoder step rate rises above this, drop into low velocity set (x1)
 
 // How long (in ms) are the button hold durations?
-const word btnShortHold = 1000; //for entering setting mode, or hold-setting at low velocity
-const word btnLongHold = 3000; //for entering options menu, or hold-setting at high velocity
-const word velThreshold = 0; //ms
-// When an adj up/down input (btn or rot) follows another in less than this time, value will change more (10 vs 1).
-// 0 to disable. Recommend ~150 for rotaries. If you want to use this feature with buttons, extend to ~300.
+#define CTRL_HOLD_SHORT_DUR 1000 //for entering setting mode, or hold-setting at low velocity (x1)
+#define CTRL_HOLD_LONG_DUR 3000 //for entering options menu, or hold-setting at high velocity (x10)
+
+//What are the signal pin(s) connected to?
+#define PIEZO_PIN 10
+#define RELAY_PIN -1 //don't change - not available until UNDB v9 (or modded v8 - see v9 configs)
+#define RELAY_MODE 0 //don't change - not available until UNDB v9 (or modded v8 - see v9 configs)
+#define SIGNAL_DUR 180 //sec - when pulsed signal is going, pulses are sent once/sec for this period (e.g. 180 = 3min)
+#define SWITCH_DUR 7200 //sec - when alarm triggers switched relay, it's switched on for this period (e.g. 7200 = 2hr)
+#define PIEZO_PULSE 250 //ms - used with piezo via tone()
+#define RELAY_PULSE 200 //ms - used with pulsed relay
+
+//Soft power switches
+#define ENABLE_SOFT_ALARM_SWITCH 1
+// 1 = yes. Alarm can be switched on and off when clock is displaying the alarm time (fnIsAlarm).
+// 0 = no. Alarm will be permanently on. Use with switched relay if the appliance has its own switch on this relay circuit.
+#define ENABLE_SOFT_POWER_SWITCH 0 //don't change - not available until UNDB v9 (or modded v8 - see v9 configs)
+
+//LED circuit control
+#define LED_PIN -1 //don't change - not available until UNDB v9 (or modded v8 - see v9 configs)
+
+//When display is dim/off, a press will light the tubes for how long?
+#define UNOFF_DUR 10 //sec
 
 // What is the "frame rate" of the tube cleaning and display scrolling? up to 65535 ms
-const word cleanSpeed = 200; //ms
-const word scrollSpeed = 100; //ms - e.g. scroll-in-and-out date at :30
+#define CLEAN_SPEED 200 //ms
+#define SCROLL_SPEED 100 //ms - e.g. scroll-in-and-out date at :30
 
 // What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
-const unsigned long timeoutSet = 300; //sec
-const unsigned long timeoutTempFn = 5; //sec
+#define SETTING_TIMEOUT 300 //sec
+#define FN_TEMP_TIMEOUT 5 //sec
+#define FN_PAGE_TIMEOUT 3 //sec
 
 //This clock is 2x3 multiplexed: two tubes powered at a time.
 //The anode channel determines which two tubes are powered,
 //and the two SN74141 cathode driver chips determine which digits are lit.
 //4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
-const char outA1 = 2;
-const char outA2 = 3;
-const char outA3 = 4;
-const char outA4 = 5;
-const char outB1 = 6;
-const char outB2 = 7;
-const char outB3 = 8;
-const char outB4 = 9;
+#define OUT_A1 2
+#define OUT_A2 3
+#define OUT_A3 4
+#define OUT_A4 5
+#define OUT_B1 6
+#define OUT_B2 7
+#define OUT_B3 8
+#define OUT_B4 9
 //3 pins out to anode channel switches
-const char anode1 = 11;
-const char anode2 = 12;
-const char anode3 = 13;
+#define ANODE_1 11
+#define ANODE_2 12
+#define ANODE_3 13
