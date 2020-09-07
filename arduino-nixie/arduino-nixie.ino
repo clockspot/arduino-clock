@@ -1401,9 +1401,9 @@ void updateDisplay(){
     }
   }
   else if(versionRemain>0) {
-    editDisplay(VER_MAJOR, 0, 1, false, false);
-    editDisplay(VER_MINOR, 2, 3, false, false);
-    editDisplay(VER_PATCH, 4, 5, false, false);
+    editDisplay(vMajor, 0, 1, false, false);
+    editDisplay(vMinor, 2, 3, false, false);
+    editDisplay(vPatch, 4, 5, false, false);
   }
   else if(fnSetPg) { //setting value, for either fn or option
     displayDim = 2;
