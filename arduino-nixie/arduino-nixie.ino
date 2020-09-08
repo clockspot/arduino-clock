@@ -1585,9 +1585,19 @@ void updateDisplay(){
        
 } //end updateDisplay()
 
+// void serialPrintDate(int y, byte m, byte d){
+//   Serial.print(y,DEC); Serial.print(F("-"));
+//   if(m<10) Serial.print(F("0")); Serial.print(m,DEC); Serial.print(F("-"));
+//   if(d<10) Serial.print(F("0")); Serial.print(d,DEC);
+// }
+// void serialPrintTime(int todMins){
+//   if(todMins/60<10) Serial.print(F("0")); Serial.print(todMins/60,DEC); Serial.print(F(":"));
+//   if(todMins%60<10) Serial.print(F("0")); Serial.print(todMins%60,DEC);
+// }
+
 //A snapshot of sun times, in minutes past midnight, calculated at clean time and when the date or time is changed.
 //Need to capture this many, as we could be displaying these values at least through end of tomorrow depending on when cleaning happens.
-
+#if ENABLE_DATE_RISESET
 byte sunDate = 0; //date of month when calculated ("today")
 int sunSet0  = -1; //yesterday's set
 int sunRise1 = -1; //today rise
@@ -1595,7 +1605,7 @@ int sunSet1  = -1; //today set
 int sunRise2 = -1; //tomorrow rise
 int sunSet2  = -1; //tomorrow set
 int sunRise3 = -1; //day after tomorrow rise
-void calcSun(int y, byte m, byte d){ if(ENABLE_DATE_RISESET){
+void calcSun(int y, byte m, byte d){
   //Calculates sun times and stores them in the values above
   blankDisplay(0,5,false); //immediately blank display so we can fade in from it elegantly
   Dusk2Dawn here(readEEPROM(10,true)/10, readEEPROM(12,true)/10, (float(readEEPROM(14,false))-100)/4);
@@ -1624,17 +1634,7 @@ void calcSun(int y, byte m, byte d){ if(ENABLE_DATE_RISESET){
   sunRise3 = here.sunrise(y,m,d,isDST(y,m,d));
   // serialPrintDate(y,m,d);
   // Serial.print(F("  Rise ")); serialPrintTime(sunRise3); Serial.println();
-}} //end calcSun()
-// void serialPrintDate(int y, byte m, byte d){
-//   Serial.print(y,DEC); Serial.print(F("-"));
-//   if(m<10) Serial.print(F("0")); Serial.print(m,DEC); Serial.print(F("-"));
-//   if(d<10) Serial.print(F("0")); Serial.print(d,DEC);
-// }
-// void serialPrintTime(int todMins){
-//   if(todMins/60<10) Serial.print(F("0")); Serial.print(todMins/60,DEC); Serial.print(F(":"));
-//   if(todMins%60<10) Serial.print(F("0")); Serial.print(todMins%60,DEC);
-// }
-
+} //end calcSun()
 void displaySun(byte which, int d, int tod){
   //Displays sun times from previously calculated values
   //Old code to calculate sun at display time, with test serial output, is in commit 163ca33
@@ -1668,6 +1668,11 @@ void displaySun(byte which, int d, int tod){
   blankDisplay(4, 4, true);
   editDisplay(evtIsRise, 5, 5, false, true);
 }
+#else
+//to give other fns something empty to call, when rise/set isn't enabled
+void calcSun(int y, byte m, byte d){}
+void displaySun(byte which, int d, int tod){}
+#endif
 
 void displayWeather(byte which){
   //shows high/low temp (for day/night respectively) on main tubes, and precipitation info on seconds tubes
