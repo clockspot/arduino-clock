@@ -1,19 +1,19 @@
-//Unmodified UNDB v8 with LED and relay disabled, and buttons as labeled, with 4-digit display.
+//Unmodified UNDB v8 with LED and relay disabled, and buttons as labeled, with 6-digit display.
 
-#define DISPLAY_SIZE 4 //number of tubes in display module. Small display adjustments are made for 4-tube clocks
+#define DISPLAY_SIZE 6 //number of tubes in display module. Small display adjustments are made for 4-tube clocks
 
 // Which functionality is enabled in this clock?
 // Related options will also be enabled in the options menu.
 #define ENABLE_DATE_FN true // Date function, optionally including pages below
-#define ENABLE_DATE_COUNTER true // Adds date page with an anniversary counter
-#define ENABLE_DATE_RISESET true // Adds date pages with sunrise/sunset times. Requires DM Kichi's Dusk2Dawn library to be installed in IDE.
+#define ENABLE_DATE_COUNTER false // Adds date page with an anniversary counter
+#define ENABLE_DATE_RISESET false // Adds date pages with sunrise/sunset times. Requires DM Kichi's Dusk2Dawn library to be installed in IDE.
 #define ENABLE_ALARM_FN true
-#define ENABLE_ALARM_AUTOSKIP true
-#define ENABLE_ALARM_FIBONACCI true
-#define ENABLE_TIMER_FN true
+#define ENABLE_ALARM_AUTOSKIP false
+#define ENABLE_ALARM_FIBONACCI false
+#define ENABLE_TIMER_FN false
 #define ENABLE_TIME_CHIME true
 #define ENABLE_SHUTOFF_NIGHT true // If disabled, tubes will be full brightness all the time.
-#define ENABLE_SHUTOFF_AWAY true // Requires night shutoff.
+#define ENABLE_SHUTOFF_AWAY false // Requires night shutoff.
 #define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
 #define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 

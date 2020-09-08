@@ -1,6 +1,6 @@
-//Unmodified UNDB v8 with LED and relay disabled, and buttons as labeled, with 4-digit display.
+//UNDB v5, 6-tube display, with rotary controls
 
-#define DISPLAY_SIZE 4 //number of tubes in display module. Small display adjustments are made for 4-tube clocks
+#define DISPLAY_SIZE 6 //number of tubes in display module. Small display adjustments are made for 4-tube clocks
 
 // Which functionality is enabled in this clock?
 // Related options will also be enabled in the options menu.
@@ -17,7 +17,7 @@
 #define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
 #define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 
-// These are the RLB board connections to Arduino analog input pins.
+// These are the UNDB v5 board connections to Arduino analog input pins.
 // S1/PL13 = Reset
 // S2/PL5 = A1
 // S3/PL6 = A0
@@ -28,14 +28,14 @@
 // A6-A7 are analog-only pins that aren't quite as responsive and require a physical pullup resistor (1K to +5V), and can't be used with rotary encoders because they don't support pin change interrupts.
 
 // What input is associated with each control?
-#define CTRL_SEL A1 //main select button - must be equipped
-#define CTRL_UP A2 //main up/down buttons or rotary encoder - must be equipped
-#define CTRL_DN A3
-#define CTRL_ALT A0 //alt select button - if unequipped, set to 0
+#define CTRL_SEL A2 //main select button - must be equipped
+#define CTRL_UP A1 //main up/down buttons or rotary encoder - must be equipped
+#define CTRL_DN A0
+#define CTRL_ALT 0 //alt select button - if unequipped, set to 0
 
 // What type of up/down controls are equipped?
 // 1 = momentary buttons. 2 = quadrature rotary encoder: requires Paul Stoffregen's Encoder library to be installed in IDE.
-#define CTRL_UPDN_TYPE 1
+#define CTRL_UPDN_TYPE 2
 #define ROT_VEL_START 80 //Required if CTRL_UPDN_TYPE==2. If step rate falls below this, kick into high velocity set (x10)
 #define ROT_VEL_STOP 500 //Required if CTRL_UPDN_TYPE==2. If encoder step rate rises above this, drop into low velocity set (x1)
 
