@@ -67,7 +67,7 @@ This feature can count up (chrono) or down (timer), up to 100 hours each way. Wh
 > **Hardware variations**
 > * If your clock has a [switched relay](#hardware-configuration) and the chrono/timer is [set to use it](#optionstimer), it will switch on while the timer is running, like the “sleep” function on a clock radio. The runout options will still work, but won’t signal.
 > * If your clock does not have a beeper, the runout options cannot be set.
-> * If your clock uses a rotary encoder for **Up/Down** rather than buttons, **Down** will stop the chrono/timer, and **Up** will display lap times (chrono) and cycle through runout options (timer).
+> * If your clock uses a rotary encoder for **Up/Down** rather than buttons, while running, **Up** will display lap times (chrono) and cycle through runout options (timer), and **Down** will stop. To prevent accidental resets, **Down** does nothing while stopped. To reset to `0`, simply switch to another display while stopped.
 
 ## The Alt button
 
@@ -150,11 +150,12 @@ You can also set the **defaults for the options menu** (in main code, currently)
 
 ## Compiling the sketch
 
-**To compile the sketch,** ensure these libraries are added and enabled in your Arduino IDE, via the Library Manager:
+**To compile the sketch,** ensure these libraries are installed in your Arduino IDE via Library Manager, as needed:
 
 * Wire (Arduino built-in)
 * EEPROM (Arduino built-in)
-* DS3231 ([NorthernWidget](https://github.com/NorthernWidget/DS3231))
-* Dusk2Dawn ([dmkishi](https://github.com/dmkishi/Dusk2Dawn))
+* [DS3231](https://github.com/NorthernWidget/DS3231) by NorthernWidget
+* [Dusk2Dawn](https://github.com/dmkishi/Dusk2Dawn) by DM Kishi - if sunrise/sunset display is enabled
+* [Encoder](https://github.com/PaulStoffregen/Encoder) by Paul Stoffregen - if rotary encoder is equipped
 
 **To upload the sketch to your clock,** if it doesn’t appear in the IDE’s Ports menu (as a USB port), your UNDB may be equipped with an Arduino clone that requires [drivers for the CH340 chipset](https://sparks.gogo.co.nz/ch340.html).
