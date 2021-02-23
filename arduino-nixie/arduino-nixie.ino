@@ -7,7 +7,7 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/v9-6tube.h"
+#include "configs/sample.h"
 
 ////////// Software version //////////
 const byte vMajor = 1;
@@ -15,9 +15,17 @@ const byte vMinor = 9;
 const byte vPatch = 0;
 
 ////////// Other includes, global consts, and vars //////////
-#include <Wire.h> //Arduino - GNU LPGL
+//These cpp files contain code that is conditionally included
+//based on the available hardware and settings in the config file.
+//TODO revisit - This is probably not the right way to do this –
+//these are being compiled (or not) as part of this file,
+//rather than independently, with header files included here –
+//but it seems to work, as long as they don't reference later functions.
+//All variants of each type (disp, rtc, etc) should define the same functions.
+#include "dispMAX7219.cpp" //placeholder
+#include "rtcDS3231.cpp"
+
 #include <EEPROM.h> //Arduino - GNU LPGL
-#include <DS3231.h> //NorthernWidget - The Unlicense - install in your Arduino IDE
 #if ENABLE_DATE_RISESET
   #include <Dusk2Dawn.h> //DM Kiski - unlicensed - install in your Arduino IDE if needed
 #endif
@@ -96,17 +104,12 @@ const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,76, 4, 9, 0,  0,76, 2,
 const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0, 0, 0,  0,49, 0,  0, 0,49, 0,  0,   0,   0, 0, 0, 0,   0,   0,  -900,-1800, 52};
 const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88, 5,60, 1,  1,88, 5,  4, 1,88, 5,  2,1439,1439, 2, 6, 6,1439,1439,   900, 1800,156};
 
-//RTC objects
-DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
-RTClib rtc; //an object to access a snapshot of the ds3231 via rtc.now()
-DateTime tod; //stores the rtc.now() snapshot for several functions to use
-byte toddow; //stores the day of week (read separately from ds3231 dow counter)
 
 // Hardware inputs and value setting
 byte btnCur = 0; //Momentary button currently in use - only one allowed at a time
 byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=set by btnStop()
 unsigned long inputLast = 0; //When a button was last pressed
-int inputLastTODMins = 0; //time of day, in minutes past midnight, when button was pressed. Used in paginated functions so they all reflect the same TOD.
+int inputLastTODMins = 0; //time of day, in minutes past midnight, when button was pressed. Used in paginated functions so they all reflect the same time of day.
 #if CTRL_UPDN_TYPE==2 //rotary encoder
   Encoder rot(CTRL_DN,CTRL_UP);
 #endif
@@ -117,7 +120,7 @@ const byte fnIsTime = 0; //time of day
 const byte fnIsDate = 1; //date, with optional day counter and sunrise/sunset pages
 const byte fnIsAlarm = 2; //alarm time
 const byte fnIsTimer = 3; //countdown timer and chronograph
-const byte fnIsTemp = 4; //temperature per DS3231 – will likely read high
+const byte fnIsTemp = 4; //temperature per rtc – will likely read high
 const byte fnIsTest = 5; //simply cycles all tubes
 const byte fnOpts = 201; //fn values from here to 255 correspond to options in the options menu
 byte fn = 0; //currently displayed fn per above
@@ -164,7 +167,7 @@ byte versionRemain = 3; //display version at start
 
 void setup(){
   Serial.begin(9600);
-  Wire.begin();
+  rtcInit();
   initInputs();
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
   initEEPROM(readInput(CTRL_SEL)==LOW); //Do a hard init of EEPROM if button is held; else do a soft init to make sure vals in range
@@ -257,7 +260,7 @@ void checkBtn(byte btn){
   unsigned long now = millis();
   //If the button has just been pressed, and no other buttons are in use...
   if(btnCur==0 && bnow==LOW) {
-    btnCur = btn; btnCurHeld = 0; inputLast = now; inputLastTODMins = tod.hour()*60+tod.minute();
+    btnCur = btn; btnCurHeld = 0; inputLast = now; inputLastTODMins = rtcGetTOD();
     ctrlEvt(btn,1); //hey, the button has been pressed
   }
   //If the button is being held...
@@ -294,7 +297,7 @@ void checkRot(){
     rotLastVal = rotCurVal;
     if(rotCurVal>=4 || rotCurVal<=-4){ //we've completed a step of 4 states (this library doesn't seem to drop states much, so this is reasonably reliable)
       unsigned long now = millis();
-      inputLast = now; inputLastTODMins = tod.hour()*60+tod.minute();
+      inputLast = now; inputLastTODMins = rtcGetTOD();
       if((unsigned long)(now-rotLastStep)<=ROT_VEL_START) rotVel = 1; //kick into high velocity setting (x10)
       else if((unsigned long)(now-rotLastStep)>=ROT_VEL_STOP) rotVel = 0; //fall into low velocity setting (x1)
       rotLastStep = now;
@@ -386,10 +389,10 @@ void ctrlEvt(byte ctrl, byte evt){
       if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL hold: enter setting mode
         switch(fn){
           case fnIsTime: //set mins
-            startSet((tod.hour()*60)+tod.minute(),0,1439,1); break;
+            startSet(rtcGetTOD(),0,1439,1); break; //TODO pull from time
           case fnIsDate: //depends what page we're on
-            if(fnPg==0){ //regular date display: set year
-              fnSetValDate[1]=tod.month(), fnSetValDate[2]=tod.day(); startSet(tod.year(),0,9999,1);
+            if(fnPg==0){ //regular date display: set year //TODO pull from time
+              fnSetValDate[1]=rtcGetMonth(), fnSetValDate[2]=rtcGetDate(); startSet(rtcGetYear(),0,9999,1);
             } else if(fnPg==fnDateCounter){ //month, date, direction
               startSet(readEEPROM(5,false),1,12,1);
             } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
@@ -496,17 +499,15 @@ void ctrlEvt(byte ctrl, byte evt){
         //Consider recording the btn start time when going into fn setting so we can distinguish its release from a future one
         if(ctrl==CTRL_SEL) { //CTRL_SEL push: go to next option or save and exit setting mode
           btnStop(); //not waiting for CTRL_SELHold, so can stop listening here
-          //We will set ds3231 time parts directly
+          //We will set rtc time parts directly
           //con: potential for very rare clock rollover while setting; pro: can set date separate from time
           switch(fn){
             case fnIsTime: //save in RTC
               if(fnSetValDid){ //but only if the value was actually changed
-                ds3231.setHour(fnSetVal/60);
-                ds3231.setMinute(fnSetVal%60);
-                ds3231.setSecond(0);
+                rtcSetTime(fnSetVal/60,fnSetVal%60,0);
                 millisAtLastCheck = 0; //see ms()
-                calcSun(tod.year(),tod.month(),tod.day());
-                isDSTByHour(tod.year(),tod.month(),tod.day(),fnSetVal/60,true);
+                calcSun(rtcGetYear(),rtcGetMonth(),rtcGetDate());
+                isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),fnSetVal/60,true);
               }
               clearSet(); break;
             case fnIsDate: //depends what page we're on
@@ -521,12 +522,10 @@ void ctrlEvt(byte ctrl, byte evt){
                     fnSetValDate[1]=fnSetVal;
                     startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
                   case 3: //write year/month/date to RTC
-                    ds3231.setYear(fnSetValDate[0]%100); //TODO: do we store century on our end? Per ds3231 docs, "The century bit (bit 7 of the month register) is toggled when the years register overflows from 99 to 00."
-                    ds3231.setMonth(fnSetValDate[1]);
-                    ds3231.setDate(fnSetVal);
-                    ds3231.setDoW(dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal)+1); //ds3231 weekday is 1-index
+                    rtcSetDate(fnSetValDate[0],fnSetValDate[1],fnSetVal,
+                      dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal));
                     calcSun(fnSetValDate[0],fnSetValDate[1],fnSetVal);
-                    isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,tod.hour(),true);
+                    isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,rtcGetHour(),true);
                     clearSet(); break;
                   default: break;
                 }
@@ -602,8 +601,8 @@ void ctrlEvt(byte ctrl, byte evt){
       if(fnSetPg) writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
       fn = fnIsTime;
       //we may have changed lat/long/GMT/DST settings so recalc those
-      calcSun(tod.year(),tod.month(),tod.day());
-      isDSTByHour(tod.year(),tod.month(),tod.day(),tod.hour(),true);
+      calcSun(rtcGetYear(),rtcGetMonth(),rtcGetDate()); //TODO pull from clock
+      isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),true);
       clearSet();
       return;
     }
@@ -791,13 +790,8 @@ void initEEPROM(bool hard){
   btnCur = CTRL_SEL; btnStop();
   //If a hard init, set the clock
   if(hard) {
-    ds3231.setYear(20);
-    ds3231.setMonth(1);
-    ds3231.setDate(1);
-    ds3231.setDoW(3); //2020-01-01 is Wednesday. DS3231 will keep count from here
-    ds3231.setHour(0);
-    ds3231.setMinute(0);
-    ds3231.setSecond(0);
+    rtcSetDate(2021,1,1,dayOfWeek(2021,1,1));
+    rtcSetTime(0,0,0);
   }
   if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //0-1: alarm at 7am
   //2: alarm on, handled by init
@@ -900,16 +894,15 @@ void checkRTC(bool force){
   }
   
   //Update things based on RTC
-  tod = rtc.now();
-  toddow = ds3231.getDoW()-1; //ds3231 weekday is 1-index
+  rtcTakeSnap();
   
-  if(rtcSecLast != tod.second() || force) { //If it's a new RTC second, or we are forcing it
+  if(rtcSecLast != rtcGetSecond() || force) { //If it's a new RTC second, or we are forcing it
     
     //First run things
-    if(rtcSecLast==61) { autoDST(); calcSun(tod.year(),tod.month(),tod.day()); }
+    if(rtcSecLast==61) { autoDST(); calcSun(rtcGetYear(),rtcGetMonth(),rtcGetDate()); }
     
     //Things to do every natural second (decrementing real-time counters)
-    if(rtcSecLast != tod.second()) {
+    if(rtcSecLast != rtcGetSecond()) {
       //If alarm snooze has time on it, decrement, and if we reach zero and alarm is still on, resume
       //Won't check alarm skip status here, as it reflects tomorrow
       if(snoozeRemain>0) {
@@ -917,7 +910,7 @@ void checkRTC(bool force){
         //Serial.print("sr "); Serial.println(snoozeRemain,DEC);
         if(snoozeRemain<=0 && alarmOn) {
           fnSetPg = 0; fn = fnIsTime;
-          if((readEEPROM(50,false) && !(RELAY_PIN>=0 && RELAY_MODE==0 && readEEPROM(42,false)==1))) fibonacci(tod.hour(),tod.minute(),tod.second()); //fibonacci sequence
+          if((readEEPROM(50,false) && !(RELAY_PIN>=0 && RELAY_MODE==0 && readEEPROM(42,false)==1))) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond()); //fibonacci sequence
           else signalStart(fnIsAlarm,1); //regular alarm
         }
       }
@@ -931,22 +924,22 @@ void checkRTC(bool force){
   
     //Things to do at specific times
     //Timer drift correction: per the millisCorrectionInterval
-    if(tod.second()%millisCorrectionInterval==0){ //if time:
+    if(rtcGetSecond()%millisCorrectionInterval==0){ //if time:
       if(!(rtcDid&1)) millisCheckDrift(); bitWrite(rtcDid,0,1); //do if not done, set as done
     } else bitWrite(rtcDid,0,0); //if not time: set as not done
     //DST change check: every 2am
-    if(tod.second()==0 && tod.minute()==0 && tod.hour()==2) autoDST();
+    if(rtcGetSecond()==0 && rtcGetMinute()==0 && rtcGetHour()==2) autoDST();
     //Alarm check: at top of minute for normal alarm, or 23 seconds past for fibonacci (which starts 26m37s early)
     //Only do fibonacci if enabled and if the alarm is not using the switched relay - otherwise do regular
     bool fibOK = readEEPROM(50,false) && !(RELAY_PIN>=0 && RELAY_MODE==0 && readEEPROM(42,false)==1);
-    if((tod.second()==0 && !fibOK) || (tod.second()==23 && fibOK)){
+    if((rtcGetSecond()==0 && !fibOK) || (rtcGetSecond()==23 && fibOK)){
       int alarmTime = readEEPROM(0,true);
-      if(tod.second()==23){ alarmTime-=27; if(alarmTime<0) alarmTime+=1440; } //set min to n-27 with midnight rollover
-      if(tod.hour()*60+tod.minute()==alarmTime){
-        //Serial.println(tod.second()==23?F("It's fibonacci time"):F("It's regular alarm time"));
+      if(rtcGetSecond()==23){ alarmTime-=27; if(alarmTime<0) alarmTime+=1440; } //set min to n-27 with midnight rollover
+      if(rtcGetHour()*60+rtcGetMinute()==alarmTime){
+        //Serial.println(rtcGetSecond()==23?F("It's fibonacci time"):F("It's regular alarm time"));
         if(alarmOn && !alarmSkip) { //if the alarm is on and not skipped, sound it!
           fnSetPg = 0; fn = fnIsTime;
-          if(tod.second()==23) fibonacci(tod.hour(),tod.minute(),tod.second()); //fibonacci sequence
+          if(rtcGetSecond()==23) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond()); //fibonacci sequence
           else signalStart(fnIsAlarm,1); //regular alarm
         }
         //set alarmSkip for the next instance of the alarm
@@ -954,32 +947,32 @@ void checkRTC(bool force){
           //if alarm is any day of the week
           (readEEPROM(23,false)==0 ||
           //or if alarm is weekday only, and tomorrow is a weekday
-          (readEEPROM(23,false)==1 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),(toddow==6?0:toddow+1))) ||
+          (readEEPROM(23,false)==1 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),(rtcGetWeekday()==6?0:rtcGetWeekday()+1))) ||
           //or if alarm is weekend only, and tomorrow is a weekend
-          (readEEPROM(23,false)==2 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),(toddow==6?0:toddow+1)))
+          (readEEPROM(23,false)==2 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),(rtcGetWeekday()==6?0:rtcGetWeekday()+1)))
           ? 0: 1); //then don't skip the next alarm; else skip it
       } //end alarm trigger
     }
     //At bottom of minute, see if we should show the date
-    if(tod.second()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0 && cleanRemain==0 && scrollRemain==0 && versionRemain==0) {
-      if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = now; inputLastTODMins = tod.hour()*60+tod.minute(); fnPg = 254; updateDisplay(); }
+    if(rtcGetSecond()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0 && cleanRemain==0 && scrollRemain==0 && versionRemain==0) {
+      if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = now; inputLastTODMins = rtcGetHour()*60+rtcGetMinute(); fnPg = 254; updateDisplay(); }
       if(readEEPROM(18,false)==3) { startScroll(); }
     }
     //Anti-poisoning routine triggering: start when applicable, and not at night, during setting, or after a button press (unoff)
-    if(tod.second()<2 && displayDim==2 && fnSetPg==0 && unoffRemain==0) {
+    if(rtcGetSecond()<2 && displayDim==2 && fnSetPg==0 && unoffRemain==0) {
       switch(readEEPROM(46,false)) { //how often should the routine run?
         case 0: //every day
           if(readEEPROM(27,false)>0? //is night shutoff enabled?
-            tod.second()==0 && tod.hour()*60+tod.minute()==readEEPROM(28,true): //if so, at start of night shutoff (at second :00 before dim is in effect)
-            tod.second()==1 && tod.hour()*60+tod.minute()==0) //if not, at 00:00:01
+            rtcGetSecond()==0 && rtcGetHour()*60+rtcGetMinute()==readEEPROM(28,true): //if so, at start of night shutoff (at second :00 before dim is in effect)
+            rtcGetSecond()==1 && rtcGetHour()*60+rtcGetMinute()==0) //if not, at 00:00:01
               cleanRemain = 151; //run routine for fifteen cycles
           break;
         case 1: //every hour
-          if(tod.second()==1 && tod.minute()==0) //at min/sec :00:01
+          if(rtcGetSecond()==1 && rtcGetMinute()==0) //at min/sec :00:01
             cleanRemain = 101; //run routine for ten cycles
           break;
         case 2: //every minute
-          if(tod.second()==1) //at second :01
+          if(rtcGetSecond()==1) //at second :01
             cleanRemain = 21; //run routine for two cycles
           break;
         default: break;
@@ -988,19 +981,19 @@ void checkRTC(bool force){
     
     //Strikes - only if fn=clock, not setting, not signaling/snoozing, not night/away. Setting 21 will be off if signal type is no good
     //The six pips
-    if(tod.minute()==59 && tod.second()==55 && readEEPROM(21,false)==2 && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {
+    if(rtcGetMinute()==59 && rtcGetSecond()==55 && readEEPROM(21,false)==2 && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {
       signalStart(fnIsTime,6); //the signal code knows to use pip durations as applicable
     }
     //Strikes on/after the hour
-    if(tod.second()==0 && (tod.minute()==0 || tod.minute()==30) && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2){
-      byte hr; hr = tod.hour(); hr = (hr==0?12:(hr>12?hr-12:hr));
+    if(rtcGetSecond()==0 && (rtcGetMinute()==0 || rtcGetMinute()==30) && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2){
+      byte hr; hr = rtcGetHour(); hr = (hr==0?12:(hr>12?hr-12:hr));
       switch(readEEPROM(21,false)) {
         case 1: //single beep
-          if(tod.minute()==0) signalStart(fnIsTime,0); break;
+          if(rtcGetMinute()==0) signalStart(fnIsTime,0); break;
         case 3: //hour strike via normal signal cycle
-          if(tod.minute()==0) signalStart(fnIsTime,hr); break;
+          if(rtcGetMinute()==0) signalStart(fnIsTime,hr); break;
         case 4: //ship's bell at :00 and :30 mins via normal signal cycle
-          signalStart(fnIsTime,((hr%4)*2)+(tod.minute()==30?1:0)); break;
+          signalStart(fnIsTime,((hr%4)*2)+(rtcGetMinute()==30?1:0)); break;
         default: break;
       } //end strike type
     } //end strike
@@ -1010,7 +1003,7 @@ void checkRTC(bool force){
     //Also skip updating the display if this is date and not being forced, since its pages take some calculating that cause it to flicker
     if(fnSetPg==0 && (scrollRemain==0 || force) && !(fn==fnIsDate && !force)) updateDisplay();
     
-    rtcSecLast = tod.second();
+    rtcSecLast = rtcGetSecond();
     
   } //end if force or new second
 } //end checkRTC()
@@ -1057,10 +1050,10 @@ void fibonacci(byte h, byte m, byte s){
 void autoDST(){
   //Change the clock if the current DST differs from the dstOn flag.
   //Call daily when clock reaches 2am, and at first run.
-  bool dstNow = isDSTByHour(tod.year(),tod.month(),tod.day(),tod.hour(),false);
+  bool dstNow = isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),false);
   if(readEEPROM(15,false)>1){ //dstOn unreliable probably due to software update to 1.6.0
     dstOn = dstNow; writeEEPROM(15,dstOn,false); }
-  if(dstNow!=dstOn){ ds3231.setHour(dstNow>dstOn? 3: 1); dstOn = dstNow; writeEEPROM(15,dstOn,false); }
+  if(dstNow!=dstOn){ rtcSetHour(dstNow>dstOn? 3: 1); dstOn = dstNow; writeEEPROM(15,dstOn,false); }
 }
 bool isDST(int y, byte m, byte d){
   //returns whether DST is in effect on this date (after 2am shift)
@@ -1113,8 +1106,8 @@ int dateToDayCount(word y, byte m, byte d){
   return dc;
 }
 byte dayOfWeek(word y, byte m, byte d){
-  //DS3231 doesn't really calculate the day of the week, it just keeps a counter.
-  //When setting date, we'll calculate per https://en.wikipedia.org/wiki/Zeller%27s_congruence
+  //Used by nthSunday and in calls to rtcSetDate
+  //Calculated per https://en.wikipedia.org/wiki/Zeller%27s_congruence
   byte yb = y%100; //2-digit year
   byte ya = y/100; //century
   //For this formula, Jan and Feb are considered months 11 and 12 of the previous year.
@@ -1157,7 +1150,7 @@ bool isDayInRange(byte dstart, byte dend, byte dtest) {
 }
 
 // Chrono/Timer
-// There are two timing sources in the UNDB – the Arduino itself (eg millis()), which gives subsecond precision but isn't very accurate, so it's only good for short-term timing and taking action in response to user activity (eg button press hold thresholds); and the DS3231, which is very accurate but only gives seconds (unless you're monitoring its square wave via a digital pin), so it's only good for long-term timing and taking action in response to time of day. The one place we need both short-term precision and long-term accuracy is in the chrono/timer – so I have based it on millis() but with an offset applied to correct for its drift, periodically adjusted per the DS3231. I also use it for the signal, so the 1/sec measure cycle stays in sync with real time; but we don't need to use it for stuff like button polling.
+// There are two timing sources in the UNDB – the Arduino itself (eg millis()), which gives subsecond precision but isn't very accurate, so it's only good for short-term timing and taking action in response to user activity (eg button press hold thresholds); and the rtc, which is very accurate but only gives seconds (unless you're monitoring its square wave via a digital pin, in DS3231's case), so it's only good for long-term timing and taking action in response to time of day. The one place we need both short-term precision and long-term accuracy is in the chrono/timer – so I have based it on millis() but with an offset applied to correct for its drift, periodically adjusted per the rtc. I also use it for the signal, so the 1/sec measure cycle stays in sync with real time; but we don't need to use it for stuff like button polling.
 unsigned long millisDriftOffset = 0; //The cumulative running offset. Since it's circular, doesn't matter whether signed or not.
 //unsigned long millisAtLastCheck (defined at top, so ctrlEvt can reset it when setting RTC). 0 when unreliable (at start and after RTC set).
 //const byte millisCorrectionInterval (defined at top, so checkRTC can see it)
@@ -1170,15 +1163,15 @@ void millisCheckDrift(){
     if(abs((long)(millisDrift+millisDriftBuffer))>32767){} // If adding drift to buffer would make it overflow, ignore it this time
     else {
       millisDriftBuffer -= millisDrift;
-      // tod = rtc.now();
-      // if(tod.hour()<10) Serial.print(F("0"));
-      // Serial.print(tod.hour(),DEC);
+      // rtcTakeSnap();
+      // if(rtcGetHour()<10) Serial.print(F("0"));
+      // Serial.print(rtcGetHour(),DEC);
       // Serial.print(F(":"));
-      // if(tod.minute()<10) Serial.print(F("0"));
-      // Serial.print(tod.minute(),DEC);
+      // if(rtcGetMinute()<10) Serial.print(F("0"));
+      // Serial.print(rtcGetMinute(),DEC);
       // Serial.print(F(":"));
-      // if(tod.second()<10) Serial.print(F("0"));
-      // Serial.print(tod.second(),DEC);
+      // if(rtcGetSecond()<10) Serial.print(F("0"));
+      // Serial.print(rtcGetSecond(),DEC);
       // Serial.print(F("  millis: "));
       // Serial.print(now,DEC);
       // Serial.print(F("  drift: "));
@@ -1196,14 +1189,14 @@ void millisApplyDrift(){
     millisDriftOffset += (millisDriftBuffer>0? 1: -1);
     millisDriftBuffer -= (millisDriftBuffer>0? 1: -1);
     // tod = rtc.now();
-    // if(tod.hour()<10) Serial.print(F("0"));
-    // Serial.print(tod.hour(),DEC);
+    // if(rtcGetHour()<10) Serial.print(F("0"));
+    // Serial.print(rtcGetHour(),DEC);
     // Serial.print(F(":"));
-    // if(tod.minute()<10) Serial.print(F("0"));
-    // Serial.print(tod.minute(),DEC);
+    // if(rtcGetMinute()<10) Serial.print(F("0"));
+    // Serial.print(rtcGetMinute(),DEC);
     // Serial.print(F(":"));
-    // if(tod.second()<10) Serial.print(F("0"));
-    // Serial.print(tod.second(),DEC);
+    // if(rtcGetSecond()<10) Serial.print(F("0"));
+    // Serial.print(rtcGetSecond(),DEC);
     // Serial.print(F("  new offset: "));
     // Serial.print(millisDriftOffset,DEC);
     // Serial.print(F("  new buffer: "));
@@ -1340,7 +1333,7 @@ void checkEffects(bool force){
   if(cleanRemain && (unsigned long)(now-pollCleanLast)>=CLEAN_SPEED) { //account for rollover
     pollCleanLast=now;
     cleanRemain--;
-    if(cleanRemain<1) calcSun(tod.year(),tod.month(),tod.day()); //take this opportunity to perform a calculation that blanks the display for a bit
+    if(cleanRemain<1) calcSun(rtcGetYear(),rtcGetMonth(),rtcGetDate()); //take this opportunity to perform a calculation that blanks the display for a bit
     updateDisplay();
   }
   //If we're scrolling an animation, advance it every SCROLL_SPEED ms.
@@ -1446,13 +1439,13 @@ void updateDisplay(){
     
     //Set displayDim per night/away settings - fnIsAlarm may override this
     //issue: moving from off alarm to next fn briefly shows alarm in full brightness. I think because of the display delays. TODO
-    word todmins = tod.hour()*60+tod.minute();
+    word todmins = rtcGetHour()*60+rtcGetMinute();
     //In order of precedence: //TODO can we fade between dim states? 
     //clock at work: away on weekends, all day
-    if( readEEPROM(32,false)==1 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) )
+    if( readEEPROM(32,false)==1 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),rtcGetWeekday()) )
       displayDim = (unoffRemain>0? 2: 0); //unoff overrides this
     //clock at home: away on weekdays, during office hours only
-    else if( readEEPROM(32,false)==2 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),toddow) && isTimeInRange(readEEPROM(35,true), readEEPROM(37,true), todmins) ) displayDim = (unoffRemain>0? 2: 0);
+    else if( readEEPROM(32,false)==2 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),rtcGetWeekday()) && isTimeInRange(readEEPROM(35,true), readEEPROM(37,true), todmins) ) displayDim = (unoffRemain>0? 2: 0);
     //night shutoff - if night end is 0:00, use alarm time instead
     else if( readEEPROM(27,false) && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins) ) displayDim = (readEEPROM(27,false)==1?1:(unoffRemain>0?2:0)); //dim or (unoff? bright: off)
     //normal
@@ -1461,35 +1454,35 @@ void updateDisplay(){
     
     switch(fn){
       case fnIsTime:
-        byte hr; hr = tod.hour();
+        byte hr; hr = rtcGetHour();
         if(readEEPROM(16,false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
         editDisplay(hr, 0, 1, readEEPROM(19,false), true);
-        editDisplay(tod.minute(), 2, 3, true, true);
-        if(readEEPROM(18,false)==1) editDisplay(tod.day(), 4, 5, readEEPROM(19,false), true); //date
-        else editDisplay(tod.second(), 4, 5, true, true); //seconds
+        editDisplay(rtcGetMinute(), 2, 3, true, true);
+        if(readEEPROM(18,false)==1) editDisplay(rtcGetDate(), 4, 5, readEEPROM(19,false), true); //date
+        else editDisplay(rtcGetSecond(), 4, 5, true, true); //seconds
         break;
       case fnIsDate: //a paged display
         if(fnPg==0 || fnPg==254){ //plain ol' date - 0 will continue to other pages, 254 will only display date then return to time (e.g. at half minute)
           byte df; df = readEEPROM(17,false); //1=m/d/w, 2=d/m/w, 3=m/d/y, 4=d/m/y, 5=y/m/d
           if(df<=4) {
-            editDisplay((df==1||df==3?tod.month():tod.day()),0,1,readEEPROM(19,false),true); //month or date first
-            editDisplay((df==1||df==3?tod.day():tod.month()),2,3,readEEPROM(19,false),true); //date or month second
-            editDisplay((df<=2?toddow:tod.year()),4,5,(df<=2?false:true),true); //dow or year third - dow never leading zero, year always
+            editDisplay((df==1||df==3?rtcGetMonth():rtcGetDate()),0,1,readEEPROM(19,false),true); //month or date first
+            editDisplay((df==1||df==3?rtcGetDate():rtcGetMonth()),2,3,readEEPROM(19,false),true); //date or month second
+            editDisplay((df<=2?rtcGetWeekday():rtcGetYear()),4,5,(df<=2?false:true),true); //dow or year third - dow never leading zero, year always
           }
           else { //df==5
-            editDisplay(tod.year(),0,1,true,true); //year always has leading zero
-            editDisplay(tod.month(),2,3,readEEPROM(19,false),true);
-            editDisplay(tod.day(),4,5,readEEPROM(19,false),true);
+            editDisplay(rtcGetYear(),0,1,true,true); //year always has leading zero
+            editDisplay(rtcGetMonth(),2,3,readEEPROM(19,false),true);
+            editDisplay(rtcGetDate(),4,5,readEEPROM(19,false),true);
           }
         }
         else if(fnPg==fnDateCounter){
-          editDisplay(dateComp(tod.year(),tod.month(),tod.day(),readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)),0,3,false,true);
+          editDisplay(dateComp(rtcGetYear(),rtcGetMonth(),rtcGetDate(),readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)),0,3,false,true);
           blankDisplay(4,5,true);
         }
         //The sun and weather displays are based on a snapshot of the time of day when the function display was triggered, just in case it's triggered a few seconds before a sun event (sunrise/sunset) and the "prev/now" and "next" displays fall on either side of that event, they'll both display data from before it. If triggered just before midnight, the date could change as well – not such an issue for sun, but might be for weather - TODO create date snapshot also
-        else if(fnPg==fnDateSunlast) displaySun(0,tod.day(),inputLastTODMins);
+        else if(fnPg==fnDateSunlast) displaySun(0,rtcGetDate(),inputLastTODMins);
         else if(fnPg==fnDateWeathernow) displayWeather(0);
-        else if(fnPg==fnDateSunnext) displaySun(1,tod.day(),inputLastTODMins);
+        else if(fnPg==fnDateSunnext) displaySun(1,rtcGetDate(),inputLastTODMins);
         else if(fnPg==fnDateWeathernext) displayWeather(1);
         break; //end fnIsDate
       //fnIsDayCount removed in favor of paginated calendar
@@ -1544,32 +1537,32 @@ void updateDisplay(){
         }
         break;
       case fnIsTemp: //thermometer
-        int temp; temp = ds3231.getTemperature()*100;
+        int temp; temp = rtcGetTemp();
         if(readEEPROM(45,false)==1) temp = temp*1.8 + 3200;
         //TODO another option to apply offset
         editDisplay(abs(temp)/100,1,3,(temp<0?true:false),true); //leading zeros if negative
         editDisplay(abs(temp)%100,4,5,true,true);
         break;
       case fnIsTest:
-        editDisplay(tod.second(),0,0,true,false);
-        editDisplay(tod.second(),1,1,true,false);
-        editDisplay(tod.second(),2,2,true,false);
-        editDisplay(tod.second(),3,3,true,false);
-        editDisplay(tod.second(),4,4,true,false);
-        editDisplay(tod.second(),5,5,true,false);
+        editDisplay(rtcGetSecond(),0,0,true,false);
+        editDisplay(rtcGetSecond(),1,1,true,false);
+        editDisplay(rtcGetSecond(),2,2,true,false);
+        editDisplay(rtcGetSecond(),3,3,true,false);
+        editDisplay(rtcGetSecond(),4,4,true,false);
+        editDisplay(rtcGetSecond(),5,5,true,false);
       default: break;
     }//end switch
   } //end if fn running
   
   // if(false) { //DEBUG MODE: when display's not working, just write it to the console, with time. TODO create dummy display handler
-  //   if(tod.hour()<10) Serial.print(F("0"));
-  //   Serial.print(tod.hour(),DEC);
+  //   if(rtcGetHour()<10) Serial.print(F("0"));
+  //   Serial.print(rtcGetHour(),DEC);
   //   Serial.print(F(":"));
-  //   if(tod.minute()<10) Serial.print(F("0"));
-  //   Serial.print(tod.minute(),DEC);
+  //   if(rtcGetMinute()<10) Serial.print(F("0"));
+  //   Serial.print(rtcGetMinute(),DEC);
   //   Serial.print(F(":"));
-  //   if(tod.second()<10) Serial.print(F("0"));
-  //   Serial.print(tod.second(),DEC);
+  //   if(rtcGetSecond()<10) Serial.print(F("0"));
+  //   Serial.print(rtcGetSecond(),DEC);
   //   Serial.print(F("   "));
   //   for(byte i=0; i<DISPLAY_SIZE; i++) {
   //     if(i%2==0 && i!=0) Serial.print(F(" ")); //spacer between units
