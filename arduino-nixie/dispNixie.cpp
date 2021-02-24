@@ -2,6 +2,8 @@
 #ifndef DISP_NIXIE_SRC //include once only
 #define DISP_NIXIE_SRC
 
+//#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
+
 //This clock is 2x3 multiplexed: two tubes powered at a time.
 //The anode channel determines which two tubes are powered,
 //and the two SN74141 cathode driver chips determine which digits are lit.

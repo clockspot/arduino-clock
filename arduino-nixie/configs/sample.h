@@ -1,6 +1,5 @@
 //This config includes all options this project supports (displays, inputs, etc).
 //You can make a copy and include only the portions relevant to your clock's hardware.
-//Currently configured for UNDB v9, standard Arduino with six nixies, no RTC
 
 #ifndef CONFIG
 #define CONFIG
@@ -74,35 +73,37 @@
 ///// Display /////
 
 //If using nixie array:
-#define DISP_NIXIE
-#define CLEAN_SPEED 200 //ms - "frame rate" of tube cleaning
-//Which output pins?
-//This clock is 2x3 multiplexed: two tubes powered at a time.
-//The anode channel determines which two tubes are powered,
-//and the two SN74141 cathode driver chips determine which digits are lit.
-//4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
-#define OUT_A1 2
-#define OUT_A2 3
-#define OUT_A3 4
-#define OUT_A4 5
-#define OUT_B1 6
-#define OUT_B2 7
-#define OUT_B3 8
-#define OUT_B4 16 //aka A2
-//3 pins out to anode channel switches
-#define ANODE_1 11
-#define ANODE_2 12
-#define ANODE_3 13
+// #define DISP_NIXIE
+// #define CLEAN_SPEED 200 //ms - "frame rate" of tube cleaning
+// //Which output pins?
+// //This clock is 2x3 multiplexed: two tubes powered at a time.
+// //The anode channel determines which two tubes are powered,
+// //and the two SN74141 cathode driver chips determine which digits are lit.
+// //4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
+// #define OUT_A1 2
+// #define OUT_A2 3
+// #define OUT_A3 4
+// #define OUT_A4 5
+// #define OUT_B1 6
+// #define OUT_B2 7
+// #define OUT_B3 8
+// #define OUT_B4 16 //aka A2
+// //3 pins out to anode channel switches
+// #define ANODE_1 11
+// #define ANODE_2 12
+// #define ANODE_3 13
 
 //If using 8x32 LED matrix:
 //Requires LedControl library by Eberhard Farle to be installed in IDE. (http://wayoda.github.io/LedControl)
-// #define DISP_MAX7219
-// #define NUM_MAX 4 //How many modules? 3 for 8x24 (4 digit, untested) or 4 for 8x32 (6 digit)
-// #define ROTATE 90
-// //Which output pins?
-// #define CLK_PIN 2 //D2, pin 20
-// #define CS_PIN 3 //D3, pin 21
-// #define DIN_PIN 4 //D4, pin 22
+#define DISP_MAX7219
+#define NUM_MAX 4 //How many modules? 3 for 8x24 (4 digit, untested) or 4 for 8x32 (6 digit)
+#define ROTATE 90
+#define BRIGHTNESS_FULL 10 //out of 0-15
+#define BRIGHTNESS_DIM 3
+//Which output pins?
+#define CLK_PIN 2 //D2, pin 20
+#define CS_PIN 3 //D3, pin 21
+#define DIN_PIN 4 //D4, pin 22
 
 //For all display types:
 #define DISPLAY_SIZE 6 //number of digits in display module: 6 or 4
@@ -147,7 +148,7 @@
 
 //If using no RTC (a fake RTC based on millis()):
 #define RTC_MILLIS
-#define ANTI_DRIFT 0 //msec to add/remove per second - or seconds to add/remove per day divided by 86.4 - to compensate for natural drift. If using wifinina, it really only needs to be good enough for a decent timekeeping display until the next ntp sync. TIP: setting to a superhigh value is helpful for testing! e.g. 9000 will make it run 10x speed
+#define ANTI_DRIFT 1400 //msec to add/remove per second - or seconds to add/remove per day divided by 86.4 - to compensate for natural drift. If using wifinina, it really only needs to be good enough for a decent timekeeping display until the next ntp sync. TIP: setting to a superhigh value is helpful for testing! e.g. 9000 will make it run 10x speed
 
 
 ///// Network /////
