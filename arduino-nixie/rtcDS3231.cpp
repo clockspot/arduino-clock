@@ -6,18 +6,6 @@
 #include <Wire.h> //Arduino - GNU LPGL - for I2C access to DS3231
 #include <DS3231.h> //NorthernWidget - The Unlicense - install in your Arduino IDE
 
-//#include <SPI.h> //Arduino - for SPI access to MAX7219???????
-//#include <WiFiNINA.h> //?????????????
-//#include <WiFiUdp.h> //???????????
-
-//#include "config.h" //constants
-
-//#include "rtcDS3231.h" //definitions for own functions - needed only if calling functions before defined
-
-//should come from the config file
-// #include NETWORK_H //definitions for the network
-// #include DISPLAY_H //definitions for the display (as defined in config)
-
 //RTC objects
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
 RTClib rtc; //an object to access a snapshot of the ds3231 via rtc.now()
