@@ -23,18 +23,16 @@ const byte vPatch = 0;
   #include <Encoder.h> //Paul Stoffregen - install in your Arduino IDE if needed
 #endif
 
-//At the time of this commit, I was working on getting all the persistent-storage stuff mirrored in volatile vars, to protect against EEPROM failure (and to support testing on the 33 IoT before I'd integrated persistent storage there). Below, I've created actual variables (ints and bytes) for each of them, and had begun to flesh out syncOpt() which would map these vars to their index in the opts arrays. But this is tedious and kinda ugly. I've decided to memorialize it in this commit in case I want to come back to it, and then switching to trying to simply add a optsVal[] to hold the volatile values. It'll be memory-wasteful, as everything will have to be an int; but there might be room for that still, and it's a less invasive change since the rest of the code can still key off the loc to get the value.
-
-/*Storage locations for non-volatile clock settings
-Don't change which location is associated with which setting; they should remain permanent to avoid the need for storage initializations after code upgrades; and they are used directly in code.
+/*Variables that are backed by persistent storage, and their corresponding storage locations
+Don't change which storage location is associated with which variable; they should remain permanent to avoid the need for storage initializations after code upgrades (AVR only – on SAMD this can't be avoided); and they are used directly in code.
 Setting values are byte (0 to 255) or int (-32768 to 32767) where high byte is loc and low byte is loc+1.
 In updateDisplay(), special setting formats are deduced from the option max value (max 1439 is a time of day, max 156 is a UTC offset, etc)
 and whether a value is an int or byte is deduced from whether the max value > 255.
-TODO consider having volatile values for all these things, using storage just to recover after a power loss - so any degradation of storage would not be noticeable during running. This can be integrated into a storage module accommodating flash memory in the Arduino IoT*/
+Formerly, we would access the persistent storage directly, but this has changed to having everything in volatile variables that are simply backed by persistent storage for the purpose of recovery after a power cut. This way the day-to-day running is not affected if the EEPROM/flash goes bad.
 
-//Vars that are backed by persistent storage
-//We'll initialize them with default values and replace with vals from storage if applicable and in range
-//These ones are set outside the options menu
+These ones are set outside the options menu. These have dedicated volatile vars and are handled separately in the code.
+We'll initialize them with default values and replace with vals from storage if applicable and in range.*/
+
 int alarmTOD = 420; //loc 0-1 - default: 7am
 //alarmOn //loc 2
 //loc 3 free
@@ -50,72 +48,58 @@ byte fnPreset = 0;
 //loc 9 free
 //dstOn mirrors volarile - loc 15
 
-//These ones are set inside the options menu - ranges defined in array below
-//Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
-int lat = 0; //loc 10-11
-int lon = 0; //loc 12-13
-byte timeOffset = 100; //loc 14 - locale offset from UTC (non-DST) in quarter-hours plus 100 - range is 52 (-12h or -48qh, US Minor Outlying Islands) to 156 (+14h or +56qh, Kiribati)
-byte timeFormat = 2; //loc 16
-byte dateFormat = 1; //loc 17
-byte dateShow = 0; //loc 18 - for displaying date during time
-byte leadZeros = 0; //loc 19 - Leading zeros in time hour, calendar, and chrono/timer
-byte digitFade = 5; //loc 20 - in ms
-byte strike = 0; //loc 21 - skipped when no piezo and relay is switch (start=0)
-byte timeAutoDST = 0; //loc 22
-byte alarmDays = 0; //loc 23
-byte alarmSnooze = 9; //loc 24
-//loc 25 free - formerly timer interval mode
-byte backlight = 1; //loc 26 - skipped when no led pin
-byte night = 0; //loc 27 - nighttime dim/shutoff
-int nightStartTOD = ; //loc 28-29
-int nightEndTOD = ; //loc 30-31
-byte away = ; //loc 32 - shutoff when away from home/work
-byte workStartWeekday = ; //loc 33
-byte workEndWeekday = ; //loc 34
-int workStartTOD = ; //loc 35-36
-int workEndTOD = ; //loc 37-38
-byte alarmPitch = ; //loc 39 - skipped when no piezo
-byte timerPitch = ; //loc 40 - skipped when no piezo
-byte strikePitch = ; //loc 41 - skipped when no piezo
-byte alarmSignal = ; //loc 42 - 0=beeper, 1=relay - skipped when no relay (start=0) or no piezo (start=0)
-byte timerSignal = ; //loc 43 - skipped when no relay (start=0) or no piezo (start=1)
-byte strikeSignal = ; //loc 44 - skipped when no pulse relay (start=0) or no piezo (start=1)
-byte tempFormat = ; //loc 45 - skipped when !ENABLE_TEMP_FN TODO also useful for weather display
-byte cleanFreq = ; //loc 46 - anti-cathode poisoning routine - nixies only
-byte alarmPattern = ; //loc 47 - Alarm beeper pattern - skipped when no piezo
-byte timerPattern = ; //loc 48 - Timer beeper pattern - skipped when no piezo
-byte strikePattern = ; //loc 49 - Strike beeper pattern - skipped when no piezo
-byte alarmFibonacci = ; //loc 50
+/*These ones are set inside the options menu (defaults defined in arrays below).
+Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
+  10-11 Latitude
+  12-13 Longitude
+  14 UTC offset in quarter-hours plus 100 - range is 52 (-12h or -48qh, US Minor Outlying Islands) to 156 (+14h or +56qh, Kiribati)
+  16 Time format
+  17 Date format 
+  18 Display date during time
+  19 Leading zeros in time hour, calendar, and chrono/timer
+  20 Digit fade duration
+  21 Strike - skipped when no piezo and relay is switch (start=0)
+  22 Auto DST
+  23 Alarm days
+  24 Alarm snooze
+  25 [free] - formerly Timer interval mode - skipped when no piezo and relay is switch (start=0)
+  26 LED circuit behavior - skipped when no led pin
+  27 Night shutoff
+  28-29 Night start, mins
+  30-31 Night end, mins
+  32 Away shutoff
+  33 First day of workweek
+  34 Last day of workweek
+  35-36 Work starts at, mins
+  37-38 Work ends at, mins
+  39 Alarm beeper pitch - skipped when no piezo
+  40 Timer beeper pitch - skipped when no piezo
+  41 Strike beeper pitch - skipped when no piezo
+  42 Alarm signal, 0=beeper, 1=relay - skipped when no relay (start=0) or no piezo (start=0)
+  43 Timer signal - skipped when no relay (start=0) or no piezo (start=1)
+  44 Strike signal - skipped when no pulse relay (start=0) or no piezo (start=1)
+  45 Temperature format - skipped when !ENABLE_TEMP_FN TODO also useful for weather display
+  46 Anti-cathode poisoning
+  47 Alarm beeper pattern - skipped when no piezo
+  48 Timer beeper pattern - skipped when no piezo
+  49 Strike beeper pattern - skipped when no piezo
+  50 Alarm Fibonacci mode
+*/
 
-//Options menu numbers/order (displayed in UI and readme), locs (maps with above), and min/max values.
+//Options menu numbers (displayed in UI and readme), locs, and default/min/max/current values.
+//Option numbers/order can be changed (though try to avoid for user convenience);
 //but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
-//The defaults were moving up into the above
-//                       General                    Alarm              Timer        Strike       Shutoff                        Geo
+//The current values array is wasteful, since they have to all be ints here; but there should be room. We will initialize them at startup.
+//                       General                    Alarm              Timer        Strike       Night and away shutoff           Geo
 //opt index              0  1  2  3  4  5  6  7  8   9 10 11 12 13 14  15 16 17  18 19 20 21  22   23   24 25 26 27   28   29     30    31  32
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13,14,15, 21,22,23, 30,31,32,33, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52};
 const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,47,24,50, 43,40,48, 21,44,41,49, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14};
-const  int optsDef[] = {  ,  ,  ,  ,  ,  ,  , 0, 0,   , 0,76, 4,  , 0,  0,76, 2,   , 0,68, 5,   ,1320, 360, 0, 1, 5, 480,1080,      ,     ,   };
+const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,76, 4, 9, 0,  0,76, 2,  0, 0,68, 5,  0,1320, 360, 0, 1, 5, 480,1080,     0,    0,100};
 const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0, 0, 0,  0,49, 0,  0, 0,49, 0,  0,   0,   0, 0, 0, 0,   0,   0,  -900,-1800, 52};
 const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88, 5,60, 1,  1,88, 5,  4, 1,88, 5,  2,1439,1439, 2, 6, 6,1439,1439,   900, 1800,156};
+       int optsVal[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0,  0, 0, 0,  0, 0, 0, 0,  0,   0,   0, 0, 0, 0,   0,   0,     0,    0,  0};
 
-int syncOpt(byte i, bool set, int valNew){
-  //These are a possible way to map storage-backed vars to their corresponding options menu pos. I don't like this.
-  //Given an index in the opts arrays, it identifies the corresponding variable, then:
-  //1) if set==true, sets the variable to val;
-  //2) sets the storage to the variable value;
-  //3) returns the variable value.
-  switch(i){
-    case 0: return timeFormat = setOpt(i, set, timeFormat, valNew);
-    case 1: return dateFormat = setOpt(i, set, dateFormat, valNew);
-    //.....
-  }
-}
-int setOpt(byte i, bool set, int valNow, int valNew){
-  int valRet = valNow;
-  if(set && valNew>=optsMin[i] && valNew<=optsMax[i]) valRet = valNew; //new val is in range
-  //TODO setStorage()
-  return valRet;
-}
+//The rest of these volatile variables are not backed by persistent storage.
 
 // Hardware inputs and value setting
 byte btnCur = 0; //Momentary button currently in use - only one allowed at a time
