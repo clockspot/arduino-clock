@@ -58,5 +58,7 @@ byte rtcGetSecond(){ return tod.second(); }
 
 byte rtcGetTemp(){ return ds3231.getTemperature()*100; }
 
+void millisApplyDrift(); //where does this need to go
+
 #endif
 #endif

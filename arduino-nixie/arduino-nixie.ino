@@ -15,15 +15,6 @@ const byte vMinor = 9;
 const byte vPatch = 0;
 
 ////////// Other includes, global consts, and vars //////////
-//These cpp files contain code that is conditionally included
-//based on the available hardware and settings in the config file.
-//TODO revisit - This is probably not the right way to do this –
-//these are being compiled (or not) as part of this file,
-//rather than independently, with header files included here –
-//but it seems to work, as long as they don't reference later functions.
-//All variants of each type (disp, rtc, etc) should define the same functions.
-#include "dispMAX7219.cpp" //placeholder
-#include "rtcDS3231.cpp"
 
 #include <EEPROM.h> //Arduino - GNU LPGL
 #if ENABLE_DATE_RISESET
@@ -158,15 +149,26 @@ const byte millisCorrectionInterval = 30; //used to calibrate millis() to RTC fo
 unsigned long millisAtLastCheck = 0;
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night/away shutoff) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
-byte cleanRemain = 0; //anti-cathode-poisoning clean timeout counter, increments at CLEAN_SPEED ms (see loop()). Start at 11 to run at clock startup
-int8_t scrollRemain = 0; //"frames" of scroll – signed byte - 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change.
+
 byte versionRemain = 3; //display version at start
+
+//These cpp files contain code that is conditionally included
+//based on the available hardware and settings in the config file.
+//TODO revisit - This is probably not the right way to do this –
+//these are being compiled (or not) as part of this file,
+//rather than independently, with header files included here –
+//but it seems to work, as long as they don't reference later functions.
+//All variants of each type (disp, rtc, etc) should define the same functions.
+#include "dispNixie.cpp"
+#include "dispMAX7219.cpp" //placeholder
+#include "rtcDS3231.cpp"
 
 
 ////////// Main code control //////////
 
 void setup(){
   Serial.begin(9600);
+  //while(!Serial); //TODO 33 IoT only
   rtcInit();
   initInputs();
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
@@ -204,12 +206,13 @@ void setup(){
   dstOn = (readEEPROM(15,false)>0); //set last known DST state per EEPROM backup
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   findFnAndPageNumbers(); //initial values
+  initDisplay();
   initOutputs(); //depends on some EEPROM settings
 }
 
 void loop(){
   //Every loop cycle, check the RTC and inputs (previously polled, but works fine without and less flicker)
-  checkEffects(false); //cleaning and scrolling display effects - not handled by checkRTC since they have their own timing
+  //checkEffects(false); //cleaning and scrolling display effects - not handled by checkRTC since they have their own timing
   checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
   millisApplyDrift();
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
@@ -341,25 +344,27 @@ void ctrlEvt(byte ctrl, byte evt){
     btnStop();
     return;
   }
-  //If the clean is going, any press should cancel it, with a display update
-  if(cleanRemain>0 && evt==1){
-    cleanRemain = 0;
-    btnStop();
-    updateDisplay();
-    return;
-  }
-  //If a scroll is waiting to scroll out, cancel it, and let the button event do what it will
-  if(scrollRemain==-128 && evt==1){
-    scrollRemain = 0;
-  }
-  //If a scroll is going, fast-forward to end of scroll in/out - see also checkRTC
-  else if(scrollRemain!=0 && evt==1){
-    btnStop();
-    if(scrollRemain>0) scrollRemain = 1;
-    else scrollRemain = -1;
-    checkEffects(true);
-    return;
-  }
+  // //TODO NIXIE
+  // //If the clean is going, any press should cancel it, with a display update
+  // if(cleanRemain>0 && evt==1){
+  //   cleanRemain = 0;
+  //   btnStop();
+  //   updateDisplay();
+  //   return;
+  // }
+  // //TODO NIXIE??
+  // //If a scroll is waiting to scroll out, cancel it, and let the button event do what it will
+  // if(scrollRemain==-128 && evt==1){
+  //   scrollRemain = 0;
+  // }
+  // //If a scroll is going, fast-forward to end of scroll in/out - see also checkRTC
+  // else if(scrollRemain!=0 && evt==1){
+  //   btnStop();
+  //   if(scrollRemain>0) scrollRemain = 1;
+  //   else scrollRemain = -1;
+  //   checkEffects(true);
+  //   return;
+  // }
   //If the version display is going, any press should cancel it, with a display update
   if(versionRemain>0 && evt==1){
     versionRemain = 0;
@@ -873,11 +878,11 @@ void checkRTC(bool force){
   }
   //Paged-display function timeout //TODO change fnIsDate to consts? //TODO timeoutPageFn var
   else if(fn==fnIsDate && (unsigned long)(now-inputLast)>=FN_PAGE_TIMEOUT*1000) { //3sec per date page
-    //If a scroll in is going, fast-forward to end - see also ctrlEvt
-    if(scrollRemain>0) {
-      scrollRemain = 1;
-      checkEffects(true);
-    }
+    // //If a scroll in is going, fast-forward to end - see also ctrlEvt
+    // if(scrollRemain>0) {
+    //   scrollRemain = 1;
+    //   checkEffects(true);
+    // }
     //Here we just have to increment the page and decide when to reset. updateDisplay() will do the rendering
     fnPg++; inputLast+=(FN_PAGE_TIMEOUT*1000); //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
     while(fnPg<fnDatePages && fnPg<200 && ( //skip inapplicable date pages. The 200 is an extra failsafe
@@ -954,29 +959,36 @@ void checkRTC(bool force){
       } //end alarm trigger
     }
     //At bottom of minute, see if we should show the date
-    if(rtcGetSecond()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0 && cleanRemain==0 && scrollRemain==0 && versionRemain==0) {
+    if(rtcGetSecond()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0 && versionRemain==0) { /*cleanRemain==0 && scrollRemain==0 && */ 
       if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = now; inputLastTODMins = rtcGetHour()*60+rtcGetMinute(); fnPg = 254; updateDisplay(); }
-      if(readEEPROM(18,false)==3) { startScroll(); }
+      //if(readEEPROM(18,false)==3) { startScroll(); }
     }
     //Anti-poisoning routine triggering: start when applicable, and not at night, during setting, or after a button press (unoff)
     if(rtcGetSecond()<2 && displayDim==2 && fnSetPg==0 && unoffRemain==0) {
-      switch(readEEPROM(46,false)) { //how often should the routine run?
-        case 0: //every day
-          if(readEEPROM(27,false)>0? //is night shutoff enabled?
-            rtcGetSecond()==0 && rtcGetHour()*60+rtcGetMinute()==readEEPROM(28,true): //if so, at start of night shutoff (at second :00 before dim is in effect)
-            rtcGetSecond()==1 && rtcGetHour()*60+rtcGetMinute()==0) //if not, at 00:00:01
-              cleanRemain = 151; //run routine for fifteen cycles
-          break;
-        case 1: //every hour
-          if(rtcGetSecond()==1 && rtcGetMinute()==0) //at min/sec :00:01
-            cleanRemain = 101; //run routine for ten cycles
-          break;
-        case 2: //every minute
-          if(rtcGetSecond()==1) //at second :01
-            cleanRemain = 21; //run routine for two cycles
-          break;
-        default: break;
-      }
+      //temporarily we'll recalculate the sun stuff every day
+      if(readEEPROM(27,false)>0? //is night shutoff enabled?
+        rtcGetSecond()==0 && rtcGetHour()*60+rtcGetMinute()==readEEPROM(28,true): //if so, at start of night shutoff (at second :00 before dim is in effect)
+        rtcGetSecond()==1 && rtcGetHour()*60+rtcGetMinute()==0) //if not, at 00:00:01
+          calcSun(rtcGetYear(),rtcGetMonth(),rtcGetDate()); //take this opportunity to perform a calculation that blanks the display for a bit
+      // TODO the below will need to change cleanRemain=x to displayClean(x)
+      
+      // switch(readEEPROM(46,false)) { //how often should the routine run?
+      //   case 0: //every day
+      //     if(readEEPROM(27,false)>0? //is night shutoff enabled?
+      //       rtcGetSecond()==0 && rtcGetHour()*60+rtcGetMinute()==readEEPROM(28,true): //if so, at start of night shutoff (at second :00 before dim is in effect)
+      //       rtcGetSecond()==1 && rtcGetHour()*60+rtcGetMinute()==0) //if not, at 00:00:01
+      //         cleanRemain = 151; //run routine for fifteen cycles
+      //     break;
+      //   case 1: //every hour
+      //     if(rtcGetSecond()==1 && rtcGetMinute()==0) //at min/sec :00:01
+      //       cleanRemain = 101; //run routine for ten cycles
+      //     break;
+      //   case 2: //every minute
+      //     if(rtcGetSecond()==1) //at second :01
+      //       cleanRemain = 21; //run routine for two cycles
+      //     break;
+      //   default: break;
+      // }
     }
     
     //Strikes - only if fn=clock, not setting, not signaling/snoozing, not night/away. Setting 21 will be off if signal type is no good
@@ -1001,7 +1013,7 @@ void checkRTC(bool force){
     //Finally, update the display, whether natural tick or not, as long as we're not setting or on a scrolled display (unless forced eg. fn change)
     //This also determines night/away shutoff, which is why strikes will happen if we go into off at top of hour, and not when we come into on at the top of the hour TODO find a way to fix this
     //Also skip updating the display if this is date and not being forced, since its pages take some calculating that cause it to flicker
-    if(fnSetPg==0 && (scrollRemain==0 || force) && !(fn==fnIsDate && !force)) updateDisplay();
+    if(fnSetPg==0 && (true || force) && !(fn==fnIsDate && !force)) updateDisplay(); /*scrollRemain==0 ||*/
     
     rtcSecLast = rtcGetSecond();
     
@@ -1318,82 +1330,53 @@ void timerSwitchSleepRelay(bool on){
 }
 
 
-////////// Display data formatting //////////
-
-byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
-byte displayLast[6] = {11,11,11,11,11,11}; //for noticing changes to displayNext and fading the display to it
-byte scrollDisplay[6] = {15,15,15,15,15,15}; //For animating a value into displayNext from right, and out to left
-
-unsigned long pollCleanLast = 0; //every CLEAN_SPEED ms
-unsigned long pollScrollLast = 0; //every SCROLL_SPEED ms
-void checkEffects(bool force){
-  //control the cleaning/scrolling effects - similar to checkRTC but it has its own timings
-  unsigned long now = millis();
-  //If we're running a tube cleaning, advance it every CLEAN_SPEED ms.
-  if(cleanRemain && (unsigned long)(now-pollCleanLast)>=CLEAN_SPEED) { //account for rollover
-    pollCleanLast=now;
-    cleanRemain--;
-    if(cleanRemain<1) calcSun(rtcGetYear(),rtcGetMonth(),rtcGetDate()); //take this opportunity to perform a calculation that blanks the display for a bit
-    updateDisplay();
-  }
-  //If we're scrolling an animation, advance it every SCROLL_SPEED ms.
-  else if(scrollRemain!=0 && scrollRemain!=-128 && ((unsigned long)(now-pollScrollLast)>=SCROLL_SPEED || force)) {
-    pollScrollLast=now;
-    if(scrollRemain<0) {
-      scrollRemain++; updateDisplay();
-    } else {
-      scrollRemain--; updateDisplay();
-      if(scrollRemain==0) scrollRemain = -128;
-    }
-  }
-}
-
 void updateDisplay(){
   //Run as needed to update display when the value being shown on it has changed
   //This formats the new value and puts it in displayNext[] for cycleDisplay() to pick up
   
-  if(scrollRemain==-128) {  //If the current display is flagged to be scrolled out, do it. This is kind of the counterpart to startScroll()
-    for(byte i=0; i<6; i++) scrollDisplay[i] = displayNext[i]; //cache the current value in scrollDisplay[] just in case it changed
-    scrollRemain = (0-DISPLAY_SIZE)-1;
-  }
-  
-  if(cleanRemain) { //cleaning tubes
-    displayDim = 2;
-    byte digit = 10-((cleanRemain-1)%10); //(11-cleanRemain)%10;
-    editDisplay(digit,0,0,true,false);
-    editDisplay(digit,1,1,true,false);
-    editDisplay(digit,2,2,true,false);
-    editDisplay(digit,3,3,true,false);
-    editDisplay(digit,4,4,true,false);
-    editDisplay(digit,5,5,true,false);
-  }
-  /*
-  Scrolling "frames" (ex. on 4-tube clock):
-  To use this, call editDisplay() as usual, then startScroll()
-  4:              [       ]1 2 3 4      tube[n] (0-index) is source[n-scrollRemain] unless that index < 0, then blank
-  3:              [      1]2 3 4
-  2:              [    1 2]3 4
-  1:              [  1 2 3]4
-  0/-128:         [1 2 3 4]
-  -4:            1[2 3 4  ]      tube[n] is source[n+DISPLAY_SIZE+scrollRemain+1] unless that index >= DISPLAY_SIZE, then blank
-  -3:          1 2[3 4    ]
-  -2:        1 2 3[4      ]
-  -1:      1 2 3 4[       ]
-  0: (scroll functions are skipped to display whatever's applicable)
-  */
-  else if(scrollRemain>0) { //scrolling display: value coming in - these don't use editDisplay as we're going array to array
-    for(byte i=0; i<DISPLAY_SIZE; i++) {
-      int8_t isrc = i-scrollRemain; //needs to support negative
-      displayNext[i] = (isrc<0? 15: scrollDisplay[isrc]); //allow to fade
-    }
-  }
-  else if(scrollRemain<0 && scrollRemain!=-128) { //scrolling display: value going out
-    for(byte i=0; i<DISPLAY_SIZE; i++) {
-      byte isrc = i+DISPLAY_SIZE+scrollRemain+1;
-      displayNext[i] = (isrc>=DISPLAY_SIZE? 15: scrollDisplay[isrc]); //allow to fade
-    }
-  }
-  else if(versionRemain>0) {
+  // if(scrollRemain==-128) {  //If the current display is flagged to be scrolled out, do it. This is kind of the counterpart to startScroll()
+  //   for(byte i=0; i<6; i++) scrollDisplay[i] = displayNext[i]; //cache the current value in scrollDisplay[] just in case it changed
+  //   scrollRemain = (0-DISPLAY_SIZE)-1;
+  // }
+  //
+  // if(cleanRemain) { //cleaning tubes
+  //   displayDim = 2;
+  //   byte digit = 10-((cleanRemain-1)%10); //(11-cleanRemain)%10;
+  //   editDisplay(digit,0,0,true,false);
+  //   editDisplay(digit,1,1,true,false);
+  //   editDisplay(digit,2,2,true,false);
+  //   editDisplay(digit,3,3,true,false);
+  //   editDisplay(digit,4,4,true,false);
+  //   editDisplay(digit,5,5,true,false);
+  // }
+  // /*
+  // Scrolling "frames" (ex. on 4-tube clock):
+  // To use this, call editDisplay() as usual, then startScroll()
+  // 4:              [       ]1 2 3 4      tube[n] (0-index) is source[n-scrollRemain] unless that index < 0, then blank
+  // 3:              [      1]2 3 4
+  // 2:              [    1 2]3 4
+  // 1:              [  1 2 3]4
+  // 0/-128:         [1 2 3 4]
+  // -4:            1[2 3 4  ]      tube[n] is source[n+DISPLAY_SIZE+scrollRemain+1] unless that index >= DISPLAY_SIZE, then blank
+  // -3:          1 2[3 4    ]
+  // -2:        1 2 3[4      ]
+  // -1:      1 2 3 4[       ]
+  // 0: (scroll functions are skipped to display whatever's applicable)
+  // */
+  // else if(scrollRemain>0) { //scrolling display: value coming in - these don't use editDisplay as we're going array to array
+  //   for(byte i=0; i<DISPLAY_SIZE; i++) {
+  //     int8_t isrc = i-scrollRemain; //needs to support negative
+  //     displayNext[i] = (isrc<0? 15: scrollDisplay[isrc]); //allow to fade
+  //   }
+  // }
+  // else if(scrollRemain<0 && scrollRemain!=-128) { //scrolling display: value going out
+  //   for(byte i=0; i<DISPLAY_SIZE; i++) {
+  //     byte isrc = i+DISPLAY_SIZE+scrollRemain+1;
+  //     displayNext[i] = (isrc>=DISPLAY_SIZE? 15: scrollDisplay[isrc]); //allow to fade
+  //   }
+  // } //todo move cleanRemain, scrollRemain to dispNixie
+  // else
+  if(versionRemain>0) {
     editDisplay(vMajor, 0, 1, false, false);
     editDisplay(vMinor, 2, 3, false, false);
     editDisplay(vPatch, 4, 5, false, false);
@@ -1674,57 +1657,12 @@ void displayWeather(byte which){
   //IoT: Show the weather for the current period (after last sun event): high (day) or low (night) and precip info//IoT: Show the weather for the period after the next sun event
 }
 
-void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
-  //Splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
-  //If there are blank places (on the left of a non-leading-zero number), uses value 15 to blank tube
-  //If number has more places than posEnd-posStart, the higher places are truncated off (e.g. 10015 on 4 tubes --> 0015)
-  word place;
-  for(byte i=0; i<=posEnd-posStart; i++){
-    switch(i){ //because int(pow(10,1))==10 but int(pow(10,2))==99...
-      case 0: place=1; break;
-      case 1: place=10; break;
-      case 2: place=100; break;
-      case 3: place=1000; break;
-      case 4: place=10000; break;
-      case 5: place=100000; break;
-      default: break;
-    }
-    displayNext[posEnd-i] = (i==0&&n==0 ? 0 : (n>=place ? (n/place)%10 : (leadingZeros?0:15)));
-    if(!fade) displayLast[posEnd-i] = displayNext[posEnd-i]; //cycleDisplay will be none the wiser
-  }
-} //end editDisplay()
-void blankDisplay(byte posStart, byte posEnd, byte fade){
-  for(byte i=posStart; i<=posEnd; i++) { displayNext[i]=15; if(!fade) displayLast[i]=15; }
-} //end blankDisplay();
-void startScroll() { //To scroll a value in, call this after calling editDisplay as normal
-  for(byte i=0; i<6; i++) scrollDisplay[i] = displayNext[i]; //cache the incoming value in scrollDisplay[]
-  blankDisplay(0,5,true);
-  scrollRemain = DISPLAY_SIZE+1; //this will trigger updateDisplay() to start scrolling. DISPLAY_SIZE+1 adds blank frame at front
-} //end startScroll()
+
 
 
 ////////// Hardware outputs //////////
 
-//This clock is 2x3 multiplexed: two tubes powered at a time.
-//The anode channel determines which two tubes are powered,
-//and the two SN74141 cathode driver chips determine which digits are lit.
-//4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
-byte binOutA[4] = {OUT_A1,OUT_A2,OUT_A3,OUT_A4};
-byte binOutB[4] = {OUT_B1,OUT_B2,OUT_B3,OUT_B4};
-//3 pins out to anode channel switches
-byte anodes[3] = {ANODE_1,ANODE_2,ANODE_3};
-
-const int fadeDur = 5; //ms - each multiplexed pair of digits appears for this amount of time per cycle
-const int dimDur = 4; //ms - portion of fadeDur that is left dark during dim times
-int fadeNextDur = 0; //ms - during fade, incoming digit's portion of fadeDur
-int fadeLastDur = 0; //ms - during fade, outgoing digit's portion of fadeDur
-unsigned long fadeStartLast = 0; //millis - when the last digit fade was started
-unsigned long setStartLast = 0; //to control flashing during start
-unsigned long displayBlinkStart = 0; //when nonzero, display should briefly blank
-
 void initOutputs() {
-  for(byte i=0; i<4; i++) { pinMode(binOutA[i],OUTPUT); pinMode(binOutB[i],OUTPUT); }
-  for(byte i=0; i<3; i++) { pinMode(anodes[i],OUTPUT); }
   if(PIEZO_PIN>=0) pinMode(PIEZO_PIN, OUTPUT);
   if(RELAY_PIN>=0) {
     pinMode(RELAY_PIN, OUTPUT); digitalWrite(RELAY_PIN, HIGH); //LOW = device on
@@ -1733,112 +1671,6 @@ void initOutputs() {
   if(LED_PIN>=0) pinMode(LED_PIN, OUTPUT);
   updateLEDs(); //set to initial value
 }
-
-void displayBlink(){
-  displayBlinkStart = millis();
-}
-void cycleDisplay(){
-  unsigned long now = millis();
-  
-  if(displayBlinkStart){
-    if((unsigned long)(now-displayBlinkStart)<250){ delay(fadeDur*3); return; }
-    // The delay is to make cycleDisplay take up the same amount of loop time it usually does. Not sure if necessary.
-    else displayBlinkStart = 0;
-  }
-  
-  //Other display code decides whether we should dim per function or time of day
-  bool dim = (displayDim==1?1:0);
-  //But if we're setting, decide here to dim for every other 500ms since we started setting
-  if(fnSetPg>0) {
-    if(setStartLast==0) setStartLast = now;
-    dim = 1-(((unsigned long)(now-setStartLast)/500)%2);
-  } else {
-    if(setStartLast>0) setStartLast=0;
-  }
-  //TODO if we want to flash certain elements, we might do it similarly here
-  
-  fadeLastDur = fadeDur-(dim?dimDur:0); //by default, last digit displays for entire fadeDur minus dim time
-  
-  if(readEEPROM(20,false)==0 || dim) { //fading disabled or dim
-    if(fadeStartLast) fadeStartLast = 0; //cancel any fade currently going - dim state doesn't have enough steps to fade well
-    for(byte i=0; i<6; i++) if(displayNext[i] != displayLast[i]) displayLast[i] = displayNext[i];
-  }
-  else { //fading enabled
-    if(fadeStartLast==0) { //not fading - time to fade?
-      for(byte i=0; i<6; i++) if(displayNext[i] != displayLast[i]) { fadeStartLast = now; break; }
-    }
-    if(fadeStartLast!=0) { //currently fading
-      //let the next digit steal some display time from the last digit
-      //ex: if fade time (from EEPROM) is 20ms, and fadeDur (next+last) is 6ms:
-      // at  0ms, next = (( 0*(6-1))/20)+1 = 1; last = (6-nextDur) = 5;
-      // at 10ms, next = ((10*(6-1))/20)+1 = 3; last = (6-nextDur) = 3; ...
-      // at 20ms, next = ((20*(6-1))/20)+1 = 6; next = total, so fade is over!
-      //TODO facilitate longer fades by writing a tweening function that smooths the frames, i.e. 111121222 - or use delayMicroseconds as below
-      //TODO does this have more problems with the millis rollover issue?
-      fadeNextDur = (((unsigned long)(now-fadeStartLast)*(fadeDur-1))/(readEEPROM(20,false)*10))+1;
-      if(fadeNextDur >= fadeLastDur) { //fade is over
-        fadeStartLast = 0;
-        fadeNextDur = 0;
-        fadeLastDur = fadeDur;
-        for(byte j=0; j<6; j++) displayLast[j] = displayNext[j];
-      } //end fade is over
-      else { //shorten last digit display duration by subtracting next display duration from it
-        fadeLastDur = fadeLastDur - fadeNextDur;
-      }
-    } //end curently fading
-  } //end fading enabled
-  
-  //TODO consider using delayMicroseconds() which, with its tighter resolution, may give better control over fades and dim levels
-  if(displayDim>0) { //if other display code says to shut off entirely, skip this part
-    //Anode channel 0: tubes #2 (min x10) and #5 (sec x1)
-    setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
-    digitalWrite(anodes[0], HIGH); //Turn on tubes
-    delay(fadeLastDur);//-(dim?dimDur:0)); //Display for fade-out cycles
-    setCathodes(displayNext[2],displayNext[5]); //Switch cathodes to new digits
-    delay(fadeNextDur);//-(dim?dimDur:0)); //Display for fade-in cycles
-    digitalWrite(anodes[0], LOW); //Turn off tubes
-  
-    if(dim) delay(dimDur);
-  
-    //Anode channel 1: tubes #4 (sec x10) and #1 (hour x1)
-    setCathodes(displayLast[4],displayLast[1]);
-    digitalWrite(anodes[1], HIGH);
-    delay(fadeLastDur);
-    setCathodes(displayNext[4],displayNext[1]);
-    delay(fadeNextDur);
-    digitalWrite(anodes[1], LOW);
-  
-    if(dim) delay(dimDur);
-  
-    //Anode channel 2: tubes #0 (hour x10) and #3 (min x1)
-    setCathodes(displayLast[0],displayLast[3]);
-    digitalWrite(anodes[2], HIGH);
-    delay(fadeLastDur);
-    setCathodes(displayNext[0],displayNext[3]);
-    delay(fadeNextDur);
-    digitalWrite(anodes[2], LOW);
-  
-    if(dim) delay(dimDur);
-  } //end if displayDim>0
-  //TODO why does it sometimes flicker while in the setting mode
-} //end cycleDisplay()
-
-void setCathodes(byte decValA, byte decValB){
-  bool binVal[4]; //4-bit binary number with values [1,2,4,8]
-  decToBin(binVal,decValA); //have binary value of decVal set into binVal
-  for(byte i=0; i<4; i++) digitalWrite(binOutA[i],binVal[i]); //set bin inputs of SN74141
-  decToBin(binVal,decValB);
-  for(byte i=0; i<4; i++) digitalWrite(binOutB[i],binVal[i]); //set bin inputs of SN74141
-} //end setCathodes()
-
-void decToBin(bool binVal[], byte i){
-  //binVal is a reference (modify in place) of a binary number bool[4] with values [1,2,4,8]
-  if(i<0 || i>15) i=15; //default value, turns tubes off
-  binVal[3] = int(i/8)%2;
-  binVal[2] = int(i/4)%2;
-  binVal[1] = int(i/2)%2;
-  binVal[0] = i%2;
-} //end decToBin()
 
 //Signals are like songs played on the beeper or relay, when the alarm/timer runs out or as an indicator.
 //Like songs, a signal is made up of measures (usually 1sec each) tracked by the signalRemain counter.
