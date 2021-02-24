@@ -152,6 +152,14 @@ byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 
 byte versionRemain = 3; //display version at start
 
+//Utility functions that are called by both the main code and the below includes
+//Placed here so I can avoid making header files for the moment
+byte daysInMonth(word y, byte m){
+  if(m==2) return (y%4==0 && (y%100!=0 || y%400==0) ? 29 : 28);
+  //https://cmcenroe.me/2014/12/05/days-in-month-formula.html
+  else return (28 + ((m + (m/8)) % 2) + (2 % m) + (2 * (1/m)));
+}
+
 //These cpp files contain code that is conditionally included
 //based on the available hardware and settings in the config file.
 //TODO revisit - This is probably not the right way to do this –
@@ -159,9 +167,10 @@ byte versionRemain = 3; //display version at start
 //rather than independently, with header files included here –
 //but it seems to work, as long as they don't reference later functions.
 //All variants of each type (disp, rtc, etc) should define the same functions.
-#include "dispNixie.cpp"
-#include "dispMAX7219.cpp" //placeholder
-#include "rtcDS3231.cpp"
+#include "dispNixie.cpp" //for a SN74141-multiplexed nixie array
+#include "dispMAX7219.cpp" //for a SPI MAX7219 8x8 LED array
+#include "rtcDS3231.cpp" //for an I2C DS3231 RTC module
+#include "rtcMillis.cpp" //for no RTC
 
 
 ////////// Main code control //////////
@@ -1103,11 +1112,7 @@ byte nthSunday(int y, byte m, byte nth){
   if(nth<0) return (dayOfWeek(y,m,1)==0 && daysInMonth(y,m)>28? 29: nthSunday(y,m,1)+21+((nth+1)*7));
   return 0;
 }
-byte daysInMonth(word y, byte m){
-  if(m==2) return (y%4==0 && (y%100!=0 || y%400==0) ? 29 : 28);
-  //https://cmcenroe.me/2014/12/05/days-in-month-formula.html
-  else return (28 + ((m + (m/8)) % 2) + (2 % m) + (2 * (1/m)));
-}
+//daysInMonth() moved to top
 int daysInYear(word y){
   return 337 + daysInMonth(y,2);
 }

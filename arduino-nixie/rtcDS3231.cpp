@@ -22,7 +22,7 @@
 DS3231 ds3231; //an object to access the ds3231 specifically (temp, etc)
 RTClib rtc; //an object to access a snapshot of the ds3231 via rtc.now()
 DateTime tod; //stores the rtc.now() snapshot for several functions to use
-byte toddow; //stores the day of week (read separately from ds3231 dow counter)
+byte todW; //stores the day of week (read separately from ds3231 dow counter)
 
 void rtcInit(){
   Wire.begin();
@@ -45,20 +45,18 @@ void rtcSetHour(byte h){ //used for DST forward/backward
 void rtcTakeSnap(){
   //rtcGet functions pull from this snapshot - to ensure that code works off the same timestamp
   tod = rtc.now();
-  toddow = ds3231.getDoW()-1; //ds3231 weekday is 1-index
+  todW = ds3231.getDoW()-1; //ds3231 weekday is 1-index
 }
 int  rtcGetYear(){ return tod.year(); }
 byte rtcGetMonth(){ return tod.month(); }
 byte rtcGetDate(){ return tod.day(); }
-byte rtcGetWeekday(){ return toddow; }
+byte rtcGetWeekday(){ return todW; }
 int  rtcGetTOD(){ return tod.hour()*60+tod.minute(); }
 byte rtcGetHour(){ return tod.hour(); }
 byte rtcGetMinute(){ return tod.minute(); }
 byte rtcGetSecond(){ return tod.second(); }
 
 byte rtcGetTemp(){ return ds3231.getTemperature()*100; }
-
-void millisApplyDrift(); //where does this need to go
 
 #endif
 #endif
