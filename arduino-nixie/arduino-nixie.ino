@@ -23,32 +23,29 @@ const byte vPatch = 0;
   #include <Encoder.h> //Paul Stoffregen - install in your Arduino IDE if needed
 #endif
 
-/*Variables that are backed by persistent storage, and their corresponding storage locations
-Don't change which storage location is associated with which variable; they should remain permanent to avoid the need for storage initializations after code upgrades (AVR only – on SAMD this can't be avoided); and they are used directly in code.
-Setting values are byte (0 to 255) or int (-32768 to 32767) where high byte is loc and low byte is loc+1.
+/*Some variables are backed by persistent storage. These are referred to by their location in that storage. See storage.cpp.
+Values for these are bytes (0 to 255) or ints (-32768 to 32767) where high byte is loc and low byte is loc+1.
 In updateDisplay(), special setting formats are deduced from the option max value (max 1439 is a time of day, max 156 is a UTC offset, etc)
 and whether a value is an int or byte is deduced from whether the max value > 255.
-Formerly, we would access the persistent storage directly, but this has changed to having everything in volatile variables that are simply backed by persistent storage for the purpose of recovery after a power cut. This way the day-to-day running is not affected if the EEPROM/flash goes bad.
+If adding more variables, be sure to increase STORAGE_SPACE in storage.cpp (and use the ones marked [free] below first).
 
-These ones are set outside the options menu. These have dedicated volatile vars and are handled separately in the code.
-We'll initialize them with default values and replace with vals from storage if applicable and in range.*/
+These ones are set outside the options menu (defaults defined in initEEPROM()):
+  0-1 Alarm time, mins
+  2 Alarm on
+  3 [free]
+  4 Day count direction
+  5 Day count month
+  6 Day count date
+  7 Function preset (done by Alt when not power-switching)
+  8 Functions/pages enabled (bitmask, dynamic) TODO
+    const unsigned int FN_TIMER = 1<<0; //1
+    const unsigned int FN_DAYCOUNT = 1<<1; //2
+    const unsigned int FN_SUN = 1<<2; //4
+    const unsigned int FN_WEATHER = 1<<3; //8
+  9 [free]
+  15 DST on
 
-int alarmTOD = 420; //loc 0-1 - default: 7am
-//alarmOn //loc 2
-//loc 3 free
-byte dayCountDir = 0; //loc 4 - default: count up...
-byte dayCountMonth = 12; //loc 5 - default: ...from December...
-byte dayCountDate = 31; //loc 6 - default: ...31st. (This gives the day of the year.)
-byte fnPreset = 0;
-//loc 8 Functions/pages enabled (bitmask, dynamic) TODO
-    // const unsigned int FN_TIMER = 1<<0; //1
-    // const unsigned int FN_DAYCOUNT = 1<<1; //2
-    // const unsigned int FN_SUN = 1<<2; //4
-    // const unsigned int FN_WEATHER = 1<<3; //8
-//loc 9 free
-//dstOn mirrors volarile - loc 15
-
-/*These ones are set inside the options menu (defaults defined in arrays below).
+These ones are set inside the options menu (defaults defined in arrays below).
 Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
   10-11 Latitude
   12-13 Longitude
@@ -91,15 +88,13 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
 //The current values array is wasteful, since they have to all be ints here; but there should be room. We will initialize them at startup.
 //                       General                    Alarm              Timer        Strike       Night and away shutoff           Geo
-//opt index              0  1  2  3  4  5  6  7  8   9 10 11 12 13 14  15 16 17  18 19 20 21  22   23   24 25 26 27   28   29     30    31  32
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13,14,15, 21,22,23, 30,31,32,33, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52};
 const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,47,24,50, 43,40,48, 21,44,41,49, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14};
 const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,76, 4, 9, 0,  0,76, 2,  0, 0,68, 5,  0,1320, 360, 0, 1, 5, 480,1080,     0,    0,100};
 const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0, 0, 0,  0,49, 0,  0, 0,49, 0,  0,   0,   0, 0, 0, 0,   0,   0,  -900,-1800, 52};
 const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88, 5,60, 1,  1,88, 5,  4, 1,88, 5,  2,1439,1439, 2, 6, 6,1439,1439,   900, 1800,156};
-       int optsVal[] = { 0, 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0,  0, 0, 0,  0, 0, 0, 0,  0,   0,   0, 0, 0, 0,   0,   0,     0,    0,  0};
 
-//The rest of these volatile variables are not backed by persistent storage.
+//The rest of these variables are not backed by persistent storage, so they are regular named vars.
 
 // Hardware inputs and value setting
 byte btnCur = 0; //Momentary button currently in use - only one allowed at a time
@@ -138,8 +133,6 @@ byte fnDateSunnext = 255;
 byte fnDateWeathernext = 255;
 
 // Volatile running values used throughout the code. (Others are defined right above the method that uses them)
-bool dstOn = 0; //this is stored in EEPROM too, but only for correction after power loss – this var hedges against EEPROM failure in normal use
-bool alarmOn = 0; //this is stored in EEPROM too, but only for power loss recovery – this var hedges against EEPROM failure in normal use
 bool alarmSkip = 0;
 byte signalSource = 0; //which function triggered the signal - fnIsTime (chime), fnIsAlarm, or fnIsTimer
 byte signalPattern = 0; //the pattern for that source
@@ -172,6 +165,8 @@ byte daysInMonth(word y, byte m){
 //rather than independently, with header files included here –
 //but it seems to work, as long as they don't reference later functions.
 //All variants of each type (disp, rtc, etc) should define the same functions.
+#define STORAGE
+#include "storage.cpp";
 #include "dispNixie.cpp" //for a SN74141-multiplexed nixie array
 #include "dispMAX7219.cpp" //for a SPI MAX7219 8x8 LED array
 #include "rtcDS3231.cpp" //for an I2C DS3231 RTC module
@@ -201,9 +196,8 @@ void setup(){
     writeEEPROM(21,0,false); //turn off strike
     writeEEPROM(50,0,false); //turn off fibonacci mode
   }
-  if(!ENABLE_ALARM_FN) alarmOn = 0; //if alarm is disabled in config
-  else if(!ENABLE_SOFT_ALARM_SWITCH) alarmOn = 1; //force alarm on if software switch is disabled
-  else alarmOn = (readEEPROM(2,false)>0); //otherwise set alarm per EEPROM backup
+  if(!ENABLE_ALARM_FN) writeEEPROM(2,0,false); //force alarm off if disabled in config
+  else if(!ENABLE_SOFT_ALARM_SWITCH) writeEEPROM(2,1,false); //force alarm on if software switch is disabled
   switch(readEEPROM(7,false)){ //if the preset is set to a function that is no longer enabled, use alarm if enabled, else use time
     case fnIsDate: if(!ENABLE_DATE_FN) writeEEPROM(7,(ENABLE_ALARM_FN?fnIsAlarm:fnIsTime),false); break;
     case fnIsAlarm: if(!ENABLE_ALARM_FN) writeEEPROM(7,fnIsTime,false); break;
@@ -217,7 +211,6 @@ void setup(){
   if(!ENABLE_TIME_CHIME) writeEEPROM(21,0,false); //chime off
   if(!ENABLE_SHUTOFF_NIGHT) writeEEPROM(27,0,false); //night shutoff off
   if(!ENABLE_SHUTOFF_AWAY) writeEEPROM(32,0,false); //away shutoff off
-  dstOn = (readEEPROM(15,false)>0); //set last known DST state per EEPROM backup
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   findFnAndPageNumbers(); //initial values
   initDisplay();
@@ -716,22 +709,22 @@ void switchAlarm(byte dir){
     //There are three alarm states - on, on with skip (skips the next alarm trigger), and off.
     //Currently we use up/down buttons or a rotary control, rather than a binary switch, so we can cycle up/down through these states.
     //On/off is stored in EEPROM to survive power loss; skip is volatile, not least because it can change automatically and I don't like making automated writes to EEPROM if I can help it. Skip state doesn't matter when alarm is off.
-    if(dir==2) dir=(alarmOn?0:1); //If alarm is off, cycle button goes up; otherwise down.
+    if(dir==2) dir=(readEEPROM(2,false)?0:1); //If alarm is off, cycle button goes up; otherwise down.
     if(dir==1){
-      if(!alarmOn){ //if off, go straight to on, no skip
-        alarmOn=1; writeEEPROM(2,alarmOn,false); alarmSkip=0; quickBeep(76); //C7
+      if(!readEEPROM(2,false)){ //if off, go straight to on, no skip
+        writeEEPROM(2,1,false); alarmSkip=0; quickBeep(76); //C7
       }
       else if(alarmSkip){ //else if skip, go to on
         alarmSkip=0; quickBeep(76); //C7
       }
     }
     if(dir==0){
-      if(alarmOn){ //if on
+      if(readEEPROM(2,false)){ //if on
         if(!alarmSkip){ //if not skip, go to skip
           alarmSkip=1; quickBeep(71); //G6
         }
         else { //if skip, go to off
-          alarmOn=0; writeEEPROM(2,alarmOn,false); quickBeep(64); //C6
+          writeEEPROM(2,0,false); quickBeep(64); //C6
         }
       }
     }
@@ -812,6 +805,7 @@ void initEEPROM(bool hard){
     rtcSetDate(2021,1,1,dayOfWeek(2021,1,1));
     rtcSetTime(0,0,0);
   }
+  //The vars outside the options menu
   if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //0-1: alarm at 7am
   //2: alarm on, handled by init
   //3: free
@@ -822,7 +816,7 @@ void initEEPROM(bool hard){
   //8: TODO functions/pages enabled (bitmask)
   //9: free
   if(hard) writeEEPROM(15,0,false); //15: last known DST on flag - clear on hard reset (to match the reset RTC/auto DST/anti-poisoning settings to trigger midnight tubes as a tube test)
-  //then the options menu defaults
+  //The vars inside the options menu
   bool isInt = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
     isInt = (optsMax[opt]>255?true:false);
@@ -830,39 +824,6 @@ void initEEPROM(bool hard){
       writeEEPROM(optsLoc[opt],optsDef[opt],isInt);
   } //end for
 } //end initEEPROM()
-int readEEPROM(int loc, bool isInt){
-  if(isInt) {
-    // if(loc==[value under test]) {
-    //   Serial.print(F("EEPROM read 2 bytes:"));
-    //   Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val ")); Serial.print(EEPROM.read(loc),DEC);
-    //   Serial.print(F(" loc ")); Serial.print(loc+1,DEC); Serial.print(F(" val ")); Serial.print(EEPROM.read(loc+1),DEC);
-    //   Serial.print(F(" sum ")); Serial.print((EEPROM.read(loc)<<8)+EEPROM.read(loc+1)); Serial.println();
-    // }
-    return (EEPROM.read(loc)<<8)+EEPROM.read(loc+1);
-  } else {
-    // if(loc==[value under test]) {
-    //   Serial.print(F("EEPROM read 1 byte:"));
-    //   Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val ")); Serial.print(EEPROM.read(loc),DEC); Serial.println();
-    // }
-    return EEPROM.read(loc);
-  }
-}
-void writeEEPROM(int loc, int val, bool is2Byte){
-  if(is2Byte) {
-    // Serial.print(F("EEPROM write 2 bytes (")); Serial.print(val,DEC); Serial.print(F("):"));
-    // Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val "));
-    // if(EEPROM.read(loc)!=highByte(val)) { Serial.print(highByte(val),DEC); } else { Serial.print(F("no change")); } Serial.print(F(";"));
-    // Serial.print(F(" loc ")); Serial.print(loc+1,DEC); Serial.print(F(" val "));
-    // if(EEPROM.read(loc+1)!=lowByte(val)) { Serial.println(lowByte(val),DEC); } else { Serial.println(F("no change")); }
-    EEPROM.update(loc,highByte(val));
-    EEPROM.update(loc+1,lowByte(val));
-  } else {
-    // Serial.print(F("EEPROM write byte (")); Serial.print(val,DEC); Serial.print(F("):"));
-    // Serial.print(F(" loc ")); Serial.print(loc,DEC); Serial.print(F(" val "));
-    // if(EEPROM.read(loc)!=val) { Serial.println(val,DEC); } else { Serial.println(F("no change")); }
-    EEPROM.update(loc,val);
-  }
-}
 
 void findFnAndPageNumbers(){
   //Each function, and each page in a paged function, has a number. //TODO should pull from EEPROM 8
@@ -927,7 +888,7 @@ void checkRTC(bool force){
       if(snoozeRemain>0) {
         snoozeRemain--;
         //Serial.print("sr "); Serial.println(snoozeRemain,DEC);
-        if(snoozeRemain<=0 && alarmOn) {
+        if(snoozeRemain<=0 && readEEPROM(2,false)) { //alarm on
           fnSetPg = 0; fn = fnIsTime;
           if((readEEPROM(50,false) && !(RELAY_PIN>=0 && RELAY_MODE==0 && readEEPROM(42,false)==1))) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond()); //fibonacci sequence
           else signalStart(fnIsAlarm,1); //regular alarm
@@ -956,7 +917,7 @@ void checkRTC(bool force){
       if(rtcGetSecond()==23){ alarmTime-=27; if(alarmTime<0) alarmTime+=1440; } //set min to n-27 with midnight rollover
       if(rtcGetHour()*60+rtcGetMinute()==alarmTime){
         //Serial.println(rtcGetSecond()==23?F("It's fibonacci time"):F("It's regular alarm time"));
-        if(alarmOn && !alarmSkip) { //if the alarm is on and not skipped, sound it!
+        if(readEEPROM(2,false) && !alarmSkip) { //if the alarm is on and not skipped, sound it!
           fnSetPg = 0; fn = fnIsTime;
           if(rtcGetSecond()==23) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond()); //fibonacci sequence
           else signalStart(fnIsAlarm,1); //regular alarm
@@ -1074,12 +1035,13 @@ void fibonacci(byte h, byte m, byte s){
 } //end fibonacci()
 
 void autoDST(){
-  //Change the clock if the current DST differs from the dstOn flag.
+  //Change the clock if the current DST differs from the new one.
   //Call daily when clock reaches 2am, and at first run.
   bool dstNow = isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),false);
-  if(readEEPROM(15,false)>1){ //dstOn unreliable probably due to software update to 1.6.0
-    dstOn = dstNow; writeEEPROM(15,dstOn,false); }
-  if(dstNow!=dstOn){ rtcSetHour(dstNow>dstOn? 3: 1); dstOn = dstNow; writeEEPROM(15,dstOn,false); }
+  if(dstNow!=readEEPROM(15,false)){
+    rtcSetHour(dstNow>readEEPROM(15,false)? 3: 1); //spring forward or fall back
+    writeEEPROM(15,dstNow,false);
+  }
 }
 bool isDST(int y, byte m, byte d){
   //returns whether DST is in effect on this date (after 2am shift)
@@ -1106,9 +1068,8 @@ bool isDSTByHour(int y, byte m, byte d, byte h, bool setFlag){
   d--; if(d<1){ m--; if(m<1){ y--; m=12; } d=daysInMonth(y,m); }
   if(dstNow!=isDST(y,m,d) && h<2) dstNow=!dstNow;
   if(setFlag){
-    dstOn = dstNow;
-    writeEEPROM(15,dstOn,false);
-    //Serial.print(F("DST is ")); Serial.println(dstOn?F("on"):F("off"));
+    writeEEPROM(15,dstNow,false);
+    //Serial.print(F("DST is ")); Serial.println(readEEPROM(15,false)?F("on"):F("off"));
   }
   return dstNow;
 }
@@ -1483,13 +1444,13 @@ void updateDisplay(){
         word almTime; almTime = readEEPROM(0,true);
         editDisplay(almTime/60, 0, 1, readEEPROM(19,false), true); //hours with leading zero
         editDisplay(almTime%60, 2, 3, true, true);
-        if(alarmOn && alarmSkip){ //alarm on+skip
+        if(readEEPROM(2,false) && alarmSkip){ //alarm on+skip
           editDisplay(1,4,5,true,true); //01 to indicate off now, on maybe later
         } else { //alarm fully on or off
-          editDisplay(alarmOn,4,4,false,true);
+          editDisplay(readEEPROM(2,false),4,4,false,true);
           blankDisplay(5,5,true);
         }
-        displayDim = (alarmOn?2:1); //status bright/dim
+        displayDim = (readEEPROM(2,false)?2:1); //status bright/dim
         break;
       case fnIsTimer: //timer - display time
         unsigned long td; td = (!(timerState&1)? timerTime: //If stopped, use stored duration
