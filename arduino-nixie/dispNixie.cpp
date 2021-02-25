@@ -1,4 +1,4 @@
-#ifdef DISP_NIXIE //include if requested
+#ifdef DISP_NIXIE //only compile when requested (when included in main file)
 #ifndef DISP_NIXIE_SRC //include once only
 #define DISP_NIXIE_SRC
 

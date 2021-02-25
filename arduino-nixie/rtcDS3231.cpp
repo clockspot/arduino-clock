@@ -1,4 +1,4 @@
-#ifdef RTC_DS3231 //include if requested
+#ifdef RTC_DS3231 //only compile when requested (when included in main file)
 #ifndef RTC_DS3231_SRC //include once only
 #define RTC_DS3231_SRC
 

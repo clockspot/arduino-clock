@@ -1,4 +1,4 @@
-#ifdef STORAGE
+#ifdef STORAGE //only compile when requested (when included in main file)
 #ifndef STORAGE_SRC //include once only
 #define STORAGE_SRC
 

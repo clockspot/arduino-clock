@@ -1,4 +1,4 @@
-#ifdef DISP_MAX7219 //include if requested
+#ifdef DISP_MAX7219 //only compile when requested (when included in main file)
 #ifndef DISP_MAX7219_SRC //include once only
 #define DISP_MAX7219_SRC
 

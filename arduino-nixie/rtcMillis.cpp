@@ -1,4 +1,4 @@
-#ifdef RTC_MILLIS //include if requested
+#ifdef RTC_MILLIS //only compile when requested (when included in main file)
 #ifndef RTC_MILLIS_SRC //include once only
 #define RTC_MILLIS_SRC
 
