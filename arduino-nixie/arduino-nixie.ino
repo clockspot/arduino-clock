@@ -137,13 +137,13 @@ word unoffRemain = 0; //un-off (briefly turn on tubes during full night/away shu
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 
 byte versionRemain = 0; //display version at start //TODO with button held at start, long hold reset
-//Hold Select at startup to see the version number (from v3.0 – earlier versions will display it automatically or not display it at all).
+//Hold Select at startup to see the version number (from v2.0 – earlier versions will display it automatically or not display it at all).
 //To reset the clock to defaults, hold Alt at startup. You'll see the time reset to 0:00. (If you don't have Alt, hold Select for 15 seconds at startup.)
 
 //Declare a few functions from the main code that are used in the includes below
 //Placed here so I can avoid making header files for the moment
 byte daysInMonth(word y, byte m);
-void doSetHold(bool start);
+void doSet(int delta);
 void ctrlEvt(byte ctrl, byte evt);
 
 //These cpp files contain code that is conditionally included
@@ -177,7 +177,7 @@ void setup(){
   initInputs();
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
   initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
-  initEEPROM(readInput(CTRL_SEL)==LOW); //Do a hard init of EEPROM if button is held; else do a soft init to make sure vals in range
+  initEEPROM(checkForHeldButtonAtStartup()); //Do a hard init of EEPROM if button is held; else do a soft init to make sure vals in range
   //Some options need to be set to a fixed value per the configuration.
   //These options will also be skipped in fnOptScroll so the user can't change them.
   if(RELAY_PIN<0 || PIEZO_PIN<0) { //If no relay or no piezo, set each signal output to [if no relay, then piezo; else relay]  
@@ -230,10 +230,11 @@ void loop(){
 ////////// Input handling and value setting //////////
 
 void ctrlEvt(byte ctrl, byte evt){
-  //Handle control events (from checkBtn or checkRot), based on current fn and set state.
+  //Handle control events from inputs, based on current fn and set state.
   //evt: 1=press, 2=short hold, 3=long hold, 0=release.
-  //We only handle press evts for adj ctrls, as that's the only evt encoders generate.
-  //But we can handle short and long holds and releases for the sel ctrls (always buttons).
+  //We only handle press evts for up/down ctrls, as that's the only evt encoders generate,
+  //and input.cpp sends repeated presses if up/down buttons are held.
+  //But for sel/alt (always buttons), we can handle different hold states here.
 
   //If the signal is going, any press should silence it
   if(signalRemain>0 && evt==1){
@@ -247,7 +248,7 @@ void ctrlEvt(byte ctrl, byte evt){
         snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
       }
     }
-    btnStop();
+    inputStop();
     return;
   }
   //If the snooze is going, any press should cancel it, with a signal
@@ -255,14 +256,14 @@ void ctrlEvt(byte ctrl, byte evt){
     snoozeRemain = 0;
     quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
     displayBlink(); //to indicate this as well
-    btnStop();
+    inputStop();
     return;
   }
   // //TODO NIXIE
   // //If the clean is going, any press should cancel it, with a display update
   // if(cleanRemain>0 && evt==1){
   //   cleanRemain = 0;
-  //   btnStop();
+  //   inputStop();
   //   updateDisplay();
   //   return;
   // }
@@ -273,7 +274,7 @@ void ctrlEvt(byte ctrl, byte evt){
   // }
   // //If a scroll is going, fast-forward to end of scroll in/out - see also checkRTC
   // else if(scrollRemain!=0 && evt==1){
-  //   btnStop();
+  //   inputStop();
   //   if(scrollRemain>0) scrollRemain = 1;
   //   else scrollRemain = -1;
   //   checkEffects(true);
@@ -282,7 +283,7 @@ void ctrlEvt(byte ctrl, byte evt){
   //If the version display is going, any press should cancel it, with a display update
   if(versionRemain>0 && evt==1){
     versionRemain = 0;
-    btnStop();
+    inputStop();
     updateDisplay();
     return;
   }
@@ -291,14 +292,14 @@ void ctrlEvt(byte ctrl, byte evt){
   unoffRemain = UNOFF_DUR; //always do this so continued button presses during an unoff keep it alive
   if(displayDim==0 && evt==1) {
     updateDisplay();
-    btnStop();
+    inputStop();
     return;
   }
   
   if(fn < fnOpts) { //normal fn running/setting (not in options menu)
 
     if(evt==3 && ctrl==CTRL_SEL) { //CTRL_SEL long hold: enter options menu
-      btnStop();
+      inputStop();
       fn = fnOpts;
       clearSet(); //don't need updateDisplay() here because this calls updateRTC with force=true
       return;
@@ -382,14 +383,14 @@ void ctrlEvt(byte ctrl, byte evt){
       } //end sel release or adj press
       else if(CTRL_ALT>0 && ctrl==CTRL_ALT) { //alt sel press
         //if switched relay, and soft switch enabled, we'll switch power.
-        if(ENABLE_SOFT_POWER_SWITCH && RELAY_PIN>=0 && RELAY_MODE==0) { switchPower(2); btnStop(); }
+        if(ENABLE_SOFT_POWER_SWITCH && RELAY_PIN>=0 && RELAY_MODE==0) { switchPower(2); inputStop(); }
         //Otherwise, this becomes our function preset.
         else {
-          //On long hold, if this is not currently the preset, we'll set it, double beep, and btnStop.
+          //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
           //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
           if(evt==2) {
             if(readEEPROM(7,false)!=fn) {
-              btnStop();
+              inputStop();
               writeEEPROM(7,fn,false);
               quickBeep(76);
               displayBlink();
@@ -397,7 +398,7 @@ void ctrlEvt(byte ctrl, byte evt){
           }
           //On short release, jump to the preset fn.
           else if(evt==0) {
-            btnStop();
+            inputStop();
             if(fn!=readEEPROM(7,false)) fn=readEEPROM(7,false);
             else {
               //Special case: if this is the alarm, toggle the alarm switch
@@ -413,11 +414,11 @@ void ctrlEvt(byte ctrl, byte evt){
     else { //fn setting
       if(evt==1) { //press
         //TODO could we do release/shorthold on CTRL_SEL so we can exit without making changes?
-        //currently no, because we don't btnStop() when short hold goes into fn setting, in case long hold may go to options menu
+        //currently no, because we don't inputStop() when short hold goes into fn setting, in case long hold may go to options menu
         //so we can't handle a release because it would immediately save if releasing from the short hold.
-        //Consider recording the btn start time when going into fn setting so we can distinguish its release from a future one
+        //Consider recording the input start time when going into fn setting so we can distinguish its release from a future one
         if(ctrl==CTRL_SEL) { //CTRL_SEL push: go to next option or save and exit setting mode
-          btnStop(); //not waiting for CTRL_SELHold, so can stop listening here
+          inputStop(); //not waiting for CTRL_SELHold, so can stop listening here
           //We will set rtc time parts directly
           //con: potential for very rare clock rollover while setting; pro: can set date separate from time
           switch(fn){
@@ -433,7 +434,7 @@ void ctrlEvt(byte ctrl, byte evt){
               if(fnPg==0){ //regular date display: save in RTC
                 switch(fnSetPg){
                   case 1: //save year, set month
-                    displayBlink(); //to indicate save. Safe b/c we've btnStopped. See below for why
+                    displayBlink(); //to indicate save. Safe b/c we've inputStopped. See below for why
                     fnSetValDate[0]=fnSetVal;
                     startSet(fnSetValDate[1],1,12,2); break; 
                   case 2: //save month, set date
@@ -501,11 +502,11 @@ void ctrlEvt(byte ctrl, byte evt){
         if(ctrl==CTRL_UP) doSet(rotVel ? 10 : 1);
         if(ctrl==CTRL_DN) doSet(rotVel ? -10 : -1);
       } //end if evt==1
-      else if(evt==2){ //short hold - trigger doSetHold directly for better timing
-        #if CTRL_UPDN_TYPE==1 //buttons
-          if(ctrl==CTRL_UP || ctrl==CTRL_DN) doSetHold(true);
-        #endif
-      }
+      // else if(evt==2){ //short hold - trigger doSetHold directly for better timing
+      //   #if CTRL_UPDN_TYPE==1 //buttons
+      //     if(ctrl==CTRL_UP || ctrl==CTRL_DN) doSetHold(true);
+      //   #endif
+      // }
     } //end fn setting
     
   } //end normal fn running/setting
@@ -515,7 +516,7 @@ void ctrlEvt(byte ctrl, byte evt){
     byte opt = fn-fnOpts; //current option index
     
     if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL short hold: exit options menu
-      btnStop();
+      inputStop();
       //if we were setting a value, writes setting val to EEPROM if needed
       if(fnSetPg) writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
       fn = fnIsTime;
@@ -673,26 +674,6 @@ void doSet(int delta){
   updateDisplay();
 }
 
-unsigned long doSetHoldLast;
-void doSetHold(bool start){
-  //When we're setting via an adj button that's passed a hold point, fire off doSet commands at intervals
-  //TODO integrate this with checkInputs?
-  unsigned long now = millis();
-  //The interval used to be 250, but in order to make the value change by a full 9 values between CTRL_HOLD_SHORT_DUR and CTRL_HOLD_LONG_DUR,
-  //the interval is now that difference divided by 9. TODO divisor may need to be a bit higher in case CTRL_HOLD_LONG_DUR ever fires before 9th - it seems indeed it did, so 9.5.
-  //It may be weird not being exactly quarter-seconds, but it doesn't line up with the blinking anyway.
-  if(start || (unsigned long)(now-doSetHoldLast)>=(((CTRL_HOLD_LONG_DUR-CTRL_HOLD_SHORT_DUR)*2)/19)) { //(x*2)/19 = x/9.5
-    doSetHoldLast = now;
-    if(fnSetPg!=0 && (btnCur==CTRL_UP || btnCur==CTRL_DN) ){ //if we're setting, and this is an adj btn
-      bool dir = (btnCur==CTRL_UP ? 1 : 0);
-      //If short hold, or long hold but high velocity isn't supported, use low velocity (delta=1)
-      if(btnCurHeld==2 || (btnCurHeld==3 && fnSetValVel==false)) doSet(dir?1:-1);
-      //else if long hold, use high velocity (delta=10)
-      else if(btnCurHeld==3) doSet(dir?10:-10);
-    }
-  }
-}
-
 void clearSet(){ //Exit set state
   startSet(0,0,0,0);
   fnSetValDid=false;
@@ -705,8 +686,6 @@ void clearSet(){ //Exit set state
 void initEEPROM(bool hard){
   //If hard, set EEPROM and clock to defaults
   //Otherwise, just make sure stuff is in range
-  //First prevent the held button from doing anything else
-  btnCur = CTRL_SEL; btnStop();
   //If a hard init, set the clock
   if(hard) {
     rtcSetDate(2021,1,1,dayOfWeek(2021,1,1));
