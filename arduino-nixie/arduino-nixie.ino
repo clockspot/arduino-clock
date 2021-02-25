@@ -179,6 +179,7 @@ void setup(){
   Serial.begin(9600);
   //while(!Serial); //TODO 33 IoT only
   rtcInit();
+  storageInit();
   initInputs();
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
   initEEPROM(readInput(CTRL_SEL)==LOW); //Do a hard init of EEPROM if button is held; else do a soft init to make sure vals in range
