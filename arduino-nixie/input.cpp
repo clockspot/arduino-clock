@@ -29,6 +29,7 @@
   int imuZState = 0; //the state we're reporting (-1, 0, 1)
   int imuZTestState = 0; //the state we've actually last seen
   int imuZTestCount = 0; //how many times we've seen it
+  //int imuLastRead = 0; //for debug
   void readIMU(){
     float x, y, z;
     IMU.readAcceleration(x,y,z);
@@ -39,14 +40,26 @@
     else if(y>-0.3 && y<0.3) imuState = 0;
     else imuState = imuYTestState; //if it's not in one of the ranges, treat it as "same"
     if(imuYTestState!=imuState){ imuYTestState=imuState; imuYTestCount=0; }
-    if(imuYTestCount<imuTestCountTrigger){ imuYTestCount++; /*Serial.print("Y "); Serial.print(imuYTestState); Serial.print(" "); for(char i=0; i<imuYTestCount; i++) Serial.print("#"); Serial.println(imuYTestCount);*/ if(imuYTestCount==imuTestCountTrigger) imuYState=imuYTestState; }
+    if(imuYTestCount<IMU_DEBOUNCING){ imuYTestCount++; /*Serial.print("Y "); Serial.print(imuYTestState); Serial.print(" "); for(char i=0; i<imuYTestCount; i++) Serial.print("#"); Serial.println(imuYTestCount);*/ if(imuYTestCount==IMU_DEBOUNCING) imuYState=imuYTestState; }
   
          if(z<=-0.5) imuState = -1;
     else if(z>= 0.5) imuState = 1;
     else if(z>-0.3 && z<0.3) imuState = 0;
     else imuState = imuZTestState;
     if(imuZTestState!=imuState){ imuZTestState=imuState; imuZTestCount=0; }
-    if(imuZTestCount<imuTestCountTrigger){ imuZTestCount++; /*Serial.print("Z "); Serial.print(imuZTestState); Serial.print(" "); for(char i=0; i<imuZTestCount; i++) Serial.print("#"); Serial.println(imuZTestCount);*/ if(imuZTestCount==imuTestCountTrigger) imuZState=imuZTestState; }
+    if(imuZTestCount<IMU_DEBOUNCING){ imuZTestCount++; /*Serial.print("Z "); Serial.print(imuZTestState); Serial.print(" "); for(char i=0; i<imuZTestCount; i++) Serial.print("#"); Serial.println(imuZTestCount);*/ if(imuZTestCount==IMU_DEBOUNCING) imuZState=imuZTestState; }
+    
+    // unsigned long now = millis();
+    // if((unsigned long)(now-imuLastRead)>=1000){
+    //   // Serial.print(F("x="));
+    //   // Serial.print(imuXState,DEC);
+    //   Serial.print(F("  y="));
+    //   Serial.print(imuYState,DEC);
+    //   Serial.print(F("  z="));
+    //   Serial.print(imuZState,DEC);
+    //   Serial.println();
+    //   imuLastRead = now;
+    // }
   }
 #endif
 
@@ -72,8 +85,9 @@ void initInputs(){
     //rotary needs no init here
   #endif
   #ifdef INPUT_IMU
-    //if(!IMU.begin()){ Serial.println("Failed to initialize IMU!"); while(1); }
+    //if(!IMU.begin()){ Serial.println(F("Failed to initialize IMU!")); while(1); }
     IMU.begin();
+    //Serial.println(F("IMU initialized"));
   #endif
 }
 
@@ -111,6 +125,9 @@ void checkBtn(byte btn){
   unsigned long now = millis();
   //If the button has just been pressed, and no other buttons are in use...
   if(inputCur==0 && bnow) {
+    // Serial.print(F("Btn "));
+    // Serial.print(btn,DEC);
+    // Serial.println(F(" pressed"));
     inputCur = btn; inputCurHeld = 0; inputLast = now; inputLastTODMins = rtcGetTOD();
     ctrlEvt(btn,1); //hey, the button has been pressed
   }
@@ -118,18 +135,27 @@ void checkBtn(byte btn){
   if(inputCur==btn && bnow) {
     //If the button has passed a hold duration threshold... (ctrlEvt will only act on these for Sel/Alt)
     if((unsigned long)(now-inputLast)>=CTRL_HOLD_LONG_DUR && inputCurHeld < 3) { //account for rollover
+      // Serial.print(F("Btn "));
+      // Serial.print(btn,DEC);
+      // Serial.println(F(" long-held"));
       inputCurHeld = 3;
       ctrlEvt(btn,3); //hey, the button has been long-held
     }
     else if((unsigned long)(now-inputLast)>=CTRL_HOLD_SHORT_DUR && inputCurHeld < 2) {
+      // Serial.print(F("Btn "));
+      // Serial.print(btn,DEC);
+      // Serial.println(F(" short-held"));
       inputCurHeld = 2;
       ctrlEvt(btn,2); //hey, the button has been short-held
       holdLast = now; //starts the repeated presses code going
     }
     //While Up/Dn are being held, send repeated presses to ctrlEvt
-    #ifdef INPUT_UPDN_BUTTONS
+    #if defined(INPUT_UPDN_BUTTONS) || defined(INPUT_IMU)
       if((btn==CTRL_UP || btn==CTRL_DN) && inputCurHeld >= 2){
         if((unsigned long)(now-holdLast)>=(inputCurHeld==3?20:125)){ //TODO could make it nonlinear
+          // Serial.print(F("Btn "));
+          // Serial.print(btn,DEC);
+          // Serial.println(F(" repeat-pressed"));
           holdLast = now;
           ctrlEvt(btn,1);
         }

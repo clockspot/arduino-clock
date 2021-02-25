@@ -6,33 +6,14 @@
 #include <SPI.h> //Arduino - for SPI access to MAX7219
 #include <LedControl.h> //Eberhard Farle's LedControl library - http://wayoda.github.io/LedControl
 
+LedControl lc=LedControl(DIN_PIN,CLK_PIN,CS_PIN,NUM_MAX);
+
 int curBrightness = BRIGHTNESS_FULL;
 
 unsigned long displayBlinkStart = 0; //when nonzero, display should briefly blank
 
 void initDisplay(){
   for(int i=0; i<NUM_MAX; i++) { lc.shutdown(i,false); lc.setIntensity(i,curBrightness); }
-}
-
-void cycleDisplay(){
-  //MAX7219 handles its own cycling - just needs display data updates.
-  //But we do need to check if the blink should be over, and whether dim has changed.
-  if(displayBlinkStart){
-    if((unsigned long)(now-displayBlinkStart)>=250){ displayBlinkStart = 0; sendToMAX7219(); }
-  }
-  //Other display code decides whether we should dim per function or time of day
-  bool dim = (displayDim==1?1:0);
-  //But if we're setting, decide here to dim for every other 500ms since we started setting
-  if(fnSetPg>0) {
-    if(setStartLast==0) setStartLast = now;
-    dim = 1-(((unsigned long)(now-setStartLast)/500)%2);
-  } else {
-    if(setStartLast>0) setStartLast=0;
-  }
-  if(curBrightness!=(dim? BRIGHTNESS_DIM: BRIGHTNESS_FULL)){
-    curBrightness = (dim? BRIGHTNESS_DIM: BRIGHTNESS_FULL);
-    for(int i=0; i<NUM_MAX; i++) { lc.setIntensity(i,curBrightness); }
-  }
 }
 
 //TODO can we move this into flash?
@@ -81,11 +62,35 @@ void sendToMAX7219(){ //"private"
   for(int i=0; i<bignumWidth; i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, (displayNext[3]==15?0:bignum[displayNext[3]*bignumWidth+i])); ci--; } //m ones
   if(NUM_MAX>3){ //TODO test
     for(int i=0; i<1;             i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, 0); ci--; } //1col gap
-    for(int i=0; i<smallnumWidth; i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, (displayNext[4]==15?0:bignum[displayNext[4]*smallnumWidth+i])); ci--; } //s tens
+    for(int i=0; i<smallnumWidth; i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, (displayNext[4]==15?0:smallnum[displayNext[4]*smallnumWidth+i])); ci--; } //s tens
     for(int i=0; i<1;             i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, 0); ci--; } //1col gap
-    for(int i=0; i<smallnumWidth; i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, (displayNext[5]==15?0:bignum[displayNext[5]*smallnumWidth+i])); ci--; } //m ones
+    for(int i=0; i<smallnumWidth; i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, (displayNext[5]==15?0:smallnum[displayNext[5]*smallnumWidth+i])); ci--; } //m ones
   }
 }
+
+unsigned long setStartLast = 0; //to control flashing during start
+void cycleDisplay(){
+  unsigned long now = millis();
+  //MAX7219 handles its own cycling - just needs display data updates.
+  //But we do need to check if the blink should be over, and whether dim has changed.
+  if(displayBlinkStart){
+    if((unsigned long)(now-displayBlinkStart)>=250){ displayBlinkStart = 0; sendToMAX7219(); }
+  }
+  //Other display code decides whether we should dim per function or time of day
+  bool dim = (displayDim==1?1:0);
+  //But if we're setting, decide here to dim for every other 500ms since we started setting
+  if(fnSetPg>0) {
+    if(setStartLast==0) setStartLast = now;
+    dim = 1-(((unsigned long)(now-setStartLast)/500)%2);
+  } else {
+    if(setStartLast>0) setStartLast=0;
+  }
+  if(curBrightness!=(dim? BRIGHTNESS_DIM: BRIGHTNESS_FULL)){
+    curBrightness = (dim? BRIGHTNESS_DIM: BRIGHTNESS_FULL);
+    for(int i=0; i<NUM_MAX; i++) { lc.setIntensity(i,curBrightness); }
+  }
+}
+
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
   //Splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
   //If there are blank places (on the left of a non-leading-zero number), uses value 15 to blank tube
