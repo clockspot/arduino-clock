@@ -19,9 +19,6 @@ const byte vPatch = 0;
 #if ENABLE_DATE_RISESET
   #include <Dusk2Dawn.h> //DM Kiski - unlicensed - install in your Arduino IDE if needed
 #endif
-#if CTRL_UPDN_TYPE==2 //rotary encoder
-  #include <Encoder.h> //Paul Stoffregen - install in your Arduino IDE if needed
-#endif
 
 /*Some variables are backed by persistent storage. These are referred to by their location in that storage. See storage.cpp.
 Values for these are bytes (0 to 255) or ints (-32768 to 32767) where high byte is loc and low byte is loc+1.
@@ -96,15 +93,6 @@ const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88, 5,60, 1,  1,88, 5,
 
 //The rest of these variables are not backed by persistent storage, so they are regular named vars.
 
-// Hardware inputs and value setting
-byte btnCur = 0; //Momentary button currently in use - only one allowed at a time
-byte btnCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=set by btnStop()
-unsigned long inputLast = 0; //When a button was last pressed
-int inputLastTODMins = 0; //time of day, in minutes past midnight, when button was pressed. Used in paginated functions so they all reflect the same time of day.
-#if CTRL_UPDN_TYPE==2 //rotary encoder
-  Encoder rot(CTRL_DN,CTRL_UP);
-#endif
-
 // Functions and pages
 // Unique IDs - see also fnScroll
 const byte fnIsTime = 0; //time of day
@@ -148,15 +136,15 @@ unsigned long millisAtLastCheck = 0;
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night/away shutoff) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 
-byte versionRemain = 3; //display version at start
+byte versionRemain = 0; //display version at start //TODO with button held at start, long hold reset
+//Hold Select at startup to see the version number (from v3.0 – earlier versions will display it automatically or not display it at all).
+//To reset the clock to defaults, hold Alt at startup. You'll see the time reset to 0:00. (If you don't have Alt, hold Select for 15 seconds at startup.)
 
-//Utility functions that are called by both the main code and the below includes
+//Declare a few functions from the main code that are used in the includes below
 //Placed here so I can avoid making header files for the moment
-byte daysInMonth(word y, byte m){
-  if(m==2) return (y%4==0 && (y%100!=0 || y%400==0) ? 29 : 28);
-  //https://cmcenroe.me/2014/12/05/days-in-month-formula.html
-  else return (28 + ((m + (m/8)) % 2) + (2 % m) + (2 * (1/m)));
-}
+byte daysInMonth(word y, byte m);
+void doSetHold(bool start);
+void ctrlEvt(byte ctrl, byte evt);
 
 //These cpp files contain code that is conditionally included
 //based on the available hardware and settings in the config file.
@@ -164,24 +152,31 @@ byte daysInMonth(word y, byte m){
 //these are being compiled (or not) as part of this file,
 //rather than independently, with header files included here –
 //but it seems to work, as long as they don't reference later functions.
-//All variants of each type (disp, rtc, etc) should define the same functions.
+//The disp and rtc options are mutually exclusive.
 #define STORAGE
-#include "storage.cpp";
+#include "storage.cpp"; //supports both AVR EEPROM and SAMD flash
 #include "dispNixie.cpp" //for a SN74141-multiplexed nixie array
 #include "dispMAX7219.cpp" //for a SPI MAX7219 8x8 LED array
 #include "rtcDS3231.cpp" //for an I2C DS3231 RTC module
 #include "rtcMillis.cpp" //for no RTC
+#define INPUT
+#include "input.cpp"; //for Sel/Alt/Up/Dn - must come after rtc as it uses rtcGetTOD()
+//#include "inputButtons.cpp"; //for Sel [Alt] [Up/Dn] as buttons
+//#include "inputRotary.cpp"; //for Up/Dn as rotary control
+//#include "inputIMU.cpp"; //for Sel/Alt/Up/Dn via 33 IoT's LSM6DS3 IMU motion sensor
+#define NETWORK
+#include "network.cpp" //for 33 IoT WiFiNINA
 
 
 ////////// Main code control //////////
 
 void setup(){
-  Serial.begin(9600);
+  //Serial.begin(9600);
   //while(!Serial); //TODO 33 IoT only
-  rtcInit();
-  storageInit();
+  rtcInit(); //TODO change nomenclature to match
   initInputs();
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
+  initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
   initEEPROM(readInput(CTRL_SEL)==LOW); //Do a hard init of EEPROM if button is held; else do a soft init to make sure vals in range
   //Some options need to be set to a fixed value per the configuration.
   //These options will also be skipped in fnOptScroll so the user can't change them.
@@ -224,101 +219,12 @@ void loop(){
   checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
   millisApplyDrift();
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
-  #if CTRL_UPDN_TYPE==1 //buttons
-    doSetHold(false); //if inputs have been held, this will do more things + updateDisplay as needed
-  #endif
   cycleTimer();
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
   cycleLEDs();
   cycleSignal();
 }
 
-
-////////// Control inputs //////////
-
-void initInputs(){
-  //TODO are there no "loose" pins left floating after this? per https://electronics.stackexchange.com/q/37696/151805
-  pinMode(CTRL_SEL, INPUT_PULLUP);
-  pinMode(CTRL_UP, INPUT_PULLUP);
-  pinMode(CTRL_DN, INPUT_PULLUP);
-  #if CTRL_ALT!=0
-    pinMode(CTRL_ALT, INPUT_PULLUP);
-  #endif
-}
-
-void checkInputs(){
-  //TODO potential issue: if user only means to rotate or push encoder but does both?
-  checkBtn(CTRL_SEL); //select
-  #if CTRL_UPDN_TYPE==1 //buttons
-    checkBtn(CTRL_UP); checkBtn(CTRL_DN);
-  #endif
-  #if CTRL_UPDN_TYPE==2 //rotary encoder
-    checkRot();
-  #endif
-  #if CTRL_ALT!=0 //alt (if equipped)
-    checkBtn(CTRL_ALT);
-  #endif
-}
-
-bool readInput(byte pin){
-  if(pin==A6 || pin==A7) return analogRead(pin)<100?0:1; //analog-only pins
-  else return digitalRead(pin);
-}
-void checkBtn(byte btn){
-  //Changes in momentary buttons, LOW = pressed.
-  //When a button event has occurred, will call ctrlEvt
-  bool bnow = readInput(btn);
-  unsigned long now = millis();
-  //If the button has just been pressed, and no other buttons are in use...
-  if(btnCur==0 && bnow==LOW) {
-    btnCur = btn; btnCurHeld = 0; inputLast = now; inputLastTODMins = rtcGetTOD();
-    ctrlEvt(btn,1); //hey, the button has been pressed
-  }
-  //If the button is being held...
-  if(btnCur==btn && bnow==LOW) {
-    if((unsigned long)(now-inputLast)>=CTRL_HOLD_LONG_DUR && btnCurHeld < 3) { //account for rollover
-      btnCurHeld = 3;
-      ctrlEvt(btn,3); //hey, the button has been long-held
-    }
-    else if((unsigned long)(now-inputLast)>=CTRL_HOLD_SHORT_DUR && btnCurHeld < 2) {
-      btnCurHeld = 2;
-      ctrlEvt(btn,2); //hey, the button has been short-held
-    }
-  }
-  //If the button has just been released...
-  if(btnCur==btn && bnow==HIGH) {
-    btnCur = 0;
-    if(btnCurHeld < 4) ctrlEvt(btn,0); //hey, the button was released
-    btnCurHeld = 0;
-  }
-}
-void btnStop(){
-  //In some cases, when handling btn evt 1/2/3, we may call this so following events 2/3/0 won't cause unintended behavior (e.g. after a fn change, or going in or out of set)
-  btnCurHeld = 4;
-}
-
-bool rotVel = 0; //high velocity setting (x10 rather than x1)
-#if CTRL_UPDN_TYPE==2 //rotary encoder
-unsigned long rotLastStep = 0; //timestamp of last completed step (detent)
-int rotLastVal = 0;
-void checkRot(){
-  //Changes in rotary encoder. When rotation(s) occur, will call ctrlEvt to simulate btn presses. During setting, ctrlEvt will take rotVel into account.
-  int rotCurVal = rot.read();
-  if(rotCurVal!=rotLastVal){ //we've sensed a state change
-    rotLastVal = rotCurVal;
-    if(rotCurVal>=4 || rotCurVal<=-4){ //we've completed a step of 4 states (this library doesn't seem to drop states much, so this is reasonably reliable)
-      unsigned long now = millis();
-      inputLast = now; inputLastTODMins = rtcGetTOD();
-      if((unsigned long)(now-rotLastStep)<=ROT_VEL_START) rotVel = 1; //kick into high velocity setting (x10)
-      else if((unsigned long)(now-rotLastStep)>=ROT_VEL_STOP) rotVel = 0; //fall into low velocity setting (x1)
-      rotLastStep = now;
-      while(rotCurVal>=4) { rotCurVal-=4; ctrlEvt(CTRL_UP,1); }
-      while(rotCurVal<=-4) { rotCurVal+=4; ctrlEvt(CTRL_DN,1); }
-      rot.write(rotCurVal);
-    }
-  }
-} //end checkRot()
-#endif
 
 
 ////////// Input handling and value setting //////////
@@ -766,7 +672,7 @@ void doSet(int delta){
   fnSetValDid=true;
   updateDisplay();
 }
-#if CTRL_UPDN_TYPE==1 //buttons
+
 unsigned long doSetHoldLast;
 void doSetHold(bool start){
   //When we're setting via an adj button that's passed a hold point, fire off doSet commands at intervals
@@ -786,7 +692,7 @@ void doSetHold(bool start){
     }
   }
 }
-#endif
+
 void clearSet(){ //Exit set state
   startSet(0,0,0,0);
   fnSetValDid=false;
@@ -1079,7 +985,11 @@ byte nthSunday(int y, byte m, byte nth){
   if(nth<0) return (dayOfWeek(y,m,1)==0 && daysInMonth(y,m)>28? 29: nthSunday(y,m,1)+21+((nth+1)*7));
   return 0;
 }
-//daysInMonth() moved to top
+byte daysInMonth(word y, byte m){
+  if(m==2) return (y%4==0 && (y%100!=0 || y%400==0) ? 29 : 28);
+  //https://cmcenroe.me/2014/12/05/days-in-month-formula.html
+  else return (28 + ((m + (m/8)) % 2) + (2 % m) + (2 * (1/m)));
+}
 int daysInYear(word y){
   return 337 + daysInMonth(y,2);
 }

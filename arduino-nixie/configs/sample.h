@@ -25,37 +25,34 @@
 
 ///// Inputs /////
 
-//If using buttons: Sel / Up / Dn / [Alt]
-//#define INPUT_BUTTONS //TODO implement
-//Which input pins?
-// #define CTRL_SEL A1 //UNDB S2/PL5
-// #define CTRL_UP A2 //UNDB S6/PL9
-// #define CTRL_DN A3 //UNDB S5/PL8
-// #define CTRL_ALT A0 //UNDB S3/PL6
+//If using buttons for Select and optionally Alt:
+#define INPUT_BUTTONS
 #define CTRL_SEL A6 //UNDB S4/PL7
+#define CTRL_ALT A7 //UNDB S7/PL14 - if not using Alt, set to 0
+
+//Up and Down can be buttons OR a rotary control:
+
+//If using buttons for Up and Down:
+#define INPUT_UPDN_BUTTONS
 #define CTRL_UP A0 //UNDB S3/PL6
 #define CTRL_DN A1 //UNDB S2/PL5
-#define CTRL_ALT A7 //UNDB S7/PL14
-//if not using Alt, set to 0
-//other possibilities
-//A3 //UNDB S5/PL8
-//A2 //UNDB S6/PL9
-#define CTRL_UPDN_TYPE 1 //TODO kill
 
-//If using rotary control:
+//If using rotary control for Up and Down:
 //Requires Encoder library by Paul Stoffregen to be installed in IDE.
-// #define INPUT_ROTARY //TODO implement
-// //Which input pins?
-// #define CTRL_SEL A1
+// #define INPUT_UPDN_ROTARY
 // #define CTRL_R1 A2
 // #define CTRL_R2 A3
-// #define CTRL_UPDN_TYPE 2 //TODO kill
 // #define ROT_VEL_START 80 //Required if CTRL_UPDN_TYPE==2. If step rate falls below this, kick into high velocity set (x10)
 // #define ROT_VEL_STOP 500 //Required if CTRL_UPDN_TYPE==2. If encoder step rate rises above this, drop into low velocity set (x1)
 
-//If using motion sensor on Nano 33 IoT:
-// #define INPUT_LSM6DS3 //TODO implement
+//If using IMU motion sensor on Nano 33 IoT:
+//To use, tilt clock: backward=Sel, forward=Alt, left=Down, right=Up
+//This is mutually exclusive with the button/rotary controls. TODO make it possible to use both together by renaming the functions or abstracting basic input functionality
+// #define INPUT_IMU //TODO implement
 // //TODO it has its own input thingies
+// Which side of the IMU/Arduino faces clock front/side? 0=bottom, 1=top, 2=left side, 3=right side, 4=USB end, 5=butt end
+// #define IMU_FRONT 0 //(UNDB: 0)
+// #define IMU_TOP 4 //(UNDB: 4)
 // #define IMU_DEBOUNCING 60 //how many test count needed to change the reported state
 
 //For all input types:
@@ -69,8 +66,13 @@
 #define FN_TEMP_TIMEOUT 5 //sec
 #define FN_PAGE_TIMEOUT 3 //sec
 
+//Unused inputs
+//A3 //UNDB S5/PL8
+//A2 //UNDB S6/PL9
+
 
 ///// Display /////
+//These are mutually exclusive
 
 //If using nixie array:
 #define DISP_NIXIE
@@ -137,6 +139,7 @@
 
 
 ///// Real-Time Clock /////
+//These are mutually exclusive
 
 //If using DS3231 (via I2C):
 //Requires Wire library (standard Arduino)

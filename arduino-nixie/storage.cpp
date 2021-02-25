@@ -15,7 +15,7 @@ byte storageBytes[STORAGE_SPACE]; //the volatile array of bytes
   #include <EEPROM.h> //Arduino - GNU LPGL
 #endif
 
-void storageInit(){
+void initStorage(){
   //Read from real persistent storage into storageBytes
   for(byte i=0; i<STORAGE_SPACE; i++){
     #ifdef __AVR__
