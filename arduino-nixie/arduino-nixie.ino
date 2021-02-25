@@ -161,9 +161,6 @@ void ctrlEvt(byte ctrl, byte evt);
 #include "rtcMillis.cpp" //for no RTC
 #define INPUT
 #include "input.cpp"; //for Sel/Alt/Up/Dn - must come after rtc as it uses rtcGetTOD()
-//#include "inputButtons.cpp"; //for Sel [Alt] [Up/Dn] as buttons
-//#include "inputRotary.cpp"; //for Up/Dn as rotary control
-//#include "inputIMU.cpp"; //for Sel/Alt/Up/Dn via 33 IoT's LSM6DS3 IMU motion sensor
 #define NETWORK
 #include "network.cpp" //for 33 IoT WiFiNINA
 
@@ -502,11 +499,6 @@ void ctrlEvt(byte ctrl, byte evt){
         if(ctrl==CTRL_UP) doSet(rotVel ? 10 : 1);
         if(ctrl==CTRL_DN) doSet(rotVel ? -10 : -1);
       } //end if evt==1
-      // else if(evt==2){ //short hold - trigger doSetHold directly for better timing
-      //   #if CTRL_UPDN_TYPE==1 //buttons
-      //     if(ctrl==CTRL_UP || ctrl==CTRL_DN) doSetHold(true);
-      //   #endif
-      // }
     } //end fn setting
     
   } //end normal fn running/setting
