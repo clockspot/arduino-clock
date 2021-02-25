@@ -458,6 +458,7 @@ void ctrlEvt(byte ctrl, byte evt){
                     writeEEPROM(6,fnSetVal,false);
                     startSet(readEEPROM(4,false),0,1,3); break;
                   case 3: //save date
+                    displayBlink(); //to indicate save.
                     writeEEPROM(4,fnSetVal,false);
                     clearSet(); break;
                   default: break;

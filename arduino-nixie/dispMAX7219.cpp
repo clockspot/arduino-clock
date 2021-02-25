@@ -48,23 +48,29 @@ byte smallnum[30]={ //Last two digits - 3x5
 
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start.
 
-void sendToMAX7219(){ //"private"
+void sendToMAX7219(byte posStart, byte posEnd){ //"private"
   //Called by editDisplay and blankDisplay. Needed in lieu of what cycleDisplay does for nixies.
-  int ci = (NUM_MAX*8)-1; //total column index - we will start at the last one and move backward
-  //display index = (NUM_MAX-1)-(ci/8)
-  //display column index = ci%8
-  for(int i=0; i<bignumWidth; i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, (displayNext[0]==15?0:bignum[displayNext[0]*bignumWidth+i])); ci--; } //h tens
-  for(int i=0; i<1;           i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, 0); ci--; } //1col gap
-  for(int i=0; i<bignumWidth; i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, (displayNext[1]==15?0:bignum[displayNext[1]*bignumWidth+i])); ci--; } //h ones
-  for(int i=0; i<2;           i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, 0); ci--; } //2col gap
-  for(int i=0; i<bignumWidth; i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, (displayNext[2]==15?0:bignum[displayNext[2]*bignumWidth+i])); ci--; } //m tens
-  for(int i=0; i<1;           i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, 0); ci--; } //1col gap
-  for(int i=0; i<bignumWidth; i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, (displayNext[3]==15?0:bignum[displayNext[3]*bignumWidth+i])); ci--; } //m ones
-  if(NUM_MAX>3){ //TODO test
-    for(int i=0; i<1;             i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, 0); ci--; } //1col gap
-    for(int i=0; i<smallnumWidth; i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, (displayNext[4]==15?0:smallnum[displayNext[4]*smallnumWidth+i])); ci--; } //s tens
-    for(int i=0; i<1;             i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, 0); ci--; } //1col gap
-    for(int i=0; i<smallnumWidth; i++){ lc.setColumn((NUM_MAX-1)-(ci/8),ci%8, (displayNext[5]==15?0:smallnum[displayNext[5]*smallnumWidth+i])); ci--; } //m ones
+  byte col = 0; //column to start updating, 0 at left
+  byte val = 0; //byte to send to the LED column
+  byte ci = 0;
+  for(byte i=posStart; i<=posEnd; i++){
+    if(i>3 && NUM_MAX<=3) return; //if 3 or fewer matrices, don't render digits 4 and 5
+    col = //h tens at far left
+          (i>0? bignumWidth+1: 0)+ //h ones
+          (i>1? bignumWidth+2: 0)+ //m tens
+          (i>2? bignumWidth+1: 0)+ //m ones
+          (i>3? bignumWidth+1: 0)+ //s tens
+          (i>4? smallnumWidth+1: 0); //s ones
+    for(int j=0; j<(i<4? bignumWidth: smallnumWidth); j++){ //For each column of this number
+      ci = ((NUM_MAX*8)-1)-(col+j); //translate from our column count to MAX's column count
+      lc.setColumn(
+        (NUM_MAX-1)-(ci/8), //display index
+        ci%8, //display column index
+        (displayNext[i]==15?0:
+          (i<4? bignum[displayNext[i]*bignumWidth+j]: smallnum[displayNext[i]*smallnumWidth+j])
+        )
+      );
+    }
   }
 }
 
@@ -74,7 +80,7 @@ void cycleDisplay(){
   //MAX7219 handles its own cycling - just needs display data updates.
   //But we do need to check if the blink should be over, and whether dim has changed.
   if(displayBlinkStart){
-    if((unsigned long)(now-displayBlinkStart)>=250){ displayBlinkStart = 0; sendToMAX7219(); }
+    if((unsigned long)(now-displayBlinkStart)>=500){ displayBlinkStart = 0; sendToMAX7219(0,5); }
   }
   //Other display code decides whether we should dim per function or time of day
   bool dim = (displayDim==1?1:0);
@@ -108,11 +114,11 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fad
     }
     displayNext[posEnd-i] = (i==0&&n==0 ? 0 : (n>=place ? (n/place)%10 : (leadingZeros?0:15)));
   }
-  sendToMAX7219();
+  sendToMAX7219(posStart,posEnd);
 }
 void blankDisplay(byte posStart, byte posEnd, byte fade){
   for(byte i=posStart; i<=posEnd; i++) { displayNext[i]=15; }
-  sendToMAX7219();
+  sendToMAX7219(posStart,posEnd);
 }
 
 //void startScroll() {}

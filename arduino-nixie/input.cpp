@@ -2,6 +2,13 @@
 #ifndef INPUT_SRC //include once only
 #define INPUT_SRC
 
+#define HOLDSET_SLOW_RATE 125
+#ifdef DISP_MAX7219
+  #define HOLDSET_FAST_RATE 80 //needs to be a little slower to give the display time to draw, it seems
+#else
+  #define HOLDSET_FAST_RATE 20
+#endif
+
 //#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
 #ifdef INPUT_UPDN_ROTARY
   #include <Encoder.h> //Paul Stoffregen - install in your Arduino IDE
@@ -108,8 +115,8 @@ bool readBtn(byte btn){
       //TODO support other orientations
       case CTRL_SEL: imuPressed = imuZState<0; break; //clock tilted backward
       case CTRL_ALT: imuPressed = imuZState>0; break; //clock tilted forward
-      case CTRL_DN:  imuPressed = imuYState<0; break; //clock tilted left
-      case CTRL_UP:  imuPressed = imuYState>0; break; //clock tilted right
+      case CTRL_DN:  imuPressed = imuYState>0; break; //clock tilted left
+      case CTRL_UP:  imuPressed = imuYState<0; break; //clock tilted right
       default: break;
     }
   #endif
@@ -152,7 +159,7 @@ void checkBtn(byte btn){
     //While Up/Dn are being held, send repeated presses to ctrlEvt
     #if defined(INPUT_UPDN_BUTTONS) || defined(INPUT_IMU)
       if((btn==CTRL_UP || btn==CTRL_DN) && inputCurHeld >= 2){
-        if((unsigned long)(now-holdLast)>=(inputCurHeld==3?20:125)){ //TODO could make it nonlinear
+        if((unsigned long)(now-holdLast)>=(inputCurHeld>=3?HOLDSET_FAST_RATE:HOLDSET_SLOW_RATE)){ //TODO could make it nonlinear
           // Serial.print(F("Btn "));
           // Serial.print(btn,DEC);
           // Serial.println(F(" repeat-pressed"));
