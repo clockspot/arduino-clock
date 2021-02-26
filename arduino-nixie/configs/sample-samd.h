@@ -52,7 +52,7 @@
 //Which side of the IMU/Arduino faces clock front/side? 0=bottom, 1=top, 2=left side, 3=right side, 4=USB end, 5=butt end
 #define IMU_FRONT 0 //(UNDB: 0)
 #define IMU_TOP 4 //(UNDB: 4)
-#define IMU_DEBOUNCING 60 //how many test count needed to change the reported state
+#define IMU_DEBOUNCING 150 //ms
 
 //For all input types:
 //How long (in ms) are the hold durations?

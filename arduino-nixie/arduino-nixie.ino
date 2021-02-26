@@ -657,6 +657,8 @@ void switchPower(byte dir){
 
 void startSet(int n, int m, int x, byte p){ //Enter set state at page p, and start setting a value
   fnSetVal=n; fnSetValMin=m; fnSetValMax=x; fnSetValVel=(x-m>30?1:0); fnSetPg=p; fnSetValDid=false;
+  if(fnSetValMax==59) blankDisplay(0, 3, false); //setting in seconds area - blank h:m
+  else blankDisplay(4, 5, false); //setting in h:m area - blank seconds
   updateDisplay();
 }
 void doSet(int delta){
@@ -1237,7 +1239,7 @@ void updateDisplay(){
   }
   else if(fnSetPg) { //setting value, for either fn or option
     displayDim = 2;
-    blankDisplay(4, 5, false);
+    // blankDisplay(4, 5, false); //taken over by startSet
     byte fnOptCurLoc = (fn>=fnOpts? optsLoc[fn-fnOpts]: 0); //current option index loc, to tell what's being set
     if(fnSetValMax==1439) { //Time of day (0-1439 mins, 0:00–23:59): show hrs/mins
       editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero per options
@@ -1248,7 +1250,7 @@ void updateDisplay(){
     } else if(fnSetValMax==59) { //Timer duration secs: show with leading
       //If 6 tubes (0-5), display on 4-5
       //If 4 tubes (0-3), dislpay on 2-3
-      blankDisplay(0, 3, false);
+      // blankDisplay(0, 3, false); //taken over by startSet
       editDisplay(fnSetVal, (DISPLAY_SIZE>4? 4: 2), (DISPLAY_SIZE>4? 5: 3), true, false);
     } else if(fnSetValMax==88) { //A piezo pitch. Play a short demo beep.
       editDisplay(fnSetVal, 0, 3, false, false);

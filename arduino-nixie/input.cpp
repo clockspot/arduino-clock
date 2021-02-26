@@ -3,11 +3,7 @@
 #define INPUT_SRC
 
 #define HOLDSET_SLOW_RATE 125
-#ifdef DISP_MAX7219
-  #define HOLDSET_FAST_RATE 80 //needs to be a little slower to give the display time to draw, it seems
-#else
-  #define HOLDSET_FAST_RATE 20
-#endif
+#define HOLDSET_FAST_RATE 20
 
 //#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
 #ifdef INPUT_UPDN_ROTARY
@@ -30,43 +26,36 @@
     #define CTRL_DN 103
   #endif
   //IMU "debouncing"
-  int imuYState = 0; //the state we're reporting (-1, 0, 1)
-  int imuYTestState = 0; //the state we've actually last seen
-  int imuYTestCount = 0; //how many times we've seen it
-  int imuZState = 0; //the state we're reporting (-1, 0, 1)
-  int imuZTestState = 0; //the state we've actually last seen
-  int imuZTestCount = 0; //how many times we've seen it
+  int imuRoll = 0; //the state we're reporting (-1, 0, 1)
+  int imuRollLast = 0; //when we saw it change
+  int imuPitch = 0; //the state we're reporting (-1, 0, 1)
+  int imuPitchLast = 0; //when we saw it change
   //int imuLastRead = 0; //for debug
   void readIMU(){
     float x, y, z;
     IMU.readAcceleration(x,y,z);
     int imuState;
-    //Assumes Arduino is oriented with components facing back of clock, and USB port facing up
-         if(y<=-0.5) imuState = -1;
-    else if(y>= 0.5) imuState = 1;
-    else if(y>-0.3 && y<0.3) imuState = 0;
-    else imuState = imuYTestState; //if it's not in one of the ranges, treat it as "same"
-    if(imuYTestState!=imuState){ imuYTestState=imuState; imuYTestCount=0; }
-    if(imuYTestCount<IMU_DEBOUNCING){ imuYTestCount++; /*Serial.print("Y "); Serial.print(imuYTestState); Serial.print(" "); for(char i=0; i<imuYTestCount; i++) Serial.print("#"); Serial.println(imuYTestCount);*/ if(imuYTestCount==IMU_DEBOUNCING) imuYState=imuYTestState; }
-  
-         if(z<=-0.5) imuState = -1;
-    else if(z>= 0.5) imuState = 1;
-    else if(z>-0.3 && z<0.3) imuState = 0;
-    else imuState = imuZTestState;
-    if(imuZTestState!=imuState){ imuZTestState=imuState; imuZTestCount=0; }
-    if(imuZTestCount<IMU_DEBOUNCING){ imuZTestCount++; /*Serial.print("Z "); Serial.print(imuZTestState); Serial.print(" "); for(char i=0; i<imuZTestCount; i++) Serial.print("#"); Serial.println(imuZTestCount);*/ if(imuZTestCount==IMU_DEBOUNCING) imuZState=imuZTestState; }
     
-    // unsigned long now = millis();
-    // if((unsigned long)(now-imuLastRead)>=1000){
-    //   // Serial.print(F("x="));
-    //   // Serial.print(imuXState,DEC);
-    //   Serial.print(F("  y="));
-    //   Serial.print(imuYState,DEC);
-    //   Serial.print(F("  z="));
-    //   Serial.print(imuZState,DEC);
-    //   Serial.println();
-    //   imuLastRead = now;
-    // }
+    //Assumes Arduino is oriented with components facing back of clock, and USB port facing up. TODO add support for other orientations
+
+    //Roll
+    if((unsigned long)(millis()-imuRollLast)>=IMU_DEBOUNCING){ //don't check within a period from the last change
+           if(y<=-0.5) imuState = 1;
+      else if(y>= 0.5) imuState = -1;
+      else if(y>-0.3 && y<0.3) imuState = 0;
+      else imuState = imuRoll; //if it's borderline, treat it as "same"
+      if(imuRoll != imuState){ imuRoll = imuState; imuRollLast = millis(); }
+    }
+
+    //Pitch
+    if((unsigned long)(millis()-imuPitchLast)>=IMU_DEBOUNCING){ //don't check within a period from the last change
+           if(z<=-0.5) imuState = 1;
+      else if(z>= 0.5) imuState = -1;
+      else if(z>-0.3 && z<0.3) imuState = 0;
+      else imuState = imuPitch; //if it's borderline, treat it as "same"
+      if(imuPitch != imuState){ imuPitch = imuState; imuPitchLast = millis(); }
+    }
+    
   }
 #endif
 
@@ -113,10 +102,10 @@ bool readBtn(byte btn){
     switch(btn){
       //Assumes Arduino is oriented with components facing back of clock, and USB port facing up
       //TODO support other orientations
-      case CTRL_SEL: imuPressed = imuZState<0; break; //clock tilted backward
-      case CTRL_ALT: imuPressed = imuZState>0; break; //clock tilted forward
-      case CTRL_DN:  imuPressed = imuYState>0; break; //clock tilted left
-      case CTRL_UP:  imuPressed = imuYState<0; break; //clock tilted right
+      case CTRL_SEL: imuPressed = imuPitch>0; break; //clock tilted dial up
+      case CTRL_ALT: imuPressed = imuPitch<0; break; //clock tilted dial down
+      case CTRL_DN:  imuPressed = imuRoll<0; break; //clock tilted left
+      case CTRL_UP:  imuPressed = imuRoll>0; break; //clock tilted right
       default: break;
     }
   #endif
