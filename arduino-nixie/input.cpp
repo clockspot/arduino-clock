@@ -130,28 +130,23 @@ void checkBtn(byte btn){
   //If the button is being held...
   if(inputCur==btn && bnow) {
     //If the button has passed a hold duration threshold... (ctrlEvt will only act on these for Sel/Alt)
-    if((unsigned long)(now-inputLast)>=CTRL_HOLD_LONG_DUR && inputCurHeld < 3) { //account for rollover
-      // Serial.print(F("Btn "));
-      // Serial.print(btn,DEC);
-      // Serial.println(F(" long-held"));
-      inputCurHeld = 3;
-      ctrlEvt(btn,3); //hey, the button has been long-held
+    if((unsigned long)(now-inputLast)>=CTRL_HOLD_SUPERLONG_DUR && inputCurHeld < 5){
+      inputCurHeld = 5; ctrlEvt(btn,5);
+    }
+    else if((unsigned long)(now-inputLast)>=CTRL_HOLD_VERYLONG_DUR && inputCurHeld < 4){
+      inputCurHeld = 4; ctrlEvt(btn,4);
+    }
+    else if((unsigned long)(now-inputLast)>=CTRL_HOLD_LONG_DUR && inputCurHeld < 3){
+      inputCurHeld = 3; ctrlEvt(btn,3);
     }
     else if((unsigned long)(now-inputLast)>=CTRL_HOLD_SHORT_DUR && inputCurHeld < 2) {
-      // Serial.print(F("Btn "));
-      // Serial.print(btn,DEC);
-      // Serial.println(F(" short-held"));
-      inputCurHeld = 2;
-      ctrlEvt(btn,2); //hey, the button has been short-held
+      inputCurHeld = 2; ctrlEvt(btn,2);
       holdLast = now; //starts the repeated presses code going
     }
     //While Up/Dn are being held, send repeated presses to ctrlEvt
     #if defined(INPUT_UPDN_BUTTONS) || defined(INPUT_IMU)
       if((btn==CTRL_UP || btn==CTRL_DN) && inputCurHeld >= 2){
-        if((unsigned long)(now-holdLast)>=(inputCurHeld>=3?HOLDSET_FAST_RATE:HOLDSET_SLOW_RATE)){ //TODO could make it nonlinear
-          // Serial.print(F("Btn "));
-          // Serial.print(btn,DEC);
-          // Serial.println(F(" repeat-pressed"));
+        if((unsigned long)(now-holdLast)>=(inputCurHeld>=3?HOLDSET_FAST_RATE:HOLDSET_SLOW_RATE)){ //could make it nonlinear?
           holdLast = now;
           ctrlEvt(btn,1);
         }
@@ -161,13 +156,13 @@ void checkBtn(byte btn){
   //If the button has just been released...
   if(inputCur==btn && !bnow) {
     inputCur = 0;
-    if(inputCurHeld < 4) ctrlEvt(btn,0); //hey, the button was released
+    if(inputCurHeld <= 5) ctrlEvt(btn,0); //hey, the button was released
     inputCurHeld = 0;
   }
 }
 void inputStop(){
-  //In some cases, when handling btn evt 1/2/3, we may call this so following events 2/3/0 won't cause unintended behavior (e.g. after a fn change, or going in or out of set)
-  inputCurHeld = 4;
+  //In some cases, when handling btn evt 1/2/3/4/5, we may call this so following events 2/3/4/5/0 won't cause unintended behavior (e.g. after a fn change, or going in or out of set)
+  inputCurHeld = 10;
 }
 
 bool rotVel = 0; //high velocity setting (x10 rather than x1)

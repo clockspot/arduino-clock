@@ -298,6 +298,8 @@ void ctrlEvt(byte ctrl, byte evt){
   
   if(fn < fnOpts) { //normal fn running/setting (not in options menu)
 
+    //TODO support evt==4 and evt==5 by removing inputStop() from eg evt==3 without clashing
+
     if(evt==3 && ctrl==CTRL_SEL) { //CTRL_SEL long hold: enter options menu
       inputStop();
       fn = fnOpts;
@@ -382,32 +384,39 @@ void ctrlEvt(byte ctrl, byte evt){
         //else do nothing
       } //end sel release or adj press
       else if(CTRL_ALT>0 && ctrl==CTRL_ALT) { //alt sel press
-        //if switched relay, and soft switch enabled, we'll switch power.
-        if(ENABLE_SOFT_POWER_SWITCH && RELAY_PIN>=0 && RELAY_MODE==0) { switchPower(2); inputStop(); }
-        //Otherwise, this becomes our function preset.
-        else {
-          //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
-          //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
-          if(evt==2) {
-            if(readEEPROM(7,false)!=fn) {
-              inputStop();
-              writeEEPROM(7,fn,false);
-              quickBeep(76);
-              displayBlink();
-            }
-          }
-          //On short release, jump to the preset fn.
-          else if(evt==0) {
-            inputStop();
-            if(fn!=readEEPROM(7,false)) fn=readEEPROM(7,false);
-            else {
-              //Special case: if this is the alarm, toggle the alarm switch
-              if(fn==fnIsAlarm) switchAlarm(2);
-            }
-            fnPg = 0; //reset page counter in case we were in a paged display
-            updateDisplay();
-          }
+        if(evt==3){
+          //Forget wifi? remove inputStop() from below
         }
+        if(evt==2){
+          inputStop();
+          networkStartAdmin();
+        }
+        // //if switched relay, and soft switch enabled, we'll switch power.
+        // if(ENABLE_SOFT_POWER_SWITCH && RELAY_PIN>=0 && RELAY_MODE==0) { switchPower(2); inputStop(); }
+        // //Otherwise, this becomes our function preset.
+        // else {
+        //   //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
+        //   //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
+        //   if(evt==2) {
+        //     if(readEEPROM(7,false)!=fn) {
+        //       inputStop();
+        //       writeEEPROM(7,fn,false);
+        //       quickBeep(76);
+        //       displayBlink();
+        //     }
+        //   }
+        //   //On short release, jump to the preset fn.
+        //   else if(evt==0) {
+        //     inputStop();
+        //     if(fn!=readEEPROM(7,false)) fn=readEEPROM(7,false);
+        //     else {
+        //       //Special case: if this is the alarm, toggle the alarm switch
+        //       if(fn==fnIsAlarm) switchAlarm(2);
+        //     }
+        //     fnPg = 0; //reset page counter in case we were in a paged display
+        //     updateDisplay();
+        //   }
+        // }
       }
     } //end fn running
 
