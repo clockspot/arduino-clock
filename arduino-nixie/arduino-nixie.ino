@@ -210,6 +210,7 @@ void setup(){
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   findFnAndPageNumbers(); //initial values
   initDisplay();
+  initNetwork();
   initOutputs(); //depends on some EEPROM settings
 }
 
@@ -219,6 +220,7 @@ void loop(){
   checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
   millisApplyDrift();
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
+  cycleNetwork();
   cycleTimer();
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
   cycleLEDs();

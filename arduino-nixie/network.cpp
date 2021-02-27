@@ -212,7 +212,7 @@ void networkStartAdmin(){
   //TODO display should handle its own code for displaying a type of stuff
   if(WiFi.status()!=WL_CONNECTED){
     networkStartAP();
-    //displayInt(7777); delay(2500); //TODO reimplement
+    //displayInt(7777); delay(2500); //TODO reimplement similar to versionRemain/date pagination
     Serial.println(F("Admin started at 7.7.7.7"));
   } else { //use existing wifi
     IPAddress theip = WiFi.localIP();
@@ -226,13 +226,19 @@ void networkStartAdmin(){
   //displayClear();
 }
 void networkStopAdmin(){
+  Serial.println(F("stopping admin"));
   adminInputLast = 0; //TODO use a different flag from adminInputLast
   if(WiFi.status()!=WL_CONNECTED) networkStartWiFi();
 }
 
+//unsigned long debugLast = 0;
 void checkClients(){
+  // if((unsigned long)(millis()-debugLast)>=1000) { debugLast = millis();
+  //   Serial.print("Hello ");
+  //   Serial.println(WiFi.status());
+  // }
   //if(WiFi.status()!=WL_CONNECTED && WiFi.status()!=WL_AP_CONNECTED) return;
-  if(adminInputLast && millis()-adminInputLast>ADMIN_TIMEOUT) networkStopAdmin();
+  if(adminInputLast && (unsigned long)(millis()-adminInputLast)>=ADMIN_TIMEOUT) networkStopAdmin();
   WiFiClient client = server.available();
   if(client) {
     if(adminInputLast==0) { client.flush(); client.stop(); Serial.print(F("Got a client but ditched it because last admin input was over ")); Serial.print(ADMIN_TIMEOUT); Serial.println(F("ms ago.")); return; }
@@ -347,13 +353,13 @@ void checkClients(){
   }
 }
 
-void networkSetup(){
+void initNetwork(){
   //Check status of wifi module up front
   if(WiFi.status()==WL_NO_MODULE){ Serial.println(F("Communication with WiFi module failed!")); while(true); }
   else if(WiFi.firmwareVersion()<WIFI_FIRMWARE_LATEST_VERSION) Serial.println(F("Please upgrade the firmware"));
   networkStartWiFi();  
 }
-void networkLoop(){
+void cycleNetwork(){
   checkNTP();
   checkClients();
   checkForWiFiStatusChange();
@@ -361,8 +367,8 @@ void networkLoop(){
   
 #else
 //AVR - dummy functions
-void networkSetup(){}
-void networkLoop(){}
+void initNetwork(){}
+void cycleNetwork(){}
 #endif
 
 #endif
