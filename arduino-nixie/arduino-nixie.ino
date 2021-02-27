@@ -142,9 +142,12 @@ byte versionRemain = 0; //display version at start //TODO with button held at st
 
 //Declare a few functions from the main code that are used in the includes below
 //Placed here so I can avoid making header files for the moment
-byte daysInMonth(word y, byte m);
-void doSet(int delta);
-void ctrlEvt(byte ctrl, byte evt);
+int daysInYear(word y); //used by network
+byte daysInMonth(word y, byte m); //used by network, rtcMillis
+bool isDSTByHour(int y, byte m, byte d, byte h, bool setFlag); //used by network
+void calcSun(); //used by rtc
+void ctrlEvt(byte ctrl, byte evt); //used by input
+void updateDisplay(); //used by network
 
 //These cpp files contain code that is conditionally included
 //based on the available hardware and settings in the config file.
@@ -423,7 +426,7 @@ void ctrlEvt(byte ctrl, byte evt){
               if(fnSetValDid){ //but only if the value was actually changed
                 rtcSetTime(fnSetVal/60,fnSetVal%60,0);
                 millisAtLastCheck = 0; //see ms()
-                calcSun(rtcGetYear(),rtcGetMonth(),rtcGetDate());
+                calcSun();
                 isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),fnSetVal/60,true);
               }
               clearSet(); break;
@@ -441,7 +444,7 @@ void ctrlEvt(byte ctrl, byte evt){
                   case 3: //write year/month/date to RTC
                     rtcSetDate(fnSetValDate[0],fnSetValDate[1],fnSetVal,
                       dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal));
-                    calcSun(fnSetValDate[0],fnSetValDate[1],fnSetVal);
+                    calcSun();
                     isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,rtcGetHour(),true);
                     clearSet(); break;
                   default: break;
@@ -514,7 +517,7 @@ void ctrlEvt(byte ctrl, byte evt){
       if(fnSetPg) writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
       fn = fnIsTime;
       //we may have changed lat/long/GMT/DST settings so recalc those
-      calcSun(rtcGetYear(),rtcGetMonth(),rtcGetDate()); //TODO pull from clock
+      calcSun(); //TODO pull from clock
       isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),true);
       clearSet();
       return;
@@ -760,7 +763,7 @@ void checkRTC(bool force){
   if(rtcSecLast != rtcGetSecond() || force) { //If it's a new RTC second, or we are forcing it
     
     //First run things
-    if(rtcSecLast==61) { autoDST(); calcSun(rtcGetYear(),rtcGetMonth(),rtcGetDate()); }
+    if(rtcSecLast==61) { autoDST(); calcSun(); }
     
     //Things to do every natural second (decrementing real-time counters)
     if(rtcSecLast != rtcGetSecond()) {
@@ -825,7 +828,7 @@ void checkRTC(bool force){
       if(readEEPROM(27,false)>0? //is night shutoff enabled?
         rtcGetSecond()==0 && rtcGetHour()*60+rtcGetMinute()==readEEPROM(28,true): //if so, at start of night shutoff (at second :00 before dim is in effect)
         rtcGetSecond()==1 && rtcGetHour()*60+rtcGetMinute()==0) //if not, at 00:00:01
-          calcSun(rtcGetYear(),rtcGetMonth(),rtcGetDate()); //take this opportunity to perform a calculation that blanks the display for a bit
+          calcSun(); //take this opportunity to perform a calculation that blanks the display for a bit
       // TODO the below will need to change cleanRemain=x to displayClean(x)
       
       // switch(readEEPROM(46,false)) { //how often should the routine run?
@@ -1437,8 +1440,11 @@ int sunSet1  = -1; //today set
 int sunRise2 = -1; //tomorrow rise
 int sunSet2  = -1; //tomorrow set
 int sunRise3 = -1; //day after tomorrow rise
-void calcSun(int y, byte m, byte d){
+void calcSun(){
   //Calculates sun times and stores them in the values above
+  int y = rtcGetYear();
+  int m = rtcGetMonth();
+  int d = rtcGetDate();
   blankDisplay(0,5,false); //immediately blank display so we can fade in from it elegantly
   Dusk2Dawn here(readEEPROM(10,true)/10, readEEPROM(12,true)/10, (float(readEEPROM(14,false))-100)/4);
   //Today
@@ -1502,7 +1508,7 @@ void displaySun(byte which, int d, int tod){
 }
 #else
 //to give other fns something empty to call, when rise/set isn't enabled
-void calcSun(int y, byte m, byte d){}
+void calcSun(){}
 void displaySun(byte which, int d, int tod){}
 #endif
 
