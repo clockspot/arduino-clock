@@ -23,6 +23,22 @@
 #define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 
 
+///// Real-Time Clock /////
+//These are mutually exclusive
+
+//If using DS3231 (via I2C):
+//Requires Wire library (standard Arduino)
+//Requires DS3231 library by NorthernWidget to be installed in your IDE.
+// #define RTC_DS3231
+
+//If using RTCZero on Nano 33 IoT: //TODO
+// #define RTC_ZERO "rtc/rtcZero.h"
+
+//If using no RTC (a fake RTC based on millis()):
+#define RTC_MILLIS
+#define ANTI_DRIFT 0 //msec to add/remove per second - or seconds to add/remove per day divided by 86.4 - to compensate for natural drift. If using wifinina, it really only needs to be good enough for a decent timekeeping display until the next ntp sync. TIP: setting to a superhigh value is helpful for testing! e.g. 9000 will make it run 10x speed
+
+
 ///// Inputs /////
 
 //If using buttons for Select and optionally Alt:
@@ -136,32 +152,6 @@
 
 //LED backlighting control
 #define LED_PIN -1 // -1 to disable feature; 9 if equipped (UNDB v9)
-
-
-///// Real-Time Clock /////
-//These are mutually exclusive
-
-//If using DS3231 (via I2C):
-//Requires Wire library (standard Arduino)
-//Requires DS3231 library by NorthernWidget to be installed in your IDE.
-// #define RTC_DS3231
-
-//If using RTCZero on Nano 33 IoT: //TODO
-// #define RTC_ZERO "rtc/rtcZero.h"
-
-//If using no RTC (a fake RTC based on millis()):
-#define RTC_MILLIS
-#define ANTI_DRIFT 0 //msec to add/remove per second - or seconds to add/remove per day divided by 86.4 - to compensate for natural drift. If using wifinina, it really only needs to be good enough for a decent timekeeping display until the next ntp sync. TIP: setting to a superhigh value is helpful for testing! e.g. 9000 will make it run 10x speed
-
-
-///// Network /////
-
-//If using WiFiNINA (Nano IoT):
-// #define NETWORK_WIFININA //TODO implement
-
-//If using none (standard Nano):
-//TODO have none of this? Is this ok ?
-
 
 
 #endif

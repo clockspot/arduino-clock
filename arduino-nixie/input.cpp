@@ -44,7 +44,7 @@
       else if(y>= 0.5) imuState = -1;
       else if(y>-0.3 && y<0.3) imuState = 0;
       else imuState = imuRoll; //if it's borderline, treat it as "same"
-      if(imuRoll != imuState){ imuRoll = imuState; imuRollLast = millis(); }
+      if(imuRoll != imuState){ imuRoll = imuState; imuRollLast = millis(); } //TODO maybe add audible feedback
     }
 
     //Pitch

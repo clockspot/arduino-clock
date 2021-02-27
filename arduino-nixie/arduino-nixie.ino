@@ -7,7 +7,7 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/sample.h"
+#include "configs/sample-samd.h"
 
 ////////// Software version //////////
 const byte vMajor = 1;
@@ -161,18 +161,18 @@ void updateDisplay(); //used by network
 #include "dispNixie.cpp" //for a SN74141-multiplexed nixie array
 #include "dispMAX7219.cpp" //for a SPI MAX7219 8x8 LED array
 #include "rtcDS3231.cpp" //for an I2C DS3231 RTC module
-#include "rtcMillis.cpp" //for no RTC
+#include "rtcMillis.cpp" //for a fake RTC based on millis
 #define INPUT
-#include "input.cpp"; //for Sel/Alt/Up/Dn - must come after rtc as it uses rtcGetTOD()
+#include "input.cpp"; //for Sel/Alt/Up/Dn - uses rtc functions
 #define NETWORK
-#include "network.cpp" //for 33 IoT WiFiNINA
+#include "network.cpp" //for 33 IoT WiFiNINA - uses display and rtc functions
 
 
 ////////// Main code control //////////
 
 void setup(){
-  //Serial.begin(9600);
-  //while(!Serial); //TODO 33 IoT only
+  Serial.begin(9600);
+  while(!Serial); //TODO 33 IoT only
   rtcInit(); //TODO change nomenclature to match
   initInputs();
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
