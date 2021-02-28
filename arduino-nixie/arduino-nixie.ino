@@ -165,7 +165,7 @@ void updateDisplay(); //used by network
 #define INPUT
 #include "input.cpp"; //for Sel/Alt/Up/Dn - uses rtc functions
 #define NETWORK
-#include "network.cpp" //for 33 IoT WiFiNINA - uses display and rtc functions
+#include "network.cpp" //for 33 IoT WiFiNINA - uses display, rtc, and storage functions
 
 
 ////////// Main code control //////////
