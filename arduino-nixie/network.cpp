@@ -132,14 +132,18 @@ void checkNTP(){ //Called on every cycle to see if there is an ntp response to h
   
   if(TESTNTPfail) { Udp.flush(); return; Serial.println(F("NTP came back but discarding")); } //you didn't see anything...
   
+  //TODO this assumes epoch 0, which is only good til 2038, I think!
+  
   //https://forum.arduino.cc/index.php?topic=526792.0
+  //epoch in earlier bits
   unsigned long ntpTime = (packetBuffer[40] << 24) | (packetBuffer[41] << 16) | (packetBuffer[42] << 8) | packetBuffer[43];
   unsigned long ntpFrac = (packetBuffer[44] << 24) | (packetBuffer[45] << 16) | (packetBuffer[46] << 8) | packetBuffer[47];
   unsigned int  ntpMils = (int32_t)(((float)ntpFrac / UINT32_MAX) * 1000);
   
   //Convert unix timestamp to UTC date/time
+  ntpTime -= 3155673600; //from 1900 to 2000, assuming epoch 0
   unsigned long ntpPart = ntpTime;
-  int y = 1970;
+  int y = 2000;
   while(1){ //iterate to find year
     unsigned long yearSecs = daysInYear(y)*86400;
     if(ntpPart > yearSecs){
@@ -160,7 +164,7 @@ void checkNTP(){ //Called on every cycle to see if there is an ntp response to h
   //Take UTC date/time and apply standard offset
   //which involves checking for date rollover
   //eeprom loc 14 is UTC offset in quarter-hours plus 100 - range is 52 (-12h or -48qh, US Minor Outlying Islands) to 156 (+14h or +56qh, Kiribati)
-  int utcohm = (readEEPROM(14,false)-100); //utc offset in mins from midnight
+  int utcohm = (readEEPROM(14,false)-100)*15; //utc offset in mins from midnight
   if(hm+utcohm<0){ //date rolls backward
     hm = hm+utcohm+1440; //e.g. -1 to 1439 which is 23:59
     d--; if(d<1){ m--; if(m<1){ y--; m=12; } d=daysInMonth(y,m); } //month or year rolls backward
@@ -181,12 +185,15 @@ void checkNTP(){ //Called on every cycle to see if there is an ntp response to h
   
   //finally set the rtc
   //TODO how to do subsecond set - do we push the clock forward and delay that amount of time? would involve checking for hour rollover. Also take into account requestTime/2
+  rtcSetDate(y, m, d, dayOfWeek(y,m,d));
   rtcSetTime(hm/60,hm%60,s);
   millisAtLastCheck = 0; //see ms()
   calcSun();
   
   Serial.print(millis());
-  Serial.print(F(" Received UDP packet from NTP server and set RTC to "));
+  Serial.print(F(" Received UDP packet from NTP server. Time: "));
+  Serial.print(ntpTime,DEC);
+  Serial.print(F(". Set RTC to "));
   Serial.print(rtcGetYear(),DEC); Serial.print(F("-"));
   if(rtcGetMonth()<10) Serial.print(F("0")); Serial.print(rtcGetMonth(),DEC); Serial.print(F("-"));
   if(rtcGetDate()<10) Serial.print(F("0")); Serial.print(rtcGetDate(),DEC); Serial.print(F(" "));
@@ -198,6 +205,8 @@ void checkNTP(){ //Called on every cycle to see if there is an ntp response to h
   Udp.flush(); //in case of extraneous(?) data
   //Udp.stop() was formerly here
   ntpGoing = 0;
+  
+  updateDisplay();
 } //end fn checkNTP
 
 bool networkNTPOK(){
@@ -390,7 +399,7 @@ void checkClients(){
           writeEEPROM(key,val,isInt);
           switch(key){
             case 14: //utc offset
-              //nothing
+              startNTP();
             case 22: //auto dst
               isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),true); break;
           }

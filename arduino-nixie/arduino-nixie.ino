@@ -142,6 +142,7 @@ byte versionRemain = 0; //display version at start //TODO with button held at st
 
 //Declare a few functions from the main code that are used in the includes below
 //Placed here so I can avoid making header files for the moment
+byte dayOfWeek(word y, byte m, byte d); //used by network
 int daysInYear(word y); //used by network
 byte daysInMonth(word y, byte m); //used by network, rtcMillis
 bool isDSTByHour(int y, byte m, byte d, byte h, bool setFlag); //used by network
@@ -316,7 +317,7 @@ void ctrlEvt(byte ctrl, byte evt){
             startSet(rtcGetTOD(),0,1439,1); break; //TODO pull from time
           case fnIsDate: //depends what page we're on
             if(fnPg==0){ //regular date display: set year //TODO pull from time
-              fnSetValDate[1]=rtcGetMonth(), fnSetValDate[2]=rtcGetDate(); startSet(rtcGetYear(),0,9999,1);
+              fnSetValDate[1]=rtcGetMonth(), fnSetValDate[2]=rtcGetDate(); startSet(rtcGetYear(),2000,9999,1);
             } else if(fnPg==fnDateCounter){ //month, date, direction
               startSet(readEEPROM(5,false),1,12,1);
             } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
@@ -695,6 +696,7 @@ void clearSet(){ //Exit set state
 void initEEPROM(bool hard){
   //If hard, set EEPROM and clock to defaults
   //Otherwise, just make sure stuff is in range
+  hard = (hard || readEEPROM(16,false)==0); //if EEPROM is uninitiated, do defaults
   //If a hard init, set the clock
   if(hard) {
     rtcSetDate(2021,1,1,dayOfWeek(2021,1,1));
