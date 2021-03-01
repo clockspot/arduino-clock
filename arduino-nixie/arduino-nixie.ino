@@ -13,6 +13,7 @@
 const byte vMajor = 1;
 const byte vMinor = 9;
 const byte vPatch = 0;
+const bool vDev = 1;
 
 ////////// Other includes, global consts, and vars //////////
 
@@ -39,7 +40,7 @@ These ones are set outside the options menu (defaults defined in initEEPROM()):
     const unsigned int FN_DAYCOUNT = 1<<1; //2
     const unsigned int FN_SUN = 1<<2; //4
     const unsigned int FN_WEATHER = 1<<3; //8
-  9 [free]
+  9 NTP sync on
   15 DST on
 
 These ones are set inside the options menu (defaults defined in arrays below).
@@ -57,7 +58,7 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   23 Alarm days
   24 Alarm snooze
   25 [free] - formerly Timer interval mode - skipped when no piezo and relay is switch (start=0)
-  26 LED circuit behavior - skipped when no led pin
+  26 Backlight behavior - skipped when no backlight pin
   27 Night shutoff
   28-29 Night start, mins
   30-31 Night end, mins
@@ -691,7 +692,7 @@ void clearSet(){ //Exit set state
   checkRTC(true); //force an update to tod and updateDisplay()
 }
 
-//EEPROM values are exclusively bytes (0-255) or words (unsigned ints, 0-65535)
+//EEPROM values are exclusively bytes (0-255) or words (unsigned ints, 0-65535) TODO signed or unsigned?
 //If it's a word, high byte is in loc, low byte is in loc+1
 void initEEPROM(bool hard){
   //If hard, set EEPROM and clock to defaults
@@ -711,7 +712,7 @@ void initEEPROM(bool hard){
   if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) writeEEPROM(6,31,false); //6: ...31st. (This gives the day of the year)
   if(hard) writeEEPROM(7,0,false); //7: Alt function preset
   //8: TODO functions/pages enabled (bitmask)
-  //9: free
+  if(hard || readEEPROM(9,false)>1) writeEEPROM(9,1,false); //9: NTP sync on
   if(hard) writeEEPROM(15,0,false); //15: last known DST on flag - clear on hard reset (to match the reset RTC/auto DST/anti-poisoning settings to trigger midnight tubes as a tube test)
   //The vars inside the options menu
   bool isInt = false;
