@@ -1467,7 +1467,7 @@ void calcSun(){
   int m = rtcGetMonth();
   int d = rtcGetDate();
   blankDisplay(0,5,false); //immediately blank display so we can fade in from it elegantly
-  Dusk2Dawn here(readEEPROM(10,true)/10, readEEPROM(12,true)/10, (float(readEEPROM(14,false))-100)/4);
+  Dusk2Dawn here(float(readEEPROM(10,true))/10, float(readEEPROM(12,true))/10, (float(readEEPROM(14,false))-100)/4);
   //Today
   sunDate = d;
   sunRise1 = here.sunrise(y,m,d,isDST(y,m,d)); //TODO: unreliable if event is before time change on DST change day. Optionally if isDSTChangeDay() and event is <2h de-correct for it - maybe modify the library to do this - as when 2h overlaps in fall, we don't know whether the output has been precorrected.
