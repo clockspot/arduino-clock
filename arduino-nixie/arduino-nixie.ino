@@ -172,8 +172,8 @@ void updateDisplay(); //used by network
 ////////// Main code control //////////
 
 void setup(){
-  Serial.begin(9600);
-  while(!Serial); //TODO 33 IoT only
+  // Serial.begin(9600);
+  // while(!Serial); //TODO 33 IoT only
   rtcInit(); //TODO change nomenclature to match
   initInputs();
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely

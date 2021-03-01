@@ -122,91 +122,124 @@ void startNTP(){ //Called at intervals to check for ntp time
 } //end fn startNTP
 
 bool TESTNTPfail = 0;
+unsigned long ntpTime = 0; //When this is nonzero, it means we have captured a time and are waiting to set the clock until the next full second, in order to achieve subsecond setting precision (or close to - it'll be behind by up to the loop time, since we aren't simply using delay() in order to keep the nixie display going).
+unsigned  int ntpMils = 0;
 void checkNTP(){ //Called on every cycle to see if there is an ntp response to handle
-  if(!ntpGoing) return;
-  if(!Udp.parsePacket()) return;
-  // We've received a packet, read the data from it
-  ntpSyncLast = millis();
-  unsigned int requestTime = ntpSyncLast-ntpStartLast;
-  Udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
+  if(ntpGoing){
+    //If we are waiting for a packet that hasn't arrived, wait for the next cycle
+    if(!Udp.parsePacket()) return;
+    // We've received a packet, read the data from it
+    ntpSyncLast = millis();
+    unsigned int requestTime = ntpSyncLast-ntpStartLast;
+    Udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
   
-  if(TESTNTPfail) { Udp.flush(); return; Serial.println(F("NTP came back but discarding")); } //you didn't see anything...
+    if(TESTNTPfail) { Udp.flush(); return; Serial.println(F("NTP came back but discarding")); } //you didn't see anything...
   
-  //TODO this assumes epoch 0, which is only good til 2038, I think!
+    //https://forum.arduino.cc/index.php?topic=526792.0
+    //epoch in earlier bits? needed after 2038
+    ntpTime = (packetBuffer[40] << 24) | (packetBuffer[41] << 16) | (packetBuffer[42] << 8) | packetBuffer[43];
+    unsigned long ntpFrac = (packetBuffer[44] << 24) | (packetBuffer[45] << 16) | (packetBuffer[46] << 8) | packetBuffer[47];
+    ntpMils = (int32_t)(((float)ntpFrac / UINT32_MAX) * 1000);
+    
+    //Account for the request time
+    ntpMils += requestTime/2;
+    if(ntpMils>=1000) { ntpMils -= 1000; ntpTime++; }
+    
+    Serial.print(F("NTP time: "));
+    Serial.print(ntpTime,DEC);
+    Serial.print(F("."));
+    Serial.print(ntpMils,DEC);
+    Serial.print(F(" ±"));
+    Serial.print(requestTime,DEC);
   
-  //https://forum.arduino.cc/index.php?topic=526792.0
-  //epoch in earlier bits
-  unsigned long ntpTime = (packetBuffer[40] << 24) | (packetBuffer[41] << 16) | (packetBuffer[42] << 8) | packetBuffer[43];
-  unsigned long ntpFrac = (packetBuffer[44] << 24) | (packetBuffer[45] << 16) | (packetBuffer[46] << 8) | packetBuffer[47];
-  unsigned int  ntpMils = (int32_t)(((float)ntpFrac / UINT32_MAX) * 1000);
-  
-  //Convert unix timestamp to UTC date/time
-  ntpTime -= 3155673600; //from 1900 to 2000, assuming epoch 0
-  unsigned long ntpPart = ntpTime;
-  int y = 2000;
-  while(1){ //iterate to find year
-    unsigned long yearSecs = daysInYear(y)*86400;
-    if(ntpPart > yearSecs){
-      ntpPart-=yearSecs; y++;
-    } else break;
-  }
-  byte m = 1;
-  while(1){ //iterate to find month
-    unsigned long monthSecs = daysInMonth(y,m)*86400;
-    if(ntpPart > monthSecs){
-      ntpPart-=monthSecs; m++;
-    } else break;
-  }
-  byte d = 1+(ntpPart/86400); ntpPart %= 86400;
-  int hm = ntpPart/60; //mins from midnight
-  byte s = ntpPart%60;
-  
-  //Take UTC date/time and apply standard offset
-  //which involves checking for date rollover
-  //eeprom loc 14 is UTC offset in quarter-hours plus 100 - range is 52 (-12h or -48qh, US Minor Outlying Islands) to 156 (+14h or +56qh, Kiribati)
-  int utcohm = (readEEPROM(14,false)-100)*15; //utc offset in mins from midnight
-  if(hm+utcohm<0){ //date rolls backward
-    hm = hm+utcohm+1440; //e.g. -1 to 1439 which is 23:59
-    d--; if(d<1){ m--; if(m<1){ y--; m=12; } d=daysInMonth(y,m); } //month or year rolls backward
-  } else if(hm+utcohm>1439){ //date rolls forward
-    hm = (hm+utcohm)%1440; //e.g. 1441 to 1 which is 00:01
-    d++; if(d>daysInMonth(y,m)){ m++; if(m>12){ y++; m=1; } d=1; } //month or year rolls forward
-  } else hm += utcohm;
-  
-  //then check DST at that time (setting DST flag), and add an hour if necessary
-  //which involves checking for date rollover again (forward only)
-  //TODO this may behave unpredictably from 1–2am on fallback day since that occurs twice - check to see whether it has been applied already per the difference from utc
-  if(isDSTByHour(y,m,d,hm/60,true)){
-    if(hm+60>1439){ //date rolls forward
-      hm = (hm+60)%1440; //e.g. 1441 to 1 which is 00:01
-      d++; if(d>daysInMonth(y,m)){ m++; if(m>12){ y++; m=1; } d=1; } //month or year rolls forward
-    } else hm += 60;
-  }
-  
-  //finally set the rtc
-  //TODO how to do subsecond set - do we push the clock forward and delay that amount of time? would involve checking for hour rollover. Also take into account requestTime/2
-  rtcSetDate(y, m, d, dayOfWeek(y,m,d));
-  rtcSetTime(hm/60,hm%60,s);
-  millisAtLastCheck = 0; //see ms()
-  calcSun();
-  
-  Serial.print(millis());
-  Serial.print(F(" Received UDP packet from NTP server. Time: "));
-  Serial.print(ntpTime,DEC);
-  Serial.print(F(". Set RTC to "));
-  Serial.print(rtcGetYear(),DEC); Serial.print(F("-"));
-  if(rtcGetMonth()<10) Serial.print(F("0")); Serial.print(rtcGetMonth(),DEC); Serial.print(F("-"));
-  if(rtcGetDate()<10) Serial.print(F("0")); Serial.print(rtcGetDate(),DEC); Serial.print(F(" "));
-  if(rtcGetHour()<10) Serial.print(F("0")); Serial.print(rtcGetHour(),DEC); Serial.print(F(":"));
-  if(rtcGetMinute()<10) Serial.print(F("0")); Serial.print(rtcGetMinute(),DEC); Serial.print(F(":"));
-  if(rtcGetSecond()<10) Serial.print(F("0")); Serial.print(rtcGetSecond(),DEC);
-  Serial.println();
+    //Unless the mils are bang on, we'll wait to set the clock until the next full second.
+    if(ntpMils>0) ntpTime++;
+    
+    Serial.print(F(" - set to "));
+    Serial.print(ntpTime,DEC);
+    if(ntpMils==0) Serial.print(F(" immediately"));
+    else { Serial.print(F(" after ")); Serial.print(1000-ntpMils,DEC); }
+    Serial.println();
 
-  Udp.flush(); //in case of extraneous(?) data
-  //Udp.stop() was formerly here
-  ntpGoing = 0;
+    Udp.flush(); //in case of extraneous(?) data
+    //Udp.stop() was formerly here
+    ntpGoing = 0;
+  }
+  if(!ntpGoing){
+    //If we are not waiting to set, do nothing
+    if(!ntpTime) return;
+    //If we are waiting to set, but it's not time, wait for the next cycle
+    if(ntpMils!=0 && (unsigned long)(millis()-ntpSyncLast)<(1000-ntpMils)) return;
+    //else it's time!
+
+    //Convert unix timestamp to UTC date/time
+    //TODO this assumes epoch 0, which is only good til 2038, I think!
+    ntpTime -= 3155673600; //from 1900 to 2000, assuming epoch 0
+    unsigned long ntpPart = ntpTime;
+    int y = 2000;
+    while(1){ //iterate to find year
+      unsigned long yearSecs = daysInYear(y)*86400;
+      if(ntpPart > yearSecs){
+        ntpPart-=yearSecs; y++;
+      } else break;
+    }
+    byte m = 1;
+    while(1){ //iterate to find month
+      unsigned long monthSecs = daysInMonth(y,m)*86400;
+      if(ntpPart > monthSecs){
+        ntpPart-=monthSecs; m++;
+      } else break;
+    }
+    byte d = 1+(ntpPart/86400); ntpPart %= 86400;
+    int hm = ntpPart/60; //mins from midnight
+    byte s = ntpPart%60;
   
-  updateDisplay();
+    //Take UTC date/time and apply standard offset
+    //which involves checking for date rollover
+    //eeprom loc 14 is UTC offset in quarter-hours plus 100 - range is 52 (-12h or -48qh, US Minor Outlying Islands) to 156 (+14h or +56qh, Kiribati)
+    int utcohm = (readEEPROM(14,false)-100)*15; //utc offset in mins from midnight
+    if(hm+utcohm<0){ //date rolls backward
+      hm = hm+utcohm+1440; //e.g. -1 to 1439 which is 23:59
+      d--; if(d<1){ m--; if(m<1){ y--; m=12; } d=daysInMonth(y,m); } //month or year rolls backward
+    } else if(hm+utcohm>1439){ //date rolls forward
+      hm = (hm+utcohm)%1440; //e.g. 1441 to 1 which is 00:01
+      d++; if(d>daysInMonth(y,m)){ m++; if(m>12){ y++; m=1; } d=1; } //month or year rolls forward
+    } else hm += utcohm;
+  
+    //then check DST at that time (setting DST flag), and add an hour if necessary
+    //which involves checking for date rollover again (forward only)
+    //TODO this may behave unpredictably from 1–2am on fallback day since that occurs twice - check to see whether it has been applied already per the difference from utc
+    if(isDSTByHour(y,m,d,hm/60,true)){
+      if(hm+60>1439){ //date rolls forward
+        hm = (hm+60)%1440; //e.g. 1441 to 1 which is 00:01
+        d++; if(d>daysInMonth(y,m)){ m++; if(m>12){ y++; m=1; } d=1; } //month or year rolls forward
+      } else hm += 60;
+    }
+  
+    //finally set the rtc
+    //TODO how to do subsecond set - do we push the clock forward and delay that amount of time? would involve checking for hour rollover. Also take into account requestTime/2
+    rtcSetDate(y, m, d, dayOfWeek(y,m,d));
+    rtcSetTime(hm/60,hm%60,s);
+    millisAtLastCheck = 0; //see ms()
+    calcSun();
+  
+    //Serial.print(millis());
+    //Serial.print(F(" NTP time: "));
+    //Serial.print(ntpTime,DEC);
+    //if(ntpMils==0) Serial.print(F(" NOW "));
+    //else { Serial.print(F(" after ")); Serial.print(1000-ntpMils,DEC); }
+    Serial.print(F("RTC set to "));
+    Serial.print(rtcGetYear(),DEC); Serial.print(F("-"));
+    if(rtcGetMonth()<10) Serial.print(F("0")); Serial.print(rtcGetMonth(),DEC); Serial.print(F("-"));
+    if(rtcGetDate()<10) Serial.print(F("0")); Serial.print(rtcGetDate(),DEC); Serial.print(F(" "));
+    if(rtcGetHour()<10) Serial.print(F("0")); Serial.print(rtcGetHour(),DEC); Serial.print(F(":"));
+    if(rtcGetMinute()<10) Serial.print(F("0")); Serial.print(rtcGetMinute(),DEC); Serial.print(F(":"));
+    if(rtcGetSecond()<10) Serial.print(F("0")); Serial.print(rtcGetSecond(),DEC);
+    Serial.println();
+    
+    ntpTime = 0; ntpMils = 0; //no longer waiting to set
+    updateDisplay();
+  }
 } //end fn checkNTP
 
 bool networkNTPOK(){
@@ -262,7 +295,7 @@ void checkClients(){
     if(client.connected()){
       while(client.available()){ //if there's bytes to read from the client
         char c = client.read();
-        Serial.write(c); //DEBUG
+        //Serial.write(c); //DEBUG
         
         if(c=='\n') newlineSeen = true;
         else {
