@@ -150,6 +150,7 @@ bool isDSTByHour(int y, byte m, byte d, byte h, bool setFlag); //used by network
 void calcSun(); //used by rtc
 void ctrlEvt(byte ctrl, byte evt); //used by input
 void updateDisplay(); //used by network
+void goToFn(byte thefn); //used by network
 
 //These cpp files contain code that is conditionally included
 //based on the available hardware and settings in the config file.
@@ -618,6 +619,9 @@ void fnOptScroll(byte dir){
     fnOptScroll(dir);
   }
 }
+void goToFn(byte thefn){ //A shortcut that also sets inputLast per human activity
+  fn = thefn; inputLast = millis(); inputLastTODMins = rtcGetHour()*60+rtcGetMinute();
+}
 
 void switchAlarm(byte dir){
   //0=down, 1=up, 2=toggle
@@ -833,7 +837,7 @@ void checkRTC(bool force){
     }
     //At bottom of minute, see if we should show the date
     if(rtcGetSecond()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0 && versionRemain==0) { /*cleanRemain==0 && scrollRemain==0 && */ 
-      if(readEEPROM(18,false)>=2) { fn = fnIsDate; inputLast = now; inputLastTODMins = rtcGetHour()*60+rtcGetMinute(); fnPg = 254; updateDisplay(); }
+      if(readEEPROM(18,false)>=2) { goToFn(fnIsDate); fnPg = 254; updateDisplay(); }
       //if(readEEPROM(18,false)==3) { startScroll(); }
     }
     //Anti-poisoning routine triggering: start when applicable, and not at night, during setting, or after a button press (unoff)
@@ -1346,6 +1350,7 @@ void updateDisplay(){
         break; //end fnIsDate
       //fnIsDayCount removed in favor of paginated calendar
       case fnIsAlarm: //alarm
+        displayDim = (readEEPROM(2,false)?2:1); //status bright/dim
         word almTime; almTime = readEEPROM(0,true);
         editDisplay(almTime/60, 0, 1, readEEPROM(19,false), true); //hours with leading zero
         editDisplay(almTime%60, 2, 3, true, true);
@@ -1355,7 +1360,6 @@ void updateDisplay(){
           editDisplay(readEEPROM(2,false),4,4,false,true);
           blankDisplay(5,5,true);
         }
-        displayDim = (readEEPROM(2,false)?2:1); //status bright/dim
         break;
       case fnIsTimer: //timer - display time
         unsigned long td; td = (!(timerState&1)? timerTime: //If stopped, use stored duration

@@ -336,14 +336,14 @@ void checkClients(){
         
         client.print(F("<li><h3>General</h3></li>"));
         
-        client.print(F("<li><label>Version</label>"));
+        client.print(F("<li><label>Version</label>")); //TODO upload new built version?
           client.print(vMajor,DEC);
           client.print(F("."));
           client.print(vMinor,DEC);
           client.print(F("."));
           client.print(vPatch,DEC);
           if(vDev) //don't link directly to anything, just the project
-            client.print(F("-dev (<a href='https://github.com/clockspot/arduino-nixie'>details</a>"));
+            client.print(F("-dev (<a href='https://github.com/clockspot/arduino-nixie'>details</a>)"));
           else { //link directly to the release of this version
             client.print(F(" (<a href='https://github.com/clockspot/arduino-nixie/releases/tag/v")); //TODO needs fix after rename
             client.print(vMajor,DEC);
@@ -367,18 +367,21 @@ void checkClients(){
             if(ntpSyncDiff<60){ client.print(ntpSyncDiff,DEC); client.print(F(" second(s) ago")); }
             else if(ntpSyncDiff<3600){ client.print(ntpSyncDiff/60,DEC); client.print(F(" minute(s) ago")); }
             else if(ntpSyncDiff<86400){ client.print(ntpSyncDiff/3600,DEC); client.print(F(" hour(s) ago")); }
-            else { client.print(F(" over 24 hours ago")); }
+            else { client.print(F(" over 24 hours ago")); } //TODO is there a display indication of this
           }
-          client.print(F(" &nbsp; </span><a id='syncnow' value='' href='#' onclick='save(this); document.getElementById(\"lastsync\").remove(); return false;'>Sync&nbsp;now</a><br/><span class='explain'>Requires Wi-Fi. Be sure to set your <a href='#utcoffset'>UTC offset</a> and <a href='#autodst'>auto DST</a>.</span></li>"));
+          client.print(F(" &nbsp; </span><a id='syncnow' value='' href='#' onclick='save(this); document.getElementById(\"lastsync\").remove(); return false;'>Sync&nbsp;now</a><br/><span class='explain'>Requires Wi-Fi. If using this, be sure to set your <a href='#utcoffset'>UTC offset</a> and <a href='#autodst'>auto DST</a> below.</span></li>"));
+        //TODO IP address - string that separates on periods into four bytes
         
-        //TODO RTC Time, fields with save link
+        client.print(F("<li><label>Current time</label><input type='number' id='curtodh' onchange='promptsave(\"curtod\")' onkeyup='promptsave(\"curtod\")' onblur='unpromptsave(\"curtod\"); savetod(\"curtod\")' min='0' max='23' step='1' value='")); client.print(rtcGetHour(),DEC); client.print(F("' />&nbsp;:&nbsp;<input type='number' id='curtodm' onchange='promptsave(\"curtod\")' onkeyup='promptsave(\"curtod\")' onblur='unpromptsave(\"curtod\"); savetod(\"curtod\")' min='0' max='59' step='1' value='")); client.print(rtcGetMinute(),DEC); client.print(F("' /><input type='hidden' id='curtod' /> <a id='curtodsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>24-hour format. Seconds will reset to 0 when saved.</span></li>"));
         
         client.print(F("<li><label>Time format</label><select id='b16' onchange='save(this)'>")); for(char i=1; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(16,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 1: client.print(F("12-hour")); break;
           case 2: client.print(F("24-hour")); break;
-          default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>For time-of-day display only. Setting times is always done in 24-hour.</span></li>"));
+          default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>For current time display only. Alarm and setting times are always shown in 24-hour.</span></li>"));
           
-        //TODO RTC Date, fields with save link
+        client.print(F("<li><label>Current date</label><label for='curdatey'>Year&nbsp;</label><input type='number' id='curdatey' onchange='promptsave(\"curdatey\")' onkeyup='promptsave(\"curdatey\")' onblur='unpromptsave(\"curdatey\"); save(this)' min='2000' max='9999' step='1' value='")); client.print(rtcGetYear(),DEC); client.print(F("' />")); client.print(F(" <a id='curdateysave' href='#' onclick='return false' style='display: none;'>save</a>"));
+        client.print(F("<br/><label for='curdatem'>Month&nbsp;</label><input type='number' id='curdatem' onchange='promptsave(\"curdatem\")' onkeyup='promptsave(\"curdatem\")' onblur='unpromptsave(\"curdatem\"); save(this)' min='1' max='12' step='1' value='")); client.print(rtcGetMonth(),DEC); client.print(F("' />")); client.print(F(" <a id='curdatemsave' href='#' onclick='return false' style='display: none;'>save</a>"));
+        client.print(F("<br/><label for='curdated'>Date&nbsp;</label><input type='number' id='curdated' onchange='promptsave(\"curdated\")' onkeyup='promptsave(\"curdated\")' onblur='unpromptsave(\"curdated\"); save(this)' min='1' max='31' step='1' value='")); client.print(rtcGetDate(),DEC); client.print(F("' />")); client.print(F(" <a id='curdatedsave' href='#' onclick='return false' style='display: none;'>save</a></li>")); //TODO tip count day of year and program override to display 0 as 366 //TODO when month changes, set date max, or can you? what about 2/29? it should just do 3/1 in those cases
 
         client.print(F("<li><label>Date format</label><select id='b17' onchange='save(this)'>")); for(char i=1; i<=5; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(17,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 1: client.print(F("month/date/weekday")); break;
@@ -394,6 +397,7 @@ void checkClients(){
             // const unsigned int FN_SUN = 1<<2; //4
             // const unsigned int FN_WEATHER = 1<<3; //8
         //Function preset ???????
+        //TODO leap second support? Add NTP sync at top of hour also
         
         client.print(F("<li><label>Day counter</label><select id='b4' onchange='if(this.value==2) document.getElementById(\"daycounterdeets\").style.display=\"none\"; else document.getElementById(\"daycounterdeets\").style.display=\"inline\"; save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(4,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("Count days until...")); break;
@@ -401,7 +405,7 @@ void checkClients(){
           case 2: client.print(F("DEMO hide controls")); break; //TODO change to have 0 be disabled - may require a reset
           default: break; } client.print(F("</option>")); } client.print(F("</select>")); //TODO replace inline with natural state
         
-        client.print(F("<br/><span id='daycounterdeets' style='display: inline;'><label for='b5'>Month&nbsp;</label><input type='number' id='b5' onchange='promptsave(\"b5\")' onkeyup='promptsave(\"b5\")' onblur='unpromptsave(\"b5\"); save(this)' min='1' max='12' step='1' value='")); client.print(readEEPROM(5,false),DEC); client.print(F("' />")); client.print(F(" <a id='b5save' href='#' onclick='return false' style='display: none;'>save</a>"));
+        client.print(F("<br/><span id='daycounterdeets' style='display: inline;'><span></span><label for='b5'>Month&nbsp;</label><input type='number' id='b5' onchange='promptsave(\"b5\")' onkeyup='promptsave(\"b5\")' onblur='unpromptsave(\"b5\"); save(this)' min='1' max='12' step='1' value='")); client.print(readEEPROM(5,false),DEC); client.print(F("' />")); client.print(F(" <a id='b5save' href='#' onclick='return false' style='display: none;'>save</a>")); //Extra span is there to prevent "first" styling on the month label
           
         client.print(F("<br/><label for='b6'>Date&nbsp;</label><input type='number' id='b6' onchange='promptsave(\"b6\")' onkeyup='promptsave(\"b6\")' onblur='unpromptsave(\"b6\"); save(this)' min='1' max='31' step='1' value='")); client.print(readEEPROM(6,false),DEC); client.print(F("' />")); client.print(F(" <a id='b6save' href='#' onclick='return false' style='display: none;'>save</a><br/></span><span class='explain'>Appears after date. Repeats annually.</span></li>")); //TODO tip count day of year and program override to display 0 as 366 //TODO when month changes, set date max, or can you? what about 2/29? it should just do 3/1 in those cases
 
@@ -421,63 +425,81 @@ void checkClients(){
           
         client.print(F("<li><label>Auto DST</label><a name='autodst' href='#'></a><select id='b22' onchange='save(this)'>")); for(char i=0; i<=6; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(22,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("Off")); break;
-          case 1: client.print(F("Second Sunday in March to first Sunday in November (US/CA)")); break;
-          case 2: client.print(F("Last Sunday in March to last Sunday in October (UK/EU)")); break;
-          case 3: client.print(F("First Sunday in April to last Sunday in October (MX)")); break;
-          case 4: client.print(F("Last Sunday in September to first Sunday in April (NZ)")); break;
-          case 5: client.print(F("First Sunday in October to first Sunday in April (AU)")); break;
-          case 6: client.print(F("Third Sunday in October to third Sunday in February (BZ)")); break;
-          default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>If you observe Daylight Saving Time but your locale's rules are not represented here, leave this set to Off, and set the clock (and <a href='#utcoffset'>UTC offset</a>) manually.</span></li>"));
+          case 1: client.print(F("March–November (US/CA)")); break;
+          case 2: client.print(F("March–October (UK/EU)")); break;
+          case 3: client.print(F("April–October (MX)")); break;
+          case 4: client.print(F("September–April (NZ)")); break;
+          case 5: client.print(F("October–April (AU)")); break;
+          case 6: client.print(F("October–February (BZ)")); break;
+          default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>Automatically sets clock forward/backward at 2am on the relevant Sunday (see instructions for details). If you observe Daylight Saving Time but your locale's rules are not represented here, leave this set to Off and set the clock forward manually (and add an hour to the <a href='#utcoffset'>UTC offset</a> if using sunrise/sunset).</span></li>")); //TODO instructions
 
           //TODO call everything backlight
         client.print(F("<li><label>Backlight behavior</label><a name='backlight' href='#'></a><select id='b26' onchange='save(this)'>")); for(char i=0; i<=4; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(26,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("Always off")); break;
           case 1: client.print(F("Always on")); break;
-          case 2: client.print(F("On, but follow night/away shutoff if enabled")); break;
-          case 3: client.print(F("Off, but on when alarm/timer sounds")); break;
-          case 4: client.print(F("Off, but on with switched relay (if equipped)")); break;
+          case 2: client.print(F("On until night/away shutoff")); break;
+          case 3: client.print(F("Off until alarm/timer sounds")); break;
+          case 4: client.print(F("Off until switched relay")); break; //TODO skip
           default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
 
           //TODO nixie only TODO option for never
         client.print(F("<li><label>Anti-cathode poisoning</label><a name='antipoison' href='#'></a><select id='b46' onchange='save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(46,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
-          case 0: client.print(F("Once a day, either at midnight or when night shutoff starts (if enabled)")); break;
-          case 1: client.print(F("At the top of every hour")); break;
-          case 2: client.print(F("At the top of every minute")); break;
-          default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>Briefly cycles all digits to prevent <a href='http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm'>cathode poisoning</a>. Will not trigger during night/away shutoff.</span></li>"));
+          case 0: client.print(F("Once a day")); break;
+          case 1: client.print(F("Every hour")); break;
+          case 2: client.print(F("Every minute")); break;
+          default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>Briefly cycles all digits to prevent <a href='http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm'>cathode poisoning</a>. Will not trigger during night/away shutoff. Daily option happens at midnight or, if enabled, when night shutoff starts.</span></li>"));
           
         client.print(F("<li><h3>Alarm</h3></li>"));
         
-        //Alarm time
-        //Alarm on and skip
+        client.print(F("<li><label>Alarm is&hellip;</label><select id='alm' onchange='save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if((i<2 && readEEPROM(2,false)==i) || alarmSkip) client.print(F(" selected")); client.print(F(">")); switch(i){
+          case 0: client.print(F("Off (0)")); break;
+          case 1: client.print(F("On (1)")); break;
+          case 2: client.print(F("On, but skip next (01)")); break;
+          default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
         
-        /*
-        10	Alarm auto-skip	0 = alarm triggers every day
-        1 = work week only, skipping weekends (per settings below)
-        2 = weekend only, skipping work week
+        client.print(F("<li><label>Alarm time</label><input type='number' id='almtodh' onchange='promptsave(\"almtod\")' onkeyup='promptsave(\"almtod\")' onblur='unpromptsave(\"almtod\"); savetod(\"almtod\")' min='0' max='23' step='1' value='")); client.print(readEEPROM(0,true)/60,DEC); client.print(F("' />&nbsp;:&nbsp;<input type='number' id='almtodm' onchange='promptsave(\"almtod\")' onkeyup='promptsave(\"almtod\")' onblur='unpromptsave(\"almtod\"); savetod(\"almtod\")' min='0' max='59' step='1' value='")); client.print(readEEPROM(0,true)%60,DEC); client.print(F("' /><input type='hidden' id='almtod' /> <a id='almtodsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>24-hour format.</span></li>"));
+        
+        client.print(F("<li><label>Auto-skip</label><select id='b23' onchange='save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(23,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
+          case 0: client.print(F("Never (alarm every day)")); break;
+          case 1: client.print(F("Weekends")); break;
+          case 2: client.print(F("Work week")); break;
+          default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>If using this, be sure to set <a href='#workweek'>work week</a> below.</span></li>"));
 
-        11	Alarm signal	0 = beeper (uses pitch and pattern below)
-        1 = relay (if in switch mode, will stay on for 2 hours)
-        (Clocks with both beeper and relay only)
-
-        12	Alarm beeper pitch	Note number, from 49 (A4) to 88 (C8).
-        (Clocks with beeper only)
-        https://en.wikipedia.org/wiki/Piano_key_frequencies
-
-        13	Alarm beeper pattern	0 = long (1/2-second beep)
-        1 = short (1/4-second beep)
-        2 = double (two 1/8-second beeps)
-        3 = triple (three 1/12-second beeps)
-        4 = quad (four 1/16-second beeps)
-        5 = cuckoo (two 1/8-second beeps, descending major third)
-        (Clocks with beeper only)
-
-        14	Alarm snooze	0–60 minutes. 0 disables snooze.
-
-        15	Fibonacci mode	0 = off
-        1 = on
-        To wake you more gradually, the alarm will start about 27 minutes early, by beeping at increasingly shorter intervals per the Fibonacci sequence (610 seconds, then 337, then 233...). In this mode, snooze does not take effect; any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet. Has no effect when alarm is set to use switched relay.
-        (Clocks with beeper and/or pulse relay only)
-        */
+        client.print(F("<li><label>Signal</label><select id='b42' onchange='save(this)'>")); for(char i=0; i<=1; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(42,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
+          case 0: client.print(F("Beeper")); break;
+          case 1: client.print(F("Relay")); break; //TODO "if in switch mode, will stay on for 2 hours"
+          default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
+          
+        client.print(F("<li><label>Pitch</label><select id='b39' onchange='save(this)'>")); for(char i=49; i<=88; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(39,false)==i) client.print(F(" selected")); client.print(F(">")); switch((i-40)%12){
+          case 0: client.print(F("C")); break;
+          case 1: client.print(F("D&#9837;")); break;
+          case 2: client.print(F("D")); break;
+          case 3: client.print(F("E&#9837;")); break;
+          case 4: client.print(F("E")); break;
+          case 5: client.print(F("F")); break;
+          case 6: client.print(F("G&#9837;")); break;
+          case 7: client.print(F("G")); break;
+          case 8: client.print(F("A&#9837;")); break;
+          case 9: client.print(F("A")); break;
+          case 10: client.print(F("B&#9837;")); break;
+          case 11: client.print(F("B")); break;
+          default: break; } client.print(((i-40)/12)+4,DEC); client.print(F("</option>")); } client.print(F("</select></li>"));
+          
+        client.print(F("<li><label>Pattern</label><select id='b47' onchange='save(this)'>")); for(char i=0; i<=5; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(47,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
+          case 0: client.print(F("Long")); break;
+          case 1: client.print(F("Short")); break;
+          case 2: client.print(F("Double")); break;
+          case 3: client.print(F("Triple")); break;
+          case 4: client.print(F("Quad")); break;
+          case 5: client.print(F("Cuckoo")); break;
+          default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
+        
+        client.print(F("<li><label>Snooze</label><input type='number' id='b24' onchange='promptsave(\"b24\")' onkeyup='promptsave(\"b24\")' onblur='unpromptsave(\"b24\"); save(this)' min='0' max='60' step='1' value='")); client.print(readEEPROM(24,false),DEC); client.print(F("' />")); client.print(F(" <a id='b24save' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>In minutes. Zero disables snooze.</span></li>"));
+        
+        client.print(F("<li><label>Fibonacci mode</label><select id='b50' onchange='save(this)'>")); for(char i=0; i<=1; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(50,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
+          case 0: client.print(F("Off")); break;
+          case 1: client.print(F("On")); break;
+          default: break; } client.print(F("</option>")); } client.print(F("</select><br><span class='explain'>To wake you more gradually, the alarm will start about 27 minutes early, by beeping at increasingly shorter intervals per the Fibonacci sequence (610 seconds, then 337, then 233...). In this mode, snooze does not take effect; any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet. Has no effect when alarm is set to use switched relay.</span></li>")); //TODO switch etc
         
         client.print(F("<li><h3>Chrono/Timer</h3></li>"));
         
@@ -564,7 +586,7 @@ void checkClients(){
         client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>Your time zone's offset from UTC (non-DST). If you observe DST but set the clock manually rather than using the <a href='#autodst'>auto DST</a> feature, you must add an hour to the UTC offset during DST, or the sunrise/sunset times will be an hour early.</span></li>"));
         
         //After replacing the below from formdev.php, replace " with \"
-        client.print(F("</ul></div><script type='text/javascript'>function e(id){ return document.getElementById(id); } function promptsave(ctrl){ document.getElementById(ctrl+\"save\").style.display=\"inline\"; } function unpromptsave(ctrl){ document.getElementById(ctrl+\"save\").style.display=\"none\"; } function save(ctrl){ if(ctrl.disabled) return; ctrl.disabled = true; let ind = ctrl.nextSibling; if(ind && ind.tagName==='SPAN') ind.parentNode.removeChild(ind); ind = document.createElement('span'); ind.innerHTML = '&nbsp;<span class=\"saving\">Saving&hellip;</span>'; ctrl.parentNode.insertBefore(ind,ctrl.nextSibling); let xhr = new XMLHttpRequest(); xhr.onreadystatechange = function(){ if(xhr.readyState==4){ ctrl.disabled = false; if(xhr.status==200 && !xhr.responseText){ if(ctrl.id=='wform'){ e('content').innerHTML = '<p class=\"ok\">Wi-Fi changes applied.</p><p>' + (e('wssid').value? 'Now attempting to connect to <strong>'+htmlEntities(e('wssid').value)+'</strong>.</p><p>If successful, the clock will display its IP address. To access this settings page again, connect to <strong>'+htmlEntities(e('wssid').value)+'</strong> and visit that IP address. (If you miss it, hold Select for 5 seconds to see it again.)</p><p>If not successful, the clock will display <strong>7777</strong>. ': '') + 'To access this settings page again, (re)connect to Wi-Fi network <strong>Clock</strong> and visit <a href=\"http://7.7.7.7\">7.7.7.7</a>.</p>'; clearTimeout(timer); } else { ind.innerHTML = '&nbsp;<span class=\"ok\">OK!</span>'; setTimeout(function(){ if(ind.parentNode) ind.parentNode.removeChild(ind); },1500); } } else ind.innerHTML = '&nbsp;<span class=\"error\">'+xhr.responseText+'</span>'; timer = setTimeout(timedOut, ")); client.print(ADMIN_TIMEOUT,DEC); client.print(F("); } }; clearTimeout(timer); xhr.open('POST', './', true); xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded'); if(ctrl.id=='wform'){ switch(e('wtype').value){ case '': e('wssid').value = ''; e('wpass').value = ''; case 'wpa': e('wki').value = '0'; case 'wep': default: break; } xhr.send('wssid='+e('wssid').value+'&wpass='+e('wpass').value+'&wki='+e('wki').value); } else { xhr.send(ctrl.id+'='+ctrl.value); } } function wformchg(initial){ if(initial) e('wtype').value = (e('wssid').value? (e('wki').value!=0? 'wep': 'wpa'): ''); e('wa').style.display = (e('wtype').value==''?'none':'inline'); e('wb').style.display = (e('wtype').value=='wep'?'inline':'none'); if(!initial) e('wformsubmit').style.display = 'inline'; } function timedOut(){ e('content').innerHTML = 'Clock settings page has timed out. Please hold Select for 5 seconds to reactivate it, then <a href=\"#\" onclick=\"location.reload(); return false;\">refresh</a>.'; } function htmlEntities(str){ return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;'); } wformchg(true); let timer = setTimeout(timedOut, ")); client.print(ADMIN_TIMEOUT,DEC); client.print(F("); document.getElementById('loading').remove(); document.getElementById('content').style.display = 'block';</script></body></html>"));
+        client.print(F("</ul></div><script type='text/javascript'>function e(id){ return document.getElementById(id); } function promptsave(ctrl){ document.getElementById(ctrl+\"save\").style.display=\"inline\"; } function unpromptsave(ctrl){ document.getElementById(ctrl+\"save\").style.display=\"none\"; } function savetod(ctrlset){ ctrl = document.getElementById(ctrlset); if(ctrl.disabled) return; ctrl.value = (parseInt(document.getElementById(ctrlset+\"h\").value)*60) + parseInt(document.getElementById(ctrlset+\"m\").value); save(ctrl); } function save(ctrl){ if(ctrl.disabled) return; ctrl.disabled = true; let ind = ctrl.nextSibling; if(ind && ind.tagName==='SPAN') ind.parentNode.removeChild(ind); ind = document.createElement('span'); ind.innerHTML = '&nbsp;<span class=\"saving\">Saving&hellip;</span>'; ctrl.parentNode.insertBefore(ind,ctrl.nextSibling); let xhr = new XMLHttpRequest(); xhr.onreadystatechange = function(){ if(xhr.readyState==4){ ctrl.disabled = false; if(xhr.status==200 && !xhr.responseText){ if(ctrl.id=='wform'){ e('content').innerHTML = '<p class=\"ok\">Wi-Fi changes applied.</p><p>' + (e('wssid').value? 'Now attempting to connect to <strong>'+htmlEntities(e('wssid').value)+'</strong>.</p><p>If successful, the clock will display its IP address. To access this settings page again, connect to <strong>'+htmlEntities(e('wssid').value)+'</strong> and visit that IP address. (If you miss it, hold Select for 5 seconds to see it again.)</p><p>If not successful, the clock will display <strong>7777</strong>. ': '') + 'To access this settings page again, (re)connect to Wi-Fi network <strong>Clock</strong> and visit <a href=\"http://7.7.7.7\">7.7.7.7</a>.</p>'; clearTimeout(timer); } else { ind.innerHTML = '&nbsp;<span class=\"ok\">OK!</span>'; setTimeout(function(){ if(ind.parentNode) ind.parentNode.removeChild(ind); },1500); } } else ind.innerHTML = '&nbsp;<span class=\"error\">'+xhr.responseText+'</span>'; timer = setTimeout(timedOut, ")); client.print(ADMIN_TIMEOUT,DEC); client.print(F("); } }; clearTimeout(timer); xhr.open('POST', './', true); xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded'); if(ctrl.id=='wform'){ switch(e('wtype').value){ case '': e('wssid').value = ''; e('wpass').value = ''; case 'wpa': e('wki').value = '0'; case 'wep': default: break; } xhr.send('wssid='+e('wssid').value+'&wpass='+e('wpass').value+'&wki='+e('wki').value); } else { xhr.send(ctrl.id+'='+ctrl.value); } } function wformchg(initial){ if(initial) e('wtype').value = (e('wssid').value? (e('wki').value!=0? 'wep': 'wpa'): ''); e('wa').style.display = (e('wtype').value==''?'none':'inline'); e('wb').style.display = (e('wtype').value=='wep'?'inline':'none'); if(!initial) e('wformsubmit').style.display = 'inline'; } function timedOut(){ e('content').innerHTML = 'Clock settings page has timed out. Please hold Select for 5 seconds to reactivate it, then <a href=\"#\" onclick=\"location.reload(); return false;\">refresh</a>.'; } function htmlEntities(str){ return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;'); } wformchg(true); let timer = setTimeout(timedOut, ")); client.print(ADMIN_TIMEOUT,DEC); client.print(F("); document.getElementById('loading').remove(); document.getElementById('content').style.display = 'block';</script></body></html>"));
         //client.print(F(""));
       } //end get
       else { //requestType==2 - handle what was POSTed
@@ -592,6 +614,28 @@ void checkClients(){
           requestType = 3; //triggers an admin restart after the client is closed, below
         } else if(currentLine.startsWith(F("syncnow"))){
           cueNTP();
+        } else if(currentLine.startsWith(F("curtod"))){
+          int curtod = currentLine.substring(7).toInt();
+          rtcSetTime(curtod/60,curtod%60,0);
+          goToFn(fnIsTime);
+        } else if(currentLine.startsWith(F("curdatey"))){
+          rtcSetDate(currentLine.substring(9).toInt(), rtcGetMonth(), rtcGetDate(), dayOfWeek(currentLine.substring(9).toInt(), rtcGetMonth(), rtcGetDate())); //TODO what about month exceed
+          goToFn(fnIsDate); fnPg = 254;
+        } else if(currentLine.startsWith(F("curdatem"))){
+          rtcSetDate(rtcGetYear(), currentLine.substring(9).toInt(), rtcGetDate(), dayOfWeek(rtcGetYear(), currentLine.substring(9).toInt(), rtcGetDate())); //TODO what about month exceed
+          goToFn(fnIsDate); fnPg = 254;
+        } else if(currentLine.startsWith(F("curdated"))){
+          rtcSetDate(rtcGetYear(), rtcGetMonth(), currentLine.substring(9).toInt(), dayOfWeek(rtcGetYear(), rtcGetMonth(), currentLine.substring(9).toInt())); //TODO what about month exceed
+          goToFn(fnIsDate); fnPg = 254;
+        } else if(currentLine.startsWith(F("almtod"))){
+          writeEEPROM(0,currentLine.substring(7).toInt(),true);
+          goToFn(fnIsAlarm);
+        } else if(currentLine.startsWith(F("alm"))){ //two settings (alarm on, alarm skip) with one control
+          char alm = currentLine.substring(4).toInt();
+          if(alm<2){ writeEEPROM(2,alm,false); alarmSkip = false; }
+          else     { writeEEPROM(2,1,false);   alarmSkip = true; }
+          //TODO beeps and set fn
+          goToFn(fnIsAlarm);
         } else {
           //standard eeprom saves, key is type (byte/int) + loc
           bool isInt = currentLine.startsWith(F('i')); //or b for byte
@@ -601,13 +645,30 @@ void checkClients(){
           writeEEPROM(key,val,isInt);
           //do special stuff for some of them
           switch(key){
+            case 4: case 5: case 6: //day counter
+              goToFn(fnIsDate); fnPg = 1; break; //TODO will need to skip sun - use the temporary display
             case 14: //utc offset
-              cueNTP();
+              cueNTP(); break;
+            case 17: //date format
+              goToFn(fnIsDate); fnPg = 254; break;
             case 22: //auto dst
               isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),true); break;
+            case 39: //alarm pitch //TODO beep
+              goToFn(fnIsAlarm); break;
+            case 40: //timer pitch //TODO beep
+              goToFn(fnIsTimer); break;
+            case 41: //strike pitch //TODO beep
+              goToFn(fnIsTime); break;
+            case 47: //alarm pattern //TODO beep
+              goToFn(fnIsAlarm); break;
+            case 48: //timer pattern //TODO beep
+              goToFn(fnIsTimer); break;
+            case 49: //strike pattern //TODO beep
+              goToFn(fnIsTime); break;
+            default: break;
           }
-          updateDisplay();
         }
+        updateDisplay();
       } //end post
     } //end if requestType
 

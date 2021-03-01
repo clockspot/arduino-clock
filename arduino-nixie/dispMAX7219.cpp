@@ -83,7 +83,7 @@ void cycleDisplay(){
     if((unsigned long)(now-displayBlinkStart)>=500){ displayBlinkStart = 0; sendToMAX7219(0,5); }
   }
   //Other display code decides whether we should dim per function or time of day
-  bool dim = (displayDim==1?1:0);
+  bool dim = (displayDim==1?1:0); //2 should also 0
   //But if we're setting, decide here to dim for every other 500ms since we started setting
   if(fnSetPg>0) {
     if(setStartLast==0) setStartLast = now;
@@ -114,10 +114,12 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fad
     }
     displayNext[posEnd-i] = (i==0&&n==0 ? 0 : (n>=place ? (n/place)%10 : (leadingZeros?0:15)));
   }
+  cycleDisplay(); //fixes brightness
   sendToMAX7219(posStart,posEnd);
 }
 void blankDisplay(byte posStart, byte posEnd, byte fade){
   for(byte i=posStart; i<=posEnd; i++) { displayNext[i]=15; }
+  cycleDisplay(); //fixes brightness
   sendToMAX7219(posStart,posEnd);
 }
 
