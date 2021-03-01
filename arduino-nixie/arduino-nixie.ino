@@ -22,7 +22,7 @@ const bool vDev = 1;
 #endif
 
 /*Some variables are backed by persistent storage. These are referred to by their location in that storage. See storage.cpp.
-Values for these are bytes (0 to 255) or ints (-32768 to 32767) where high byte is loc and low byte is loc+1.
+Values for these are bytes (0 to 255) or signed 16-bit ints (-32768 to 32767) where high byte is loc and low byte is loc+1.
 In updateDisplay(), special setting formats are deduced from the option max value (max 1439 is a time of day, max 156 is a UTC offset, etc)
 and whether a value is an int or byte is deduced from whether the max value > 255.
 If adding more variables, be sure to increase STORAGE_SPACE in storage.cpp (and use the ones marked [free] below first).
@@ -41,7 +41,7 @@ These ones are set outside the options menu (defaults defined in initEEPROM()):
     const unsigned int FN_SUN = 1<<2; //4
     const unsigned int FN_WEATHER = 1<<3; //8
   9 NTP sync on
-  15 DST on
+  15 DST on (last known state - set indirectly via time sets and such)
 
 These ones are set inside the options menu (defaults defined in arrays below).
 Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
@@ -608,7 +608,7 @@ void fnOptScroll(byte dir){
       || (!ENABLE_TIMER_FN && (optLoc==43||optLoc==40||optLoc==48)) //timer fn disabled in config: skip timer options
       || (!ENABLE_TEMP_FN && (optLoc==45)) //temp fn disabled in config: skip temp format TODO good for weather also
       //Other functionality disabled
-      || (!ENABLE_DATE_RISESET && (optLoc==10||optLoc==12||optLoc==14)) //date rise/set disabled in config: skip geography
+      //|| (!ENABLE_DATE_RISESET && (optLoc==10||optLoc==12)) //date rise/set disabled in config: skip geography - don't skip utc offset as that's now used when setting clock from network ||optLoc==14
       || (!ENABLE_ALARM_AUTOSKIP && (optLoc==23)) //alarm autoskip disabled in config: skip autoskip switch
       || (!ENABLE_ALARM_FIBONACCI && (optLoc==50)) //fibonacci mode disabled in config: skip fibonacci switch
       || (!ENABLE_TIME_CHIME && (optLoc==21||optLoc==44||optLoc==41||optLoc==49)) //chime disabled in config: skip chime
@@ -696,8 +696,7 @@ void clearSet(){ //Exit set state
   checkRTC(true); //force an update to tod and updateDisplay()
 }
 
-//EEPROM values are exclusively bytes (0-255) or words (unsigned ints, 0-65535) TODO signed or unsigned?
-//If it's a word, high byte is in loc, low byte is in loc+1
+//EEPROM values are bytes (0 to 255) or signed 16-bit ints (-32768 to 32767) where high byte is loc and low byte is loc+1.
 void initEEPROM(bool hard){
   //If hard, set EEPROM and clock to defaults
   //Otherwise, just make sure stuff is in range

@@ -27,8 +27,9 @@ void initStorage(){
 }
 
 int readEEPROM(int loc, bool isInt){
-  //Read from the volatile array
-  if(isInt) return (storageBytes[loc]<<8)+storageBytes[loc+1];
+  //Read from the volatile array.
+  //Must read int as 16-bit, since on SAMD int is 32-bit and negatives aren't read correctly
+  if(isInt) return (int16_t)(storageBytes[loc]<<8)+storageBytes[loc+1];
   else return storageBytes[loc];
 }
 
