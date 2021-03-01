@@ -863,6 +863,9 @@ void checkRTC(bool force){
       // }
     }
     
+    //NTP cue at minute :59
+    if(rtcGetMinute()==59 && rtcGetSecond()==0) cueNTP();
+    
     //Strikes - only if fn=clock, not setting, not signaling/snoozing, not night/away. Setting 21 will be off if signal type is no good
     //The six pips
     if(rtcGetMinute()==59 && rtcGetSecond()==55 && readEEPROM(21,false)==2 && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {

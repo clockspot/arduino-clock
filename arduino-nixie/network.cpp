@@ -25,9 +25,11 @@ WiFiServer server(80);
 const unsigned long ADMIN_TIMEOUT = 120000; //two minutes
 const unsigned long NTPOK_THRESHOLD = 3600000; //if no sync within 60 minutes, the time is considered stale
 
+
 //Declare a few functions so I can put them out of order
 //Placed here so I can avoid making header files for the moment
-void startNTP();
+void cueNTP();
+void checkNTP();
 
 int statusLast;
 void checkForWiFiStatusChange(){
@@ -64,7 +66,7 @@ void networkStartWiFi(){
     Serial.print(F("SSID: ")); Serial.println(WiFi.SSID());
     Serial.print(F("Signal strength (RSSI):")); Serial.print(WiFi.RSSI()); Serial.println(F(" dBm"));
     Serial.print(F("Access the admin page by browsing to http://")); Serial.println(WiFi.localIP());
-    server.begin(); Udp.begin(localPort); startNTP();
+    server.begin(); Udp.begin(localPort); cueNTP();
   }
   else Serial.println(F(" Wasn't able to connect."));
   updateDisplay();
@@ -92,9 +94,16 @@ void networkDisconnectWiFi(){
   WiFi.end();
 }
 
+bool ntpCued = false;
 unsigned int ntpStartLast = -3000;
 bool ntpGoing = 0;
 unsigned int ntpSyncLast = 0;
+
+void cueNTP(){
+  //We don't want to let other code startNTP() directly since it's asynchronous, and that other code may delay the time until we can check the result
+  ntpCued = true;
+}
+
 void startNTP(){ //Called at intervals to check for ntp time
   if(wssid==F("")) return; //don't try to connect if there's no creds
   if(WiFi.status()!=WL_CONNECTED) networkStartWiFi(); //in case it dropped
@@ -119,6 +128,7 @@ void startNTP(){ //Called at intervals to check for ntp time
   Udp.beginPacket(timeServer, 123); //NTP requests are to port 123
   Udp.write(packetBuffer, NTP_PACKET_SIZE);
   Udp.endPacket();
+  checkNTP(); //in case it comes back quickly enough
 } //end fn startNTP
 
 bool TESTNTPfail = 0;
@@ -166,6 +176,8 @@ void checkNTP(){ //Called on every cycle to see if there is an ntp response to h
     ntpGoing = 0;
   }
   if(!ntpGoing){
+    //If we are waiting to start, do it
+    if(ntpCued){ startNTP(); ntpCued=false; return; }
     //If we are not waiting to set, do nothing
     if(!ntpTime) return;
     //If we are waiting to set, but it's not time, wait for the next cycle
@@ -421,7 +433,7 @@ void checkClients(){
             // client.println();
           requestType = 3; //triggers an admin restart after the client is closed, below
         } else if(currentLine.startsWith(F("syncnow"))){
-          startNTP();
+          cueNTP();
         } else {
           //poll for other special types
           //else eeprom stuff, key is loc - e.g. 16=0
@@ -432,7 +444,7 @@ void checkClients(){
           writeEEPROM(key,val,isInt);
           switch(key){
             case 14: //utc offset
-              startNTP();
+              cueNTP();
             case 22: //auto dst
               isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),true); break;
           }
@@ -481,8 +493,8 @@ void initNetwork(){
   networkStartWiFi();  
 }
 void cycleNetwork(){
-  checkNTP();
   checkClients();
+  checkNTP();
   checkForWiFiStatusChange();
 }
   
