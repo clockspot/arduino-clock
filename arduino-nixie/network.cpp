@@ -325,6 +325,9 @@ void checkClients(){
       client.println("Access-Control-Allow-Origin:*");
       client.println();
       if(requestType==1){ //get
+        
+        //Re hiding irrelevant options, see also fnOptScroll in main code
+        
         client.print(F("<!DOCTYPE html><html><head><title>Clock Settings</title><style>body { background-color: #eee; color: #222; font-family: system-ui, -apple-system, sans-serif; font-size: 18px; line-height: 1.3em; margin: 1.5em; position: absolute; } a { color: #33a; } ul { padding-left: 9em; text-indent: -9em; list-style: none; margin-bottom: 4em; } ul li { margin-bottom: 0.8em; } ul li * { text-indent: 0; padding: 0; } ul li label:first-child { display: inline-block; width: 8em; text-align: right; padding-right: 1em; font-weight: bold; } ul li.nolabel { margin-left: 9em; } ul li h3 { display: inline-block; margin: 0; } input[type='text'],input[type='number'],input[type='submit'],select { border: 1px solid #999; margin: 0.2em 0; padding: 0.1em 0.3em; font-size: 1em; font-family: system-ui, -apple-system, sans-serif; } @media only screen and (max-width: 550px) { ul { padding-left: 0; text-indent: 0; } ul li label:first-child { display: block; width: auto; text-align: left; padding: 0; } ul li.nolabel { margin-left: 0; }} .saving { color: #66d; } .ok { color: #3a3; } .error { color: #c53; } .explain { font-size: 0.85em; line-height: 1.3em; color: #666; } @media (prefers-color-scheme: dark) { body { background-color: #222; color: #ddd; } a { color: white; } #result { background-color: #373; color: white; } input[type='text'],input[type='number'],select { background-color: black; color: #ddd; } .explain { color: #999; } }</style><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'></head><body><h2 style='margin-top: 0;'>Clock Settings</h2><p id='loading'>Loading&hellip;<br/><br/>If page doesn't appear in a few seconds, <a href=\"#\" onclick=\"location.reload(); return false;\">refresh</a>.</p><div id='content' style='display: none;'><ul>"));
         
         client.print(F("<li><h3>General</h3></li>"));
@@ -348,6 +351,7 @@ void checkClients(){
           }
           client.print(F("</li>"));
         
+        //We can always show this, since network is not available without wifi and ntp 
         client.print(F("<li><label>Wi-Fi</label><form id='wform' style='display: inline;' onsubmit='save(this); return false;'><select id='wtype' onchange='wformchg()'><option value=''>None</option><option value='wpa'>WPA</option><option value='wep'>WEP</option></select><span id='wa'><br/><input type='text' id='wssid' name='wssid' placeholder='SSID (Network Name)' autocomplete='off' onchange='wformchg()' onkeyup='wformchg()' value='")); String wssid2 = wssid; wssid2.replace("'","&#39;"); client.print(wssid2); client.print(F("' /><br/><input type='text' id='wpass' name='wpass' placeholder='Password/Key' autocomplete='off' onchange='wformchg()' onkeyup='wformchg()' value='")); String wpass2 = wpass; wpass2.replace("'","&#39;"); client.print(wpass2); client.print(F("' /></span><span id='wb'><br/><label for='wki'>Key Index</label> <select id='wki' onchange='wformchg()'>")); for(char i=0; i<=4; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("' ")); client.print(wki==i?F("selected"):F("")); client.print(F(">")); if(i==0) client.print(F("Select")); else client.print(i,DEC); client.print(F("</option>")); } client.print(F("</select></span><br/><input id='wformsubmit' type='submit' value='Save' style='display: none;' /></form></li>"));
         
         client.print(F("<li><label>NTP sync</label><select id='b9' onchange='save(this)'>")); for(char i=0; i<=1; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(9,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
@@ -413,7 +417,9 @@ void checkClients(){
           case 1: client.print(F("Yes (01:23)")); break;
           default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
         
+        #if !defined(HIDE_IRRELEVANT_OPTIONS) || defined(DISPLAY_NIXIE)
         client.print(F("<li><label>Digit fade</label><input type='number' id='b20' onchange='promptsave(\"b20\")' onkeyup='promptsave(\"b20\")' onblur='unpromptsave(\"b20\"); save(this)' min='0' max='20' step='1' value='")); client.print(readEEPROM(20,false),DEC); client.print(F("' />")); client.print(F(" <a id='b20save' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>Nixie tube digit fade effect, in hundredths of a second (up to 20)</span></li>"));
+        #endif
           
         client.print(F("<li><label>Auto DST</label><a name='autodst' href='#'></a><select id='b22' onchange='save(this)'>")); for(char i=0; i<=6; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(22,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("Off")); break;
@@ -426,6 +432,7 @@ void checkClients(){
           default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>Automatically sets clock forward/backward at 2am on the relevant Sunday (see instructions for details). If you observe Daylight Saving Time but your locale's rules are not represented here, leave this set to Off and set the clock forward manually (and add an hour to the <a href='#utcoffset'>UTC offset</a> if using sunrise/sunset).</span></li>")); //TODO instructions
 
           //TODO call everything backlight
+        #if !defined(HIDE_IRRELEVANT_OPTIONS) || LED_PIN
         client.print(F("<li><label>Backlight behavior</label><a name='backlight' href='#'></a><select id='b26' onchange='save(this)'>")); for(char i=0; i<=4; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(26,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("Always off")); break;
           case 1: client.print(F("Always on")); break;
@@ -433,13 +440,16 @@ void checkClients(){
           case 3: client.print(F("Off until alarm/timer sounds")); break;
           case 4: client.print(F("Off until switched relay")); break; //TODO skip
           default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
+        #endif
 
           //TODO nixie only TODO option for never
+        #if !defined(HIDE_IRRELEVANT_OPTIONS) || defined(DISPLAY_NIXIE)
         client.print(F("<li><label>Anti-cathode poisoning</label><a name='antipoison' href='#'></a><select id='b46' onchange='save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(46,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("Once a day")); break;
           case 1: client.print(F("Every hour")); break;
           case 2: client.print(F("Every minute")); break;
           default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>Briefly cycles all digits to prevent <a href='http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm' target='_blank'>cathode poisoning</a>. Will not trigger during night/away shutoff. Daily option happens at midnight or, if enabled, when night shutoff starts.</span></li>"));
+        #endif
           
         client.print(F("<li><h3>Alarm</h3></li>"));
         
@@ -457,11 +467,18 @@ void checkClients(){
           case 2: client.print(F("Work week")); break;
           default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>If using this, be sure to set <a href='#workweek'>work week</a> below.</span></li>"));
 
+        #if !defined(HIDE_IRRELEVANT_OPTIONS) || (RELAY_PIN>=0 && PIEZO_PIN>=0)
         client.print(F("<li><label>Signal</label><select id='b42' onchange='save(this)'>")); for(char i=0; i<=1; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(42,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("Beeper")); break;
-          case 1: client.print(F("Relay")); break; //TODO "if in switch mode, will stay on for 2 hours"
-          default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
-          
+          case 1: client.print(F("Relay")); break;
+          default: break; } client.print(F("</option>")); } client.print(F("</select>"));
+          #if RELAY_MODE
+            client.print(F("<br><span class='explain'>Relay will automatically switch off after ")); client.print(SWITCH_DUR/60,DEC); client.print(F(" minutes.</span>"));
+          #endif
+          client.print(F("</li>"));
+        #endif
+        
+        #if !defined(HIDE_IRRELEVANT_OPTIONS) || (PIEZO_PIN>=0)
         client.print(F("<li><label>Pitch</label><select id='b39' onchange='save(this)'>")); for(char i=49; i<=88; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(39,false)==i) client.print(F(" selected")); client.print(F(">")); switch((i-40)%12){
           case 0: client.print(F("C")); break;
           case 1: client.print(F("D&#9837;")); break;
@@ -485,13 +502,20 @@ void checkClients(){
           case 4: client.print(F("Quad")); break;
           case 5: client.print(F("Cuckoo")); break;
           default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
+        #endif
         
         client.print(F("<li><label>Snooze</label><input type='number' id='b24' onchange='promptsave(\"b24\")' onkeyup='promptsave(\"b24\")' onblur='unpromptsave(\"b24\"); save(this)' min='0' max='60' step='1' value='")); client.print(readEEPROM(24,false),DEC); client.print(F("' />")); client.print(F(" <a id='b24save' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>In minutes. Zero disables snooze.</span></li>"));
         
+        #if !defined(HIDE_IRRELEVANT_OPTIONS) || (PIEZO_PIN>=0 && RELAY_MODE>0)
         client.print(F("<li><label>Fibonacci mode</label><select id='b50' onchange='save(this)'>")); for(char i=0; i<=1; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(50,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("Off")); break;
           case 1: client.print(F("On")); break;
-          default: break; } client.print(F("</option>")); } client.print(F("</select><br><span class='explain'>To wake you more gradually, the alarm will start about 27 minutes early, by beeping at increasingly shorter intervals per the Fibonacci sequence (610 seconds, then 337, then 233...). In this mode, snooze does not take effect; any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet. Has no effect when alarm is set to use switched relay.</span></li>")); //TODO switch etc
+          default: break; } client.print(F("</option>")); } client.print(F("</select><br><span class='explain'>To wake you more gradually, the alarm will start about 27 minutes early, by beeping at increasingly shorter intervals per the Fibonacci sequence (610 seconds, then 337, then 233...). In this mode, snooze does not take effect; any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet."));
+          #if (RELAY_PIN>=0 && PIEZO_PIN>=0 && RELAY_MODE>0) //when switched relay is possible alarm signal
+            client.print(F(" Has no effect when alarm is set to use relay."));
+          #endif
+          client.print(F("</span></li>"));
+        #endif
         
         client.print(F("<li><h3>Chrono/Timer</h3></li>"));
         
@@ -502,11 +526,18 @@ void checkClients(){
           case 3: client.print(F("Start chrono, short signal")); break;
           default: break; } client.print(F("</option>")); } client.print(F("</select><br><span class='explain'>What the timer will do when it runs out. This can be set directly on the clock as well: while the timer is running, Down will cycle through these options (1-4 beeps respectively). The repeat option makes a great interval timer!</span></li>")); //TODO switch etc
         
+        #if !defined(HIDE_IRRELEVANT_OPTIONS) || (RELAY_PIN>=0 && PIEZO_PIN>=0)
         client.print(F("<li><label>Signal</label><select id='b43' onchange='save(this)'>")); for(char i=0; i<=1; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(43,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("Beeper")); break;
-          case 1: client.print(F("Relay")); break; //TODO "if in switch mode, will stay on for 2 hours"
-          default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
+          case 1: client.print(F("Relay")); break;
+          default: break; } client.print(F("</option>")); } client.print(F("</select>"));
+          #if RELAY_MODE
+            client.print(F("<br><span class='explain'>Relay will switch on while timer is running, like a <a href='https://en.wikipedia.org/wiki/Time_switch' target='_blank'>sleep timer</a>.</span>"));
+          #endif
+          client.print(F("</li>"));
+        #endif
         
+        #if !defined(HIDE_IRRELEVANT_OPTIONS) || (PIEZO_PIN>=0)
         client.print(F("<li><label>Pitch</label><select id='b40' onchange='save(this)'>")); for(char i=49; i<=88; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(40,false)==i) client.print(F(" selected")); client.print(F(">")); switch((i-40)%12){
           case 0: client.print(F("C")); break;
           case 1: client.print(F("D&#9837;")); break;
@@ -530,7 +561,9 @@ void checkClients(){
           case 4: client.print(F("Quad")); break;
           case 5: client.print(F("Cuckoo")); break;
           default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
+        #endif
         
+        #if !defined(HIDE_IRRELEVANT_OPTIONS) || (PIEZO_PIN>=0 && RELAY_MODE>0)
         client.print(F("<li><h3>Chime</h3></li>"));
         
         client.print(F("<li><label>Chime</label><select id='b21' onchange='save(this)'>")); for(char i=0; i<=4; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(21,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
@@ -540,12 +573,16 @@ void checkClients(){
           case 3: client.print(F("Strike the hour")); break;
           case 4: client.print(F("Ship's bell")); break;
           default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>Will not sound during night/away shutoff (except when off starts at top of hour). <a href='https://en.wikipedia.org/wiki/Greenwich_Time_Signal' target='_blank'>Six pips refers to this.</a></span></li>"));
+        #endif
         
+        #if !defined(HIDE_IRRELEVANT_OPTIONS) || (RELAY_PIN>=0 && PIEZO_PIN>=0 && RELAY_MODE>0)
         client.print(F("<li><label>Signal</label><select id='b44' onchange='save(this)'>")); for(char i=0; i<=1; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(44,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("Beeper")); break;
-          case 1: client.print(F("Relay")); break; //TODO "if in switch mode, will stay on for 2 hours"
+          case 1: client.print(F("Relay")); break;
           default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
-          
+        #endif
+        
+        #if !defined(HIDE_IRRELEVANT_OPTIONS) || (PIEZO_PIN>=0)  
         client.print(F("<li><label>Pitch</label><select id='b41' onchange='save(this)'>")); for(char i=49; i<=88; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(41,false)==i) client.print(F(" selected")); client.print(F(">")); switch((i-40)%12){
           case 0: client.print(F("C")); break;
           case 1: client.print(F("D&#9837;")); break;
@@ -569,6 +606,7 @@ void checkClients(){
           case 4: client.print(F("Quad")); break;
           case 5: client.print(F("Cuckoo")); break;
           default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
+        #if !defined(HIDE_IRRELEVANT_OPTIONS) || (PIEZO_PIN>=0)
                   
         client.print(F("<li><h3>Night/away shutoff</h3></li>"));
         

@@ -160,6 +160,8 @@ void goToFn(byte thefn); //used by network
 int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp); //used by network
 void findFnAndPageNumbers(); //used by network
 
+#define HIDE_IRRELEVANT_OPTIONS 0 //TODO change options to settings everywhere
+
 //These cpp files contain code that is conditionally included
 //based on the available hardware and settings in the config file.
 //TODO revisit - This is probably not the right way to do this –
@@ -602,7 +604,7 @@ void fnOptScroll(byte dir){
   if(dir==0) fn = (fn==fnOpts? posLast: fn-1);
   //Certain options don't apply to some configurations; skip those.
   byte optLoc = optsLoc[fn-fnOpts];
-  if(
+  if(HIDE_IRRELEVANT_OPTIONS && ( //see also: network requestType=1
       //Hardware config
       (PIEZO_PIN<0 && (optLoc==39||optLoc==40||optLoc==41||optLoc==47||optLoc==48||optLoc==49)) //no piezo: no signal pitches or alarm/timer/strike beeper pattern
       || ((PIEZO_PIN<0 && RELAY_MODE==0) && (optLoc==21||optLoc==50)) //no piezo, and relay is switch: no strike, or alarm fibonacci mode
@@ -611,19 +613,19 @@ void fnOptScroll(byte dir){
       || ((LED_PIN<0) && (optLoc==26)) //no led pin: no led control
       || ((LED_PIN<0) && (optLoc==26)) //no led pin: no led control
       //Functions disabled
-      || (!ENABLE_DATE_FN && (optLoc==17||optLoc==18||optLoc==10||optLoc==12||optLoc==14)) //date fn disabled in config: skip date and geography options
+      || (!ENABLE_DATE_FN && (optLoc==17||optLoc==18||optLoc==10||optLoc==12)) //date fn disabled in config: skip date and geography options - don't skip utc offset as that's now used when setting clock from network ||optLoc==14
       || (!ENABLE_ALARM_FN && (optLoc==23||optLoc==42||optLoc==39||optLoc==47||optLoc==24||optLoc==50)) //alarm fn disabled in config: skip alarm options
       || (!ENABLE_TIMER_FN && (optLoc==43||optLoc==40||optLoc==48)) //timer fn disabled in config: skip timer options
       || (!ENABLE_TEMP_FN && (optLoc==45)) //temp fn disabled in config: skip temp format TODO good for weather also
       //Other functionality disabled
-      //|| (!ENABLE_DATE_RISESET && (optLoc==10||optLoc==12)) //date rise/set disabled in config: skip geography - don't skip utc offset as that's now used when setting clock from network ||optLoc==14
+      || (!ENABLE_DATE_RISESET && (optLoc==10||optLoc==12)) //date rise/set disabled in config: skip geography - don't skip utc offset as that's now used when setting clock from network ||optLoc==14
       || (!ENABLE_ALARM_AUTOSKIP && (optLoc==23)) //alarm autoskip disabled in config: skip autoskip switch
       || (!ENABLE_ALARM_FIBONACCI && (optLoc==50)) //fibonacci mode disabled in config: skip fibonacci switch
       || (!ENABLE_TIME_CHIME && (optLoc==21||optLoc==44||optLoc==41||optLoc==49)) //chime disabled in config: skip chime
       || (!ENABLE_SHUTOFF_NIGHT && (optLoc==27||optLoc==28||optLoc==30)) //night shutoff disabled in config: skip night
       || ((!ENABLE_SHUTOFF_NIGHT || !ENABLE_SHUTOFF_AWAY) && (optLoc==32||optLoc==35||optLoc==37)) //night or away shutoff disabled in config: skip away (except workweek)
       || ((!ENABLE_SHUTOFF_NIGHT || !ENABLE_SHUTOFF_AWAY) && (!ENABLE_ALARM_AUTOSKIP || !ENABLE_ALARM_FN) && (optLoc==33||optLoc==34)) //(night or away) and alarm autoskip disabled: skip workweek
-    ) {
+    )) {
     fnOptScroll(dir);
   }
 }
