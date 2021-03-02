@@ -55,7 +55,6 @@ void networkStartWiFi(){
   WiFi.end(); //if AP is going, stop it
   if(wssid==F("")) return; //don't try to connect if there's no creds
   checkForWiFiStatusChange(); //just for serial logging
-  //rtcDisplayTime(false); //display time without seconds //TODO replace this with what
   blankDisplay(0,5,false); //I'm guessing if it hangs, nixies won't be able to display anyway
   //Serial.println(); Serial.print(millis()); Serial.print(F(" Attempting to connect to SSID: ")); Serial.println(wssid);
   if(wki) WiFi.begin(wssid.c_str(), wki, wpass.c_str()); //WEP - hangs while connecting
@@ -253,7 +252,6 @@ unsigned long adminInputLast = 0; //for noticing when the admin page hasn't been
 
 void networkStartAdmin(){
   adminInputLast = millis();
-  //TODO display should handle its own code for displaying a type of stuff
   if(WiFi.status()!=WL_CONNECTED){
     networkStartAP();
     tempValDispQueue[0] = 7777; //display to user
@@ -394,13 +392,12 @@ void checkClients(){
         //Function preset ???????
         //TODO leap second support? Add NTP sync at top of hour also
         
-        client.print(F("<li><label>Day counter</label><select id='b4' onchange='if(this.value==2) document.getElementById(\"daycounterdeets\").style.display=\"none\"; else document.getElementById(\"daycounterdeets\").style.display=\"inline\"; save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(4,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
-          case 0: client.print(F("Count days until...")); break;
-          case 1: client.print(F("Count days since...")); break; //TODO change to have 0 be disabled - may require a reset
-          case 2: client.print(F("DEMO hide controls")); break; //TODO change to have 0 be disabled - may require a reset
-          default: break; } client.print(F("</option>")); } client.print(F("</select>")); //TODO replace inline with natural state
-        
-        client.print(F("<br/><span id='daycounterdeets' style='display: inline;'><span></span><label for='b5'>Month&nbsp;</label><input type='number' id='b5' onchange='promptsave(\"b5\")' onkeyup='promptsave(\"b5\")' onblur='unpromptsave(\"b5\"); save(this)' min='1' max='12' step='1' value='")); client.print(readEEPROM(5,false),DEC); client.print(F("' />")); client.print(F(" <a id='b5save' href='#' onclick='return false' style='display: none;'>save</a>")); //Extra span is there to prevent "first" styling on the month label
+        client.print(F("<li><label>Day counter</label><select id='b4' onchange='if(this.value==0) document.getElementById(\"daycounterdeets\").style.display=\"none\"; else document.getElementById(\"daycounterdeets\").style.display=\"inline\"; save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(4,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
+          case 0: client.print(F("Off")); break;
+          case 1: client.print(F("Count days until...")); break;
+          case 2: client.print(F("Count days since...")); break;
+          default: break; } client.print(F("</option>")); } client.print(F("</select>"));
+          client.print(F("<br/><span id='daycounterdeets' style='display: ")); if(readEEPROM(4,false)==0) client.print(F("none")); else client.print(F("inline")); client.print(F(";'><span></span><label for='b5'>Month&nbsp;</label><input type='number' id='b5' onchange='promptsave(\"b5\")' onkeyup='promptsave(\"b5\")' onblur='unpromptsave(\"b5\"); save(this)' min='1' max='12' step='1' value='")); client.print(readEEPROM(5,false),DEC); client.print(F("' />")); client.print(F(" <a id='b5save' href='#' onclick='return false' style='display: none;'>save</a>")); //Extra span is there to prevent "first" styling on the month label
           
         client.print(F("<br/><label for='b6'>Date&nbsp;</label><input type='number' id='b6' onchange='promptsave(\"b6\")' onkeyup='promptsave(\"b6\")' onblur='unpromptsave(\"b6\"); save(this)' min='1' max='31' step='1' value='")); client.print(readEEPROM(6,false),DEC); client.print(F("' />")); client.print(F(" <a id='b6save' href='#' onclick='return false' style='display: none;'>save</a><br/></span><span class='explain'>Appears after date. Repeats annually.</span></li>")); //TODO tip count day of year and program override to display 0 as 366 //TODO when month changes, set date max, or can you? what about 2/29? it should just do 3/1 in those cases
 
@@ -707,8 +704,10 @@ void checkClients(){
           //do special stuff for some of them
           switch(key){
             case 4: case 5: case 6: //day counter
-              //in lieu of actually switching to fnIsDate, so that only this value is seen
-              tempValDispQueue[0] = dateComp(rtcGetYear(),rtcGetMonth(),rtcGetDate(), readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false));
+              //in lieu of actually switching to fnIsDate, so that only this value is seen - compare to ino
+              if(readEEPROM(4,false)) tempValDispQueue[0] = dateComp(rtcGetYear(),rtcGetMonth(),rtcGetDate(), readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)-1);
+              findFnAndPageNumbers(); //to include or exclude the day counter from the calendar function
+              break;
             case 14: //utc offset
               cueNTP(); break;
             case 17: //date format

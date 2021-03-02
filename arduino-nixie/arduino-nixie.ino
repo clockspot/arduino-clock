@@ -158,6 +158,7 @@ void ctrlEvt(byte ctrl, byte evt); //used by input
 void updateDisplay(); //used by network
 void goToFn(byte thefn); //used by network
 int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp); //used by network
+void findFnAndPageNumbers(); //used by network
 
 //These cpp files contain code that is conditionally included
 //based on the available hardware and settings in the config file.
@@ -480,7 +481,7 @@ void ctrlEvt(byte ctrl, byte evt){
                   case 2: //save date, set direction
                     displayBlink(); //to indicate save.
                     writeEEPROM(6,fnSetVal,false);
-                    startSet(readEEPROM(4,false),0,1,3); break;
+                    startSet(readEEPROM(4,false),1,2,3); break;
                   case 3: //save date
                     displayBlink(); //to indicate save.
                     writeEEPROM(4,fnSetVal,false);
@@ -717,7 +718,7 @@ void initEEPROM(bool hard){
   if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //0-1: alarm at 7am
   //2: alarm on, handled by init
   //3: free
-  if(hard || readEEPROM(4,false)<0 || readEEPROM(4,false)>1) writeEEPROM(4,1,false); //4: day counter direction: count up...
+  if(hard || readEEPROM(4,false)<0 || readEEPROM(4,false)>2) writeEEPROM(4,2,false); //4: day counter direction: count up...
   if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) writeEEPROM(5,12,false); //5: ...December...
   if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) writeEEPROM(6,31,false); //6: ...31st. (This gives the day of the year)
   if(hard) writeEEPROM(7,0,false); //7: Alt function preset
@@ -736,7 +737,7 @@ void initEEPROM(bool hard){
 void findFnAndPageNumbers(){
   //Each function, and each page in a paged function, has a number. //TODO should pull from EEPROM 8
   fnDatePages = 1; //date function always has a page for the date itself
-  if(ENABLE_DATE_COUNTER){ fnDatePages++; fnDateCounter=fnDatePages-1; }
+  if(ENABLE_DATE_COUNTER && readEEPROM(4,false)){ fnDatePages++; fnDateCounter=fnDatePages-1; }
   if(ENABLE_DATE_RISESET){ fnDatePages++; fnDateSunlast=fnDatePages-1; }
   if(false){ fnDatePages++; fnDateWeathernow=fnDatePages-1; }
   if(ENABLE_DATE_RISESET){ fnDatePages++; fnDateSunnext=fnDatePages-1; }
@@ -1361,7 +1362,7 @@ void updateDisplay(){
           }
         }
         else if(fnPg==fnDateCounter){
-          editDisplay(dateComp(rtcGetYear(),rtcGetMonth(),rtcGetDate(),readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)),0,3,false,true);
+          editDisplay(dateComp(rtcGetYear(),rtcGetMonth(),rtcGetDate(),readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)-1),0,3,false,true);
           blankDisplay(4,5,true);
         }
         //The sun and weather displays are based on a snapshot of the time of day when the function display was triggered, just in case it's triggered a few seconds before a sun event (sunrise/sunset) and the "prev/now" and "next" displays fall on either side of that event, they'll both display data from before it. If triggered just before midnight, the date could change as well – not such an issue for sun, but might be for weather - TODO create date snapshot also
