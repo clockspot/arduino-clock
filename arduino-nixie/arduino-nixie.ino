@@ -141,6 +141,12 @@ byte versionRemain = 0; //display version at start //TODO with button held at st
 //Hold Select at startup to see the version number (from v2.0 – earlier versions will display it automatically or not display it at all).
 //To reset the clock to defaults, hold Alt at startup. You'll see the time reset to 0:00. (If you don't have Alt, hold Select for 15 seconds at startup.)
 
+//If we need to temporarily display a value (or values in series), we can put them here. Can't be zero.
+//This is used by network to display IP addresses, and various other bits.
+int tempValDispQueue[4];
+const int tempValDispDur = 2500; //ms
+unsigned int tempValDispLast = 0;
+
 //Declare a few functions from the main code that are used in the includes below
 //Placed here so I can avoid making header files for the moment
 byte dayOfWeek(word y, byte m, byte d); //used by network
@@ -151,6 +157,7 @@ void calcSun(); //used by rtc
 void ctrlEvt(byte ctrl, byte evt); //used by input
 void updateDisplay(); //used by network
 void goToFn(byte thefn); //used by network
+int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp); //used by network
 
 //These cpp files contain code that is conditionally included
 //based on the available hardware and settings in the config file.
@@ -774,6 +781,18 @@ void checkRTC(bool force){
     if((unsigned long)(now-inputLast)>=(fn==fnIsTimer?3600:FN_TEMP_TIMEOUT)*1000) { fnSetPg = 0; fn = fnIsTime; force=true; }
   }
   
+  //Temporary value display queue
+  if(tempValDispQueue[0] && !tempValDispLast){ //just starting
+    tempValDispLast = now; if(!tempValDispLast) tempValDispLast = 1; //can't be zero
+    updateDisplay();
+  }
+  if(tempValDispLast && (unsigned long)(now-tempValDispLast)>=tempValDispDur){ //already going - time to advance?
+    for(char i=0; i<=3; i++) tempValDispQueue[i] = (i==3?0:tempValDispQueue[i+1]);
+    if(!tempValDispQueue[0]) tempValDispLast = 0; //zero found, time to stop
+    else { tempValDispLast = now; if(!tempValDispLast) tempValDispLast = 1; } //can't be zero
+    updateDisplay();
+  }
+  
   //Update things based on RTC
   rtcTakeSnap();
   
@@ -1259,6 +1278,10 @@ void updateDisplay(){
     editDisplay(vMajor, 0, 1, false, false);
     editDisplay(vMinor, 2, 3, false, false);
     editDisplay(vPatch, 4, 5, false, false);
+  }
+  else if(tempValDispQueue[0]>0){
+    editDisplay(tempValDispQueue[0], 0, 3, false, true);
+    blankDisplay(4, 5, true);
   }
   else if(fnSetPg) { //setting value, for either fn or option
     displayDim = 2;
