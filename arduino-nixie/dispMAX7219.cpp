@@ -83,21 +83,23 @@ void cycleDisplay(){
     if((unsigned long)(now-displayBlinkStart)>=500){ displayBlinkStart = 0; sendToMAX7219(0,5); }
   }
   //Other display code decides whether we should dim per function or time of day
-  bool dim = (displayDim==1?1:0); //2 should also 0
+  char dim = displayDim; //2=normal, 1=dim, 0=off
   //But if we're setting, decide here to dim for every other 500ms since we started setting
   if(fnSetPg>0) {
     if(setStartLast==0) setStartLast = now;
-    dim = 1-(((unsigned long)(now-setStartLast)/500)%2);
+    dim = (1-(((unsigned long)(now-setStartLast)/500)%2))+1;
   } else {
     if(setStartLast>0) setStartLast=0;
   }
-  if(curBrightness!=(dim? BRIGHTNESS_DIM: BRIGHTNESS_FULL)){
-    curBrightness = (dim? BRIGHTNESS_DIM: BRIGHTNESS_FULL);
-    for(int i=0; i<NUM_MAX; i++) { lc.setIntensity(i,curBrightness); }
+  if(curBrightness!=(dim==2? BRIGHTNESS_FULL: (dim==1? BRIGHTNESS_DIM: -1))){
+    curBrightness = (dim==2? BRIGHTNESS_FULL: (dim==1? BRIGHTNESS_DIM: -1));
+    if(curBrightness==-1) for(int i=0; i<NUM_MAX; i++) { lc.clearDisplay(i); }
+    else for(int i=0; i<NUM_MAX; i++) { lc.setIntensity(i,curBrightness); }
   }
 }
 
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
+  if(curBrightness==-1) return;
   //Splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
   //If there are blank places (on the left of a non-leading-zero number), uses value 15 to blank tube
   //If number has more places than posEnd-posStart, the higher places are truncated off (e.g. 10015 on 4 tubes --> 0015)
@@ -114,13 +116,13 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fad
     }
     displayNext[posEnd-i] = (i==0&&n==0 ? 0 : (n>=place ? (n/place)%10 : (leadingZeros?0:15)));
   }
-  cycleDisplay(); //fixes brightness
   sendToMAX7219(posStart,posEnd);
+  cycleDisplay(); //fixes brightness
 }
 void blankDisplay(byte posStart, byte posEnd, byte fade){
   for(byte i=posStart; i<=posEnd; i++) { displayNext[i]=15; }
-  cycleDisplay(); //fixes brightness
   sendToMAX7219(posStart,posEnd);
+  cycleDisplay(); //fixes brightness
 }
 
 //void startScroll() {}
