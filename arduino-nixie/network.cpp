@@ -4,6 +4,7 @@
 
 #ifndef __AVR__ //TODO better sensor
 //do stuff for wifinina
+#define NETWORK_OK
   
 //#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
 #include <WiFiNINA.h>
@@ -834,11 +835,7 @@ void cycleNetwork(){
   checkNTP();
   checkForWiFiStatusChange();
 }
-  
-#else
-//AVR - dummy functions
-void initNetwork(){}
-void cycleNetwork(){}
+
 #endif
 
 #endif
