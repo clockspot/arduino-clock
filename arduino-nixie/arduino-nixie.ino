@@ -160,7 +160,7 @@ void goToFn(byte thefn); //used by network
 int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp); //used by network
 void findFnAndPageNumbers(); //used by network
 
-#define HIDE_IRRELEVANT_OPTIONS 0 //TODO change options to settings everywhere
+#define SHOW_IRRELEVANT_OPTIONS 0 //TODO change options to settings everywhere //for debug
 
 //These cpp files contain code that is conditionally included
 //based on the available hardware and settings in the config file.
@@ -604,7 +604,7 @@ void fnOptScroll(byte dir){
   if(dir==0) fn = (fn==fnOpts? posLast: fn-1);
   //Certain options don't apply to some configurations; skip those.
   byte optLoc = optsLoc[fn-fnOpts];
-  if(HIDE_IRRELEVANT_OPTIONS && ( //see also: network requestType=1
+  if(!SHOW_IRRELEVANT_OPTIONS && ( //see also: network requestType=1
       //Hardware config
       (PIEZO_PIN<0 && (optLoc==39||optLoc==40||optLoc==41||optLoc==47||optLoc==48||optLoc==49)) //no piezo: no signal pitches or alarm/timer/strike beeper pattern
       || ((PIEZO_PIN<0 && RELAY_MODE==0) && (optLoc==21||optLoc==50)) //no piezo, and relay is switch: no strike, or alarm fibonacci mode
@@ -1424,7 +1424,7 @@ void updateDisplay(){
           }
         }
         break;
-      case fnIsTemp: //thermometer
+      case fnIsTemp: //thermometer TODO disable if rtc doesn't support it
         int temp; temp = rtcGetTemp();
         if(readEEPROM(45,false)==1) temp = temp*1.8 + 3200;
         //TODO another option to apply offset
