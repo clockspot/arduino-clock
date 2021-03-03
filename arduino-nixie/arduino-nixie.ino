@@ -7,7 +7,7 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/sample-samd.h"
+#include "configs/led-iot.h"
 
 ////////// Software version //////////
 const byte vMajor = 1;

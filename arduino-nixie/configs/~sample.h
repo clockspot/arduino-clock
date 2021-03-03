@@ -32,7 +32,7 @@
 // #define RTC_DS3231
 
 //If using RTCZero on Nano 33 IoT: //TODO
-// #define RTC_ZERO "rtc/rtcZero.h"
+// #define RTC_ZERO
 
 //If using no RTC (a fake RTC based on millis()):
 #define RTC_MILLIS

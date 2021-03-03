@@ -1,13 +1,17 @@
 //UNDB v9, relay disabled, buttons as labeled, with 6-digit display.
 //Also for v8 modified to v9 spec (Sel/Alt on A6/A7, Up/Down on A0/A1, relay on A3, led on 9, and cathode B4 on A2)
 
-#define DISPLAY_SIZE 6 //number of tubes in display module. Small display adjustments are made for 4-tube clocks
+#ifndef CONFIG
+#define CONFIG
+
+
+///// Functionality /////
 
 // Which functionality is enabled in this clock?
 // Related options will also be enabled in the options menu.
 #define ENABLE_DATE_FN true // Date function, optionally including pages below
 #define ENABLE_DATE_COUNTER true // Adds date page with an anniversary counter
-#define ENABLE_DATE_RISESET true // Adds date pages with sunrise/sunset times. Requires DM Kichi's Dusk2Dawn library to be installed in IDE.
+#define ENABLE_DATE_RISESET true // Adds date pages with sunrise/sunset times. Requires Dusk2Dawn library by DM Kichi to be installed in IDE.
 #define ENABLE_ALARM_FN true
 #define ENABLE_ALARM_AUTOSKIP true
 #define ENABLE_ALARM_FIBONACCI true
@@ -18,31 +22,77 @@
 #define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
 #define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 
-// These are the RLB board connections to Arduino analog input pins.
-// S1/PL13 = Reset
-// S2/PL5 = A1
-// S3/PL6 = A0
-// S4/PL7 = A6
-// S5/PL8 = A3
-// S6/PL9 = A2
-// S7/PL14 = A7
-// A6-A7 are analog-only pins that aren't quite as responsive and require a physical pullup resistor (1K to +5V), and can't be used with rotary encoders because they don't support pin change interrupts.
 
-// What input is associated with each control?
-#define CTRL_SEL A6 //main select button - must be equipped
-#define CTRL_UP A0 //main up/down buttons or rotary encoder - must be equipped
-#define CTRL_DN A1
-#define CTRL_ALT A7 //alt select button - if unequipped, set to 0
+///// Real-Time Clock /////
+//These are mutually exclusive
 
-// What type of up/down controls are equipped?
-// 1 = momentary buttons. 2 = quadrature rotary encoder: requires Paul Stoffregen's Encoder library to be installed in IDE.
-#define CTRL_UPDN_TYPE 1
-#define ROT_VEL_START 80 //Required if CTRL_UPDN_TYPE==2. If step rate falls below this, kick into high velocity set (x10)
-#define ROT_VEL_STOP 500 //Required if CTRL_UPDN_TYPE==2. If encoder step rate rises above this, drop into low velocity set (x1)
+//If using DS3231 (via I2C):
+//Requires Wire library (standard Arduino)
+//Requires DS3231 library by NorthernWidget to be installed in your IDE.
+#define RTC_DS3231
 
-// How long (in ms) are the button hold durations?
+
+///// Inputs /////
+
+//If using buttons for Select and optionally Alt:
+#define INPUT_BUTTONS
+#define CTRL_SEL A6 //UNDB S4/PL7
+#define CTRL_ALT A7 //UNDB S7/PL14 - if not using Alt, set to 0
+
+//Up and Down can be buttons OR a rotary control:
+
+//If using buttons for Up and Down:
+#define INPUT_UPDN_BUTTONS
+#define CTRL_UP A0 //UNDB S3/PL6
+#define CTRL_DN A1 //UNDB S2/PL5
+
+//For all input types:
+//How long (in ms) are the hold durations?
 #define CTRL_HOLD_SHORT_DUR 1000 //for entering setting mode, or hold-setting at low velocity (x1)
 #define CTRL_HOLD_LONG_DUR 3000 //for entering options menu, or hold-setting at high velocity (x10)
+#define CTRL_HOLD_VERYLONG_DUR 5000 //for wifi IP info / admin start (Nano IoT only)
+#define CTRL_HOLD_SUPERLONG_DUR 15000 //for wifi forget (Nano IoT only)
+//What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
+#define SETTING_TIMEOUT 300 //sec
+#define FN_TEMP_TIMEOUT 5 //sec
+#define FN_PAGE_TIMEOUT 3 //sec
+
+//Unused inputs
+//A3 //UNDB S5/PL8
+//A2 //UNDB S6/PL9
+
+
+///// Display /////
+//These are mutually exclusive
+
+//If using nixie array:
+#define DISP_NIXIE
+#define CLEAN_SPEED 200 //ms - "frame rate" of tube cleaning
+//Which output pins?
+//This clock is 2x3 multiplexed: two tubes powered at a time.
+//The anode channel determines which two tubes are powered,
+//and the two SN74141 cathode driver chips determine which digits are lit.
+//4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
+#define OUT_A1 2
+#define OUT_A2 3
+#define OUT_A3 4
+#define OUT_A4 5
+#define OUT_B1 6
+#define OUT_B2 7
+#define OUT_B3 8
+#define OUT_B4 16 //aka A2
+//3 pins out to anode channel switches
+#define ANODE_1 11
+#define ANODE_2 12
+#define ANODE_3 13
+
+//For all display types:
+#define DISPLAY_SIZE 6 //number of digits in display module: 6 or 4
+#define UNOFF_DUR 10 //sec - when display is off, an input will illuminate for how long?
+#define SCROLL_SPEED 100 //ms - "frame rate" of digit scrolling, e.g. date at :30 option
+
+
+///// Other Outputs /////
 
 //What are the signal pin(s) connected to?
 #define PIEZO_PIN 10
@@ -63,34 +113,8 @@
 // 1 = yes. Relay can be switched on and off directly with Alt button at any time (except in options menu). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
 // 0 = no. Use if the connected appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched. In this case (and/or if there is no switched relay) Alt will act as a function preset.
 
-//LED circuit control
+//LED backlighting control
 #define LED_PIN 9 // -1 to disable feature; 9 if equipped (UNDB v9)
 
-//When display is dim/off, a press will light the tubes for how long?
-#define UNOFF_DUR 10 //sec
 
-// What is the "frame rate" of the tube cleaning and display scrolling? up to 65535 ms
-#define CLEAN_SPEED 200 //ms
-#define SCROLL_SPEED 100 //ms - e.g. scroll-in-and-out date at :30
-
-// What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
-#define SETTING_TIMEOUT 300 //sec
-#define FN_TEMP_TIMEOUT 5 //sec
-#define FN_PAGE_TIMEOUT 3 //sec
-
-//This clock is 2x3 multiplexed: two tubes powered at a time.
-//The anode channel determines which two tubes are powered,
-//and the two SN74141 cathode driver chips determine which digits are lit.
-//4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
-#define OUT_A1 2
-#define OUT_A2 3
-#define OUT_A3 4
-#define OUT_A4 5
-#define OUT_B1 6
-#define OUT_B2 7
-#define OUT_B3 8
-#define OUT_B4 16 //aka A2
-//3 pins out to anode channel switches
-#define ANODE_1 11
-#define ANODE_2 12
-#define ANODE_3 13
+#endif

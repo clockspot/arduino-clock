@@ -1,5 +1,4 @@
-//This config includes all options this project supports (displays, inputs, etc).
-//You can make a copy and include only the portions relevant to your clock's hardware.
+//Arduino IoT with nothing but the LED connected
 
 #ifndef CONFIG
 #define CONFIG
@@ -11,7 +10,7 @@
 // Related options will also be enabled in the options menu.
 #define ENABLE_DATE_FN true // Date function, optionally including pages below
 #define ENABLE_DATE_COUNTER true // Adds date page with an anniversary counter
-#define ENABLE_DATE_RISESET true // Adds date pages with sunrise/sunset times. Requires Dusk2Dawn library by DM Kichi to be installed in IDE.
+#define ENABLE_DATE_RISESET false // Adds date pages with sunrise/sunset times. Requires Dusk2Dawn library by DM Kichi to be installed in IDE. TODO get this working on SAMD
 #define ENABLE_ALARM_FN true
 #define ENABLE_ALARM_AUTOSKIP true
 #define ENABLE_ALARM_FIBONACCI true
@@ -23,37 +22,21 @@
 #define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 
 
+///// Real-Time Clock /////
+//If using no RTC (a fake RTC based on millis()):
+#define RTC_MILLIS
+#define ANTI_DRIFT 0 //msec to add/remove per second - or seconds to add/remove per day divided by 86.4 - to compensate for natural drift. If using wifinina, it really only needs to be good enough for a decent timekeeping display until the next ntp sync. TIP: setting to a superhigh value is helpful for testing! e.g. 9000 will make it run 10x speed
+
+
 ///// Inputs /////
-
-//If using buttons for Select and optionally Alt:
-#define INPUT_BUTTONS
-#define CTRL_SEL A6 //UNDB S4/PL7
-#define CTRL_ALT A7 //UNDB S7/PL14 - if not using Alt, set to 0
-
-//Up and Down can be buttons OR a rotary control:
-
-//If using buttons for Up and Down:
-#define INPUT_UPDN_BUTTONS
-#define CTRL_UP A0 //UNDB S3/PL6
-#define CTRL_DN A1 //UNDB S2/PL5
-
-//If using rotary control for Up and Down:
-//Requires Encoder library by Paul Stoffregen to be installed in IDE.
-// #define INPUT_UPDN_ROTARY
-// #define CTRL_R1 A2
-// #define CTRL_R2 A3
-// #define ROT_VEL_START 80 //Required if CTRL_UPDN_TYPE==2. If step rate falls below this, kick into high velocity set (x10)
-// #define ROT_VEL_STOP 500 //Required if CTRL_UPDN_TYPE==2. If encoder step rate rises above this, drop into low velocity set (x1)
-
 //If using IMU motion sensor on Nano 33 IoT:
 //To use, tilt clock: backward=Sel, forward=Alt, left=Down, right=Up
 //This is mutually exclusive with the button/rotary controls. TODO make it possible to use both together by renaming the functions or abstracting basic input functionality
-// #define INPUT_IMU //TODO implement
-// //TODO it has its own input thingies
-// Which side of the IMU/Arduino faces clock front/side? 0=bottom, 1=top, 2=left side, 3=right side, 4=USB end, 5=butt end
-// #define IMU_FRONT 0 //(UNDB: 0)
-// #define IMU_TOP 4 //(UNDB: 4)
-// #define IMU_DEBOUNCING 60 //how many test count needed to change the reported state
+#define INPUT_IMU //TODO implement
+//Which side of the IMU/Arduino faces clock front/side? 0=bottom, 1=top, 2=left side, 3=right side, 4=USB end, 5=butt end
+#define IMU_FRONT 0 //(UNDB: 0)
+#define IMU_TOP 4 //(UNDB: 4)
+#define IMU_DEBOUNCING 150 //ms
 
 //For all input types:
 //How long (in ms) are the hold durations?
@@ -66,46 +49,20 @@
 #define FN_TEMP_TIMEOUT 5 //sec
 #define FN_PAGE_TIMEOUT 3 //sec
 
-//Unused inputs
-//A3 //UNDB S5/PL8
-//A2 //UNDB S6/PL9
-
-
 ///// Display /////
-//These are mutually exclusive
-
-//If using nixie array:
-#define DISP_NIXIE
-#define CLEAN_SPEED 200 //ms - "frame rate" of tube cleaning
-//Which output pins?
-//This clock is 2x3 multiplexed: two tubes powered at a time.
-//The anode channel determines which two tubes are powered,
-//and the two SN74141 cathode driver chips determine which digits are lit.
-//4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
-#define OUT_A1 2
-#define OUT_A2 3
-#define OUT_A3 4
-#define OUT_A4 5
-#define OUT_B1 6
-#define OUT_B2 7
-#define OUT_B3 8
-#define OUT_B4 16 //aka A2
-//3 pins out to anode channel switches
-#define ANODE_1 11
-#define ANODE_2 12
-#define ANODE_3 13
-
 //If using 8x32 LED matrix:
 //Requires LedControl library by Eberhard Farle to be installed in IDE. (http://wayoda.github.io/LedControl)
-// #define DISP_MAX7219
-// #define NUM_MAX 4 //How many modules? 3 for 8x24 (4 digit, untested) or 4 for 8x32 (6 digit)
-// #define ROTATE 90
-// #define BRIGHTNESS_FULL 10 //out of 0-15
-// #define BRIGHTNESS_DIM 3
-// //Which output pins?
-// #define CLK_PIN 2 //D2, pin 20
-// #define CS_PIN 3 //D3, pin 21
-// #define DIN_PIN 4 //D4, pin 22
+#define DISP_MAX7219
+#define NUM_MAX 4 //How many modules? 3 for 8x24 (4 digit, untested) or 4 for 8x32 (6 digit)
+#define ROTATE 90
+#define BRIGHTNESS_FULL 7 //out of 0-15
+#define BRIGHTNESS_DIM 0
+//I've found that 7 (or 15?) and 0 make the least noise
+//Which output pins?
+#define CLK_PIN 2 //D2, pin 20
+#define CS_PIN 3 //D3, pin 21
+#define DIN_PIN 4 //D4, pin 22
+//and GND and VCC 5V
 
 //For all display types:
 #define DISPLAY_SIZE 6 //number of digits in display module: 6 or 4
@@ -116,7 +73,7 @@
 ///// Other Outputs /////
 
 //What are the signal pin(s) connected to?
-#define PIEZO_PIN 10
+#define PIEZO_PIN -1
 #define RELAY_PIN -1 // -1 to disable feature (no relay item equipped); A3 if equipped (UNDB v9)
 #define RELAY_MODE 0 //If relay is equipped, what does it do?
 // 0 = switched mode: the relay will be switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in SWITCH_DUR.
@@ -135,33 +92,7 @@
 // 0 = no. Use if the connected appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched. In this case (and/or if there is no switched relay) Alt will act as a function preset.
 
 //LED backlighting control
-#define LED_PIN 9 // -1 to disable feature; 9 if equipped (UNDB v9)
-
-
-///// Real-Time Clock /////
-//These are mutually exclusive
-
-//If using DS3231 (via I2C):
-//Requires Wire library (standard Arduino)
-//Requires DS3231 library by NorthernWidget to be installed in your IDE.
-// #define RTC_DS3231
-
-//If using RTCZero on Nano 33 IoT: //TODO
-// #define RTC_ZERO "rtc/rtcZero.h"
-
-//If using no RTC (a fake RTC based on millis()):
-#define RTC_MILLIS
-#define ANTI_DRIFT 14000 //msec to add/remove per second - or seconds to add/remove per day divided by 86.4 - to compensate for natural drift. If using wifinina, it really only needs to be good enough for a decent timekeeping display until the next ntp sync. TIP: setting to a superhigh value is helpful for testing! e.g. 9000 will make it run 10x speed
-
-
-///// Network /////
-
-//If using WiFiNINA (Nano IoT):
-// #define NETWORK_WIFININA //TODO implement
-
-//If using none (standard Nano):
-//TODO have none of this? Is this ok ?
-
+#define LED_PIN -1 // -1 to disable feature; 9 if equipped (UNDB v9)
 
 
 #endif
