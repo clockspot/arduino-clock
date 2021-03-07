@@ -144,8 +144,6 @@ word unoffRemain = 0; //un-off (briefly turn on tubes during full night/away shu
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 
 byte versionRemain = 0; //display version at start //TODO with button held at start, long hold reset
-//Hold Select at startup to see the version number (from v2.0 – earlier versions will display it automatically or not display it at all).
-//To reset the clock to defaults, hold Alt at startup. You'll see the time reset to 0:00. (If you don't have Alt, hold Select for 15 seconds at startup.)
 
 //If we need to temporarily display a value (or values in series), we can put them here. Can't be zero.
 //This is used by network to display IP addresses, and various other bits.
