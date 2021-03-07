@@ -191,7 +191,9 @@ void findFnAndPageNumbers(); //used by network
 
 void setup(){
   // Serial.begin(9600);
-  // while(!Serial); //TODO 33 IoT only
+  // #ifndef __AVR__ //SAMD only
+  // while(!Serial);
+  // #endif
   rtcInit(); //TODO change nomenclature to match
   initInputs();
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
@@ -1382,6 +1384,7 @@ void updateDisplay(){
         if(readEEPROM(16,false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
         editDisplay(hr, 0, 1, readEEPROM(19,false), true);
         editDisplay(rtcGetMinute(), 2, 3, true, true);
+        //Serial.print(millis(),DEC); Serial.println(F("show display per regular (hours/mins at least)"));
         #ifdef NETWORK_SUPPORTED
         if(readEEPROM(9,false) && ntpSyncAgo()>=86400000){ blankDisplay(4,5,true); break; }
         #endif
@@ -1530,7 +1533,9 @@ void calcSun(){
   int y = rtcGetYear();
   int m = rtcGetMonth();
   int d = rtcGetDate();
-  blankDisplay(0,5,false); //immediately blank display so we can fade in from it elegantly
+  //Serial.print(millis(),DEC); Serial.println(F("blank display per calcsun"));
+  //blankDisplay(0,5,false); //immediately blank display so we can fade in from it elegantly
+  //TODO causes nixie blinking during initial startup and after ntp sync
   Dusk2Dawn here(float(readEEPROM(10,true))/10, float(readEEPROM(12,true))/10, (float(readEEPROM(14,false))-100)/4);
   //Today
   sunDate = d;
