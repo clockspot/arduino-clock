@@ -4,7 +4,7 @@
 
 #ifndef __AVR__ //TODO better sensor
 //do stuff for wifinina
-#define NETWORK_OK
+#define NETWORK_SUPPORTED
   
 //#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
 #include <WiFiNINA.h>
@@ -16,18 +16,18 @@ byte wki = 0; //wep key index - 0 if using wpa
 //TODO how to persistent store this - one byte at a time up to the max
 
 unsigned int localPort = 2390; // local port to listen for UDP packets
-IPAddress timeServer(129, 6, 15, 28); // time.nist.gov NTP server TODO make configurable
-const int NTP_PACKET_SIZE = 48; // NTP time stamp is in the first 48 bytes of the message
+#define NTP_PACKET_SIZE 48 // NTP time stamp is in the first 48 bytes of the message
 byte packetBuffer[ NTP_PACKET_SIZE]; //buffer to hold incoming and outgoing packets
 WiFiUDP Udp; // A UDP instance to let us send and receive packets over UDP
 
 WiFiServer server(80);
 
-const unsigned long ADMIN_TIMEOUT = 3600000; //120000; //two minutes
-const unsigned long NTPOK_THRESHOLD = 3600000; //if no sync within 60 minutes, the time is considered stale
+#define ADMIN_TIMEOUT 3600000 //120000; //two minutes
+#define NTP_TIMEOUT 1000 //how long to wait for a request to finish - the longer it takes, the less reliable the result is
+#define NTPOK_THRESHOLD 3600000 //if no sync within 60 minutes, the time is considered stale
 
 //TODO hide second 58 when no wifi; 59 when NTP is bad (old or 0), and retry every minute 0-5
-        
+//TODO notice when a leap second is coming and handle it
 
 //Declare a few functions so I can put them out of order
 //Placed here so I can avoid making header files for the moment
@@ -97,9 +97,20 @@ void networkDisconnectWiFi(){
 }
 
 bool ntpCued = false;
-unsigned int ntpStartLast = -3000;
+unsigned long ntpStartLast = 0; //zero is a special value meaning it has never been used
 bool ntpGoing = 0;
-unsigned int ntpSyncLast = 0;
+unsigned long ntpSyncLast = 0; //zero is a special value meaning it has never been used
+
+unsigned long ntpSyncAgo(){
+  if(!ntpSyncLast) return 86400000; //if we haven't synced before
+  // In cases where NTP fails chronically (e.g. wifi disconnect, bad server, etc), we don't want to risk this rolling over after 49 days and professing to be correct. So each time we check this, if the diff is greater than our "NTP OK" range (24 hours), we'll bump up ntpSyncLast so it only just fails to qualify.
+  unsigned long now = millis();
+  if((unsigned long)(now-ntpSyncLast)>86400000){
+    ntpSyncLast = (unsigned long)(now-86400000);
+    if(!ntpSyncLast) ntpSyncLast = -1; //never let it be zero
+  }
+  return (unsigned long)(now-ntpSyncLast);
+}
 
 void cueNTP(){
   //We don't want to let other code startNTP() directly since it's asynchronous, and that other code may delay the time until we can check the result
@@ -110,9 +121,10 @@ void startNTP(){ //Called at intervals to check for ntp time
   if(wssid==F("")) return; //don't try to connect if there's no creds
   if(WiFi.status()!=WL_CONNECTED) networkStartWiFi(); //in case it dropped
   if(WiFi.status()!=WL_CONNECTED) return;
-  if(ntpGoing && millis()-ntpStartLast < 3000) return; //if a previous request is going, do not start another until at least 3sec later
+  if(ntpGoing && millis()-ntpStartLast < 5000) return; //if a previous request is going, do not start another until at least 5sec later (NIST requires at least 4sec between requests or will ban the client)
+  //Serial.println(F("NTP starting"));
   ntpGoing = 1;
-  ntpStartLast = millis();
+  ntpStartLast = millis(); if(!ntpStartLast) ntpStartLast = -1; //never let it be zero
   Udp.flush(); //in case of old data
   //Udp.stop() was formerly here
   //Serial.println(); Serial.print(millis()); Serial.println(F(" Sending UDP packet to NTP server."));
@@ -127,6 +139,9 @@ void startNTP(){ //Called at intervals to check for ntp time
   packetBuffer[13]  = 0x4E;
   packetBuffer[14]  = 49;
   packetBuffer[15]  = 52;
+  //Serial.println(F("time to read IP"));
+  //Serial.print(readEEPROM(51,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(52,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(53,false),DEC); Serial.print(F(".")); Serial.println(readEEPROM(54,false),DEC);
+  IPAddress timeServer(readEEPROM(51,false),readEEPROM(52,false),readEEPROM(53,false),readEEPROM(54,false));
   Udp.beginPacket(timeServer, 123); //NTP requests are to port 123
   Udp.write(packetBuffer, NTP_PACKET_SIZE);
   Udp.endPacket();
@@ -137,15 +152,19 @@ unsigned long ntpTime = 0; //When this is nonzero, it means we have captured a t
 unsigned  int ntpMils = 0;
 void checkNTP(){ //Called on every cycle to see if there is an ntp response to handle
   if(ntpGoing){
-    //If we are waiting for a packet that hasn't arrived, wait for the next cycle
-    if(!Udp.parsePacket()) return;
+    //If we are waiting for a packet that hasn't arrived, wait for the next cycle, or time out
+    if(!Udp.parsePacket()){
+      if((unsigned long)(millis()-ntpStartLast)>=NTP_TIMEOUT) ntpGoing = 0; //time out
+      return;
+    }
     // We've received a packet, read the data from it
-    ntpSyncLast = millis();
+    ntpSyncLast = millis(); if(!ntpSyncLast) ntpSyncLast = -1; //never let it be zero
     unsigned int requestTime = ntpSyncLast-ntpStartLast;
     Udp.read(packetBuffer, NTP_PACKET_SIZE); // read the packet into the buffer
   
     //https://forum.arduino.cc/index.php?topic=526792.0
-    //epoch in earlier bits? needed after 2038
+    //epoch in earlier bits? needed after 2038 - TODO account for future epochs which could result in a valid 0 value
+    //TODO leap second notification in earlier bits?
     ntpTime = (packetBuffer[40] << 24) | (packetBuffer[41] << 16) | (packetBuffer[42] << 8) | packetBuffer[43];
     unsigned long ntpFrac = (packetBuffer[44] << 24) | (packetBuffer[45] << 16) | (packetBuffer[46] << 8) | packetBuffer[47];
     ntpMils = (int32_t)(((float)ntpFrac / UINT32_MAX) * 1000);
@@ -172,7 +191,7 @@ void checkNTP(){ //Called on every cycle to see if there is an ntp response to h
 
     Udp.flush(); //in case of extraneous(?) data
     //Udp.stop() was formerly here
-    ntpGoing = 0;
+    ntpGoing = 0; //next if{} block will handle this
   }
   if(!ntpGoing){
     //If we are waiting to start, do it
@@ -182,6 +201,7 @@ void checkNTP(){ //Called on every cycle to see if there is an ntp response to h
     //If we are waiting to set, but it's not time, wait for the next cycle
     if(ntpMils!=0 && (unsigned long)(millis()-ntpSyncLast)<(1000-ntpMils)) return;
     //else it's time!
+    //Serial.println(F("NTP complete"));
 
     //Convert unix timestamp to UTC date/time
     //TODO this assumes epoch 0, which is only good til 2038, I think!
@@ -247,11 +267,6 @@ void checkNTP(){ //Called on every cycle to see if there is an ntp response to h
   }
 } //end fn checkNTP
 
-bool networkNTPOK(){
-  //Serial.print(F("NTP is ")); Serial.print(millis()-ntpSyncLast < NTPOK_THRESHOLD?F("OK: "):F("stale: ")); Serial.print(millis()-ntpSyncLast); Serial.print(F("ms old (vs limit of ")); Serial.print(NTPOK_THRESHOLD); Serial.print(F("ms)")); Serial.println();
-  return (millis()-ntpSyncLast < NTPOK_THRESHOLD);
-}
-
 unsigned long adminInputLast = 0; //for noticing when the admin page hasn't been interacted with in 2 minutes, so we can time it (and AP if applicable) out
 
 void networkStartAdmin(){
@@ -270,7 +285,7 @@ void networkStartAdmin(){
   updateDisplay();
 }
 void networkStopAdmin(){
-  Serial.println(F("stopping admin"));
+  //Serial.println(F("stopping admin"));
   adminInputLast = 0; //TODO use a different flag from adminInputLast
   if(WiFi.status()!=WL_CONNECTED) networkStartWiFi();
 }
@@ -358,20 +373,24 @@ void checkClients(){
         //Wi-Fi, NTP, and UTC offset are always relevant given network
         client.print(F("<li><label>Wi-Fi</label><form id='wform' style='display: inline;' onsubmit='save(this); return false;'><select id='wtype' onchange='wformchg()'><option value=''>None</option><option value='wpa'>WPA</option><option value='wep'>WEP</option></select><span id='wa'><br/><input type='text' id='wssid' name='wssid' placeholder='SSID (Network Name)' autocomplete='off' onchange='wformchg()' onkeyup='wformchg()' value='")); String wssid2 = wssid; wssid2.replace("'","&#39;"); client.print(wssid2); client.print(F("' /><br/><input type='text' id='wpass' name='wpass' placeholder='Password/Key' autocomplete='off' onchange='wformchg()' onkeyup='wformchg()' value='")); String wpass2 = wpass; wpass2.replace("'","&#39;"); client.print(wpass2); client.print(F("' /></span><span id='wb'><br/><label for='wki'>Key Index</label> <select id='wki' onchange='wformchg()'>")); for(char i=0; i<=4; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("' ")); client.print(wki==i?F("selected"):F("")); client.print(F(">")); if(i==0) client.print(F("Select")); else client.print(i,DEC); client.print(F("</option>")); } client.print(F("</select></span><br/><input id='wformsubmit' type='submit' value='Save' style='display: none;' /></form></li>"));
         
-        client.print(F("<li><label>NTP sync</label><select id='b9' onchange='save(this)'>")); for(char i=0; i<=1; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(9,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
+        client.print(F("<li><label>NTP sync</label><select id='b9' onchange='if(this.value==0){ document.getElementById(\"ntpsyncdeets\").style.display=\"none\"; document.getElementById(\"ntpserverli\").style.display=\"none\"; } else { document.getElementById(\"ntpsyncdeets\").style.display=\"inline\"; document.getElementById(\"ntpserverli\").style.display=\"block\"; } save(this)'>")); for(char i=0; i<=1; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(9,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("Off")); break;
           case 1: client.print(F("On (every hour at minute 59)")); break;
           default: break; } client.print(F("</option>")); } client.print(F("</select><br/>"));
+          client.print(F("<span id='ntpsyncdeets' style='display: ")); if(readEEPROM(9,false)==0) client.print(F("none")); else client.print(F("inline")); client.print(F(";'><span id='lastsync'>"));
           if(ntpSyncLast){
-            client.print(F("<span id='lastsync'>Last sync as of page load time: "));
+            client.print(F("Last sync as of page load time: "));
             unsigned long ntpSyncDiff = (millis()-ntpSyncLast)/1000;
             if(ntpSyncDiff<60){ client.print(ntpSyncDiff,DEC); client.print(F(" second(s) ago")); }
             else if(ntpSyncDiff<3600){ client.print(ntpSyncDiff/60,DEC); client.print(F(" minute(s) ago")); }
             else if(ntpSyncDiff<86400){ client.print(ntpSyncDiff/3600,DEC); client.print(F(" hour(s) ago")); }
             else { client.print(F(" over 24 hours ago")); } //TODO is there a display indication of this
+          } else {
+            client.print(F("Never synced"));
           }
-          client.print(F(" &nbsp; </span><a id='syncnow' value='' href='#' onclick='save(this); document.getElementById(\"lastsync\").remove(); return false;'>Sync&nbsp;now</a><br/><span class='explain'>Requires Wi-Fi. If using this, be sure to set your <a href='#utcoffset'>UTC offset</a> and <a href='#autodst'>auto DST</a> below.</span></li>"));
-        //TODO IP address - string that separates on periods into four bytes
+          client.print(F("<br/></span><a id='syncnow' value='' href='#' onclick='save(this); document.getElementById(\"lastsync\").innerHTML=""; return false;'>Sync&nbsp;now</a><br/></span><span class='explain'>Requires Wi-Fi. If using this, be sure to set your <a href='#utcoffset'>UTC offset</a> and <a href='#autodst'>auto DST</a> below.</span></li>")); //TODO sync now results in "OK!" even if it isn't necessarily ok. Get feedback to the client by making it synchronous in that case only? Also e.g. "Please wait" instead of "Saving"
+          
+        client.print(F("<li id='ntpserverli' style='display: ")); if(readEEPROM(9,false)==0) client.print(F("none")); else client.print(F("block")); client.print(F(";'><label>NTP server</label><input type='text' id='ntpip' onchange='promptsave(\"ntpip\")' onkeyup='promptsave(\"ntpip\")' onblur='unpromptsave(\"ntpip\"); save(this)' value='")); client.print(readEEPROM(51,false),DEC); client.print(F(".")); client.print(readEEPROM(52,false),DEC); client.print(F(".")); client.print(readEEPROM(53,false),DEC); client.print(F(".")); client.print(readEEPROM(54,false),DEC); client.print(F("' />")); client.print(F(" <a id='ntpipsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'><a href='https://en.wikipedia.org/wiki/IPv4#Addressing' target='_blank'>IPv4</a> address, e.g. one of <a href='https://tf.nist.gov/tf-cgi/servers.cgi' target='_blank'>NIST's time servers</a></span></li>"));
         
         client.print(F("<li><label>Current time</label><input type='number' id='curtodh' onchange='promptsave(\"curtod\")' onkeyup='promptsave(\"curtod\")' onblur='unpromptsave(\"curtod\"); savetod(\"curtod\")' min='0' max='23' step='1' value='")); client.print(rtcGetHour(),DEC); client.print(F("' />&nbsp;:&nbsp;<input type='number' id='curtodm' onchange='promptsave(\"curtod\")' onkeyup='promptsave(\"curtod\")' onblur='unpromptsave(\"curtod\"); savetod(\"curtod\")' min='0' max='59' step='1' value='")); client.print(rtcGetMinute(),DEC); client.print(F("' /><input type='hidden' id='curtod' /> <a id='curtodsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>24-hour format. Seconds will reset to 0 when saved.</span></li>"));
         
@@ -709,7 +728,7 @@ void checkClients(){
         client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>Your time zone's offset from UTC (non-DST). If you observe DST but set the clock manually rather than using the <a href='#autodst'>auto DST</a> feature, you must add an hour to the UTC offset during DST, or the sunrise/sunset times will be an hour early.</span></li>"));
         
         //After replacing the below from formdev.php, replace " with \"
-        client.print(F("</ul></div><script type='text/javascript'>function e(id){ return document.getElementById(id); } function promptsave(ctrl){ document.getElementById(ctrl+\"save\").style.display=\"inline\"; } function unpromptsave(ctrl){ document.getElementById(ctrl+\"save\").style.display=\"none\"; } function savecoord(ctrlset){ ctrl = document.getElementById(ctrlset); if(ctrl.disabled) return; ctrl.value = parseInt(parseFloat(document.getElementById(ctrlset+\"raw\").value)*10); save(ctrl); } function savetod(ctrlset){ ctrl = document.getElementById(ctrlset); if(ctrl.disabled) return; ctrl.value = (parseInt(document.getElementById(ctrlset+\"h\").value)*60) + parseInt(document.getElementById(ctrlset+\"m\").value); save(ctrl); } function save(ctrl){ if(ctrl.disabled) return; ctrl.disabled = true; let ind = ctrl.nextSibling; if(ind && ind.tagName==='SPAN') ind.parentNode.removeChild(ind); ind = document.createElement('span'); ind.innerHTML = '&nbsp;<span class=\"saving\">Saving&hellip;</span>'; ctrl.parentNode.insertBefore(ind,ctrl.nextSibling); let xhr = new XMLHttpRequest(); xhr.onreadystatechange = function(){ if(xhr.readyState==4){ ctrl.disabled = false; console.log(xhr); if(xhr.status==200 && xhr.responseText=='ok'){ if(ctrl.id=='wform'){ e('content').innerHTML = '<p class=\"ok\">Wi-Fi changes applied.</p><p>' + (e('wssid').value? 'Now attempting to connect to <strong>'+htmlEntities(e('wssid').value)+'</strong>.</p><p>If successful, the clock will display its IP address. To access this settings page again, connect to <strong>'+htmlEntities(e('wssid').value)+'</strong> and visit that IP address. (If you miss it, hold Select for 5 seconds to see it again.)</p><p>If not successful, the clock will display <strong>7777</strong>. ': '') + 'To access this settings page again, (re)connect to Wi-Fi network <strong>Clock</strong> and visit <a href=\"http://7.7.7.7\">7.7.7.7</a>.</p>'; clearTimeout(timer); } else { ind.innerHTML = '&nbsp;<span class=\"ok\">OK!</span>'; setTimeout(function(){ if(ind.parentNode) ind.parentNode.removeChild(ind); },1500); } } else ind.innerHTML = '&nbsp;<span class=\"error\">'+(xhr.responseText?xhr.responseText:'Error')+'</span>'; timer = setTimeout(timedOut, ")); client.print(ADMIN_TIMEOUT,DEC); client.print(F("); } }; clearTimeout(timer); xhr.open('POST', './', true); xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded'); if(ctrl.id=='wform'){ switch(e('wtype').value){ case '': e('wssid').value = ''; e('wpass').value = ''; case 'wpa': e('wki').value = '0'; case 'wep': default: break; } xhr.send('wssid='+e('wssid').value+'&wpass='+e('wpass').value+'&wki='+e('wki').value); } else { xhr.send(ctrl.id+'='+ctrl.value); } } function wformchg(initial){ if(initial) e('wtype').value = (e('wssid').value? (e('wki').value!=0? 'wep': 'wpa'): ''); e('wa').style.display = (e('wtype').value==''?'none':'inline'); e('wb').style.display = (e('wtype').value=='wep'?'inline':'none'); if(!initial) e('wformsubmit').style.display = 'inline'; } function timedOut(){ e('content').innerHTML = 'Clock settings page has timed out. Please hold Select for 5 seconds to reactivate it, then <a href=\"#\" onclick=\"location.reload(); return false;\">refresh</a>.'; } function htmlEntities(str){ return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;'); } wformchg(true); let timer = setTimeout(timedOut, ")); client.print(ADMIN_TIMEOUT,DEC); client.print(F("); document.getElementById('loading').remove(); document.getElementById('content').style.display = 'block';</script></body></html>"));
+        client.print(F("</ul></div><script type='text/javascript'>function e(id){ return document.getElementById(id); } function promptsave(ctrl){ document.getElementById(ctrl+\"save\").style.display=\"inline\"; } function unpromptsave(ctrl){ document.getElementById(ctrl+\"save\").style.display=\"none\"; } function savecoord(ctrlset){ ctrl = document.getElementById(ctrlset); if(ctrl.disabled) return; ctrl.value = parseInt(parseFloat(document.getElementById(ctrlset+\"raw\").value)*10); save(ctrl); } function savetod(ctrlset){ ctrl = document.getElementById(ctrlset); if(ctrl.disabled) return; ctrl.value = (parseInt(document.getElementById(ctrlset+\"h\").value)*60) + parseInt(document.getElementById(ctrlset+\"m\").value); save(ctrl); } function save(ctrl){ if(ctrl.disabled) return; ctrl.disabled = true; let ind = ctrl.nextSibling; if(ind && ind.tagName==='SPAN') ind.parentNode.removeChild(ind); ind = document.createElement('span'); ind.innerHTML = '&nbsp;<span class=\"saving\">Saving&hellip;</span>'; ctrl.parentNode.insertBefore(ind,ctrl.nextSibling); let xhr = new XMLHttpRequest(); xhr.onreadystatechange = function(){ if(xhr.readyState==4){ ctrl.disabled = false; console.log(xhr); if(xhr.status==200 && xhr.responseText=='ok'){ if(ctrl.id=='wform'){ e('content').innerHTML = '<p class=\"ok\">Wi-Fi changes applied.</p><p>' + (e('wssid').value? 'Now attempting to connect to <strong>'+htmlEntities(e('wssid').value)+'</strong>.</p><p>If successful, the clock will display its IP address. To access this settings page again, connect to <strong>'+htmlEntities(e('wssid').value)+'</strong> and visit that IP address. (If you miss it, hold Select for 5 seconds to see it again.)</p><p>If not successful, the clock will display <strong>7777</strong>. ': '') + 'To access this settings page again, (re)connect to Wi-Fi network <strong>Clock</strong> and visit <a href=\"http://7.7.7.7\">7.7.7.7</a>.</p>'; clearTimeout(timer); } else { ind.innerHTML = '&nbsp;<span class=\"ok\">Saved</span>'; setTimeout(function(){ if(ind.parentNode) ind.parentNode.removeChild(ind); },1500); } } else ind.innerHTML = '&nbsp;<span class=\"error\">'+(xhr.responseText?xhr.responseText:'Error')+'</span>'; timer = setTimeout(timedOut, ")); client.print(ADMIN_TIMEOUT,DEC); client.print(F("); } }; clearTimeout(timer); xhr.open('POST', './', true); xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded'); if(ctrl.id=='wform'){ switch(e('wtype').value){ case '': e('wssid').value = ''; e('wpass').value = ''; case 'wpa': e('wki').value = '0'; case 'wep': default: break; } xhr.send('wssid='+e('wssid').value+'&wpass='+e('wpass').value+'&wki='+e('wki').value); } else { xhr.send(ctrl.id+'='+ctrl.value); } } function wformchg(initial){ if(initial) e('wtype').value = (e('wssid').value? (e('wki').value!=0? 'wep': 'wpa'): ''); e('wa').style.display = (e('wtype').value==''?'none':'inline'); e('wb').style.display = (e('wtype').value=='wep'?'inline':'none'); if(!initial) e('wformsubmit').style.display = 'inline'; } function timedOut(){ e('content').innerHTML = 'Clock settings page has timed out. Please hold Alt to reactivate it, then <a href=\"#\" onclick=\"location.reload(); return false;\">refresh</a>.'; } function htmlEntities(str){ return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;'); } wformchg(true); let timer = setTimeout(timedOut, ")); client.print(ADMIN_TIMEOUT,DEC); client.print(F("); document.getElementById('loading').remove(); document.getElementById('content').style.display = 'block';</script></body></html>"));
         //client.print(F(""));
       } //end get
       else { //requestType==2 - handle what was POSTed
@@ -736,6 +755,19 @@ void checkClients(){
             // client.print(wki);
             // client.println();
           requestType = 3; //triggers an admin restart after the client is closed, below
+        } else if(currentLine.startsWith(F("ntpip"))){
+          //e.g. ntpip=192.168.1.255
+          byte ntpip[4]; byte startPos = 6; bool parseOK = true;
+          for(byte i=0; i<4; i++){
+            byte endPos = currentLine.indexOf(F("."),startPos);
+            int octet = (endPos>-1? currentLine.substring(startPos,endPos).toInt(): currentLine.substring(startPos).toInt());
+            ntpip[i] = octet; startPos = endPos+1;
+            if(ntpip[i]!=octet){ parseOK = false; break; }
+          }
+          if(!parseOK) clientReturn = "Error: invalid format";
+          else for(byte i=0; i<4; i++) writeEEPROM(51+i,ntpip[i],false);
+          //Serial.print(F("IP should be ")); Serial.print(ntpip[0],DEC); Serial.print(F(".")); Serial.print(ntpip[1],DEC); Serial.print(F(".")); Serial.print(ntpip[2],DEC); Serial.print(F(".")); Serial.println(ntpip[3],DEC);
+          //Serial.print(F("IP saved as ")); Serial.print(readEEPROM(51,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(52,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(53,false),DEC); Serial.print(F(".")); Serial.println(readEEPROM(54,false),DEC);
         } else if(currentLine.startsWith(F("syncnow"))){
           cueNTP();
         } else if(currentLine.startsWith(F("curtod"))){
@@ -813,8 +845,8 @@ void checkClients(){
     } //end if requestType
     
     client.stop();
-    Serial.println("");
-    Serial.println("client disconnected");
+    //Serial.println("");
+    //Serial.println("client disconnected");
     delay(500); //for client to get the message TODO why is this necessary
     
     if(requestType==3) { //wifi was changed - restart the admin
@@ -826,8 +858,8 @@ void checkClients(){
 
 void initNetwork(){
   //Check status of wifi module up front
-  if(WiFi.status()==WL_NO_MODULE){ Serial.println(F("Communication with WiFi module failed!")); while(true); }
-  else if(WiFi.firmwareVersion()<WIFI_FIRMWARE_LATEST_VERSION) Serial.println(F("Please upgrade the firmware"));
+  //if(WiFi.status()==WL_NO_MODULE){ Serial.println(F("Communication with WiFi module failed!")); while(true); }
+  //else if(WiFi.firmwareVersion()<WIFI_FIRMWARE_LATEST_VERSION) Serial.println(F("Please upgrade the firmware"));
   networkStartWiFi();  
 }
 void cycleNetwork(){

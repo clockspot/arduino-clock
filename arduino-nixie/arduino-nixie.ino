@@ -18,16 +18,16 @@ const bool vDev = 1;
 ////////// Other includes, global consts, and vars //////////
 
 #if ENABLE_DATE_RISESET
-  #include <Dusk2Dawn.h> //DM Kiski - unlicensed - install in your Arduino IDE if needed
+  #include <Dusk2Dawn.h> //DM Kishi - unlicensed - install in your Arduino IDE if needed
 #endif
 
 /*Some variables are backed by persistent storage. These are referred to by their location in that storage. See storage.cpp.
 Values for these are bytes (0 to 255) or signed 16-bit ints (-32768 to 32767) where high byte is loc and low byte is loc+1.
 In updateDisplay(), special setting formats are deduced from the option max value (max 1439 is a time of day, max 156 is a UTC offset, etc)
 and whether a value is an int or byte is deduced from whether the max value > 255.
-If adding more variables, be sure to increase STORAGE_SPACE in storage.cpp (and use the ones marked [free] below first).
+IMPORTANT! If adding more variables, be sure to increase STORAGE_SPACE in storage.cpp (and use the ones marked [free] below first).
 
-These ones are set outside the options menu (defaults defined in initEEPROM()):
+These ones are set outside the options menu (defaults defined in initEEPROM() where applicable):
   0-1 Alarm time, mins
   2 Alarm on
   3 [free]
@@ -42,6 +42,12 @@ These ones are set outside the options menu (defaults defined in initEEPROM()):
     const unsigned int FN_WEATHER = 1<<3; //8
   9 NTP sync on
   15 DST on (last known state - set indirectly via time sets and such)
+  51-54 NTP server IP address (4 bytes)
+  55-86 Wi-Fi SSID (32 bytes)
+  87-150 Wi-Fi WPA passphrase/key or WEP key (64 bytes)
+  151 Wi-Fi WEP key index
+  
+  
 
 These ones are set inside the options menu (defaults defined in arrays below).
 Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
@@ -223,7 +229,7 @@ void setup(){
   //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
   findFnAndPageNumbers(); //initial values
   initDisplay();
-  #ifdef NETWORK_OK
+  #ifdef NETWORK_SUPPORTED
   initNetwork();
   #endif
   initOutputs(); //depends on some EEPROM settings
@@ -235,7 +241,7 @@ void loop(){
   checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
   millisApplyDrift();
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
-  #ifdef NETWORK_OK
+  #ifdef NETWORK_SUPPORTED
   cycleNetwork();
   #endif
   cycleTimer();
@@ -403,7 +409,7 @@ void ctrlEvt(byte ctrl, byte evt){
         //else do nothing
       } //end sel release or adj press
       else if(CTRL_ALT>0 && ctrl==CTRL_ALT) { //alt sel press
-        #ifdef NETWORK_OK
+        #ifdef NETWORK_SUPPORTED
         if(evt==3){
           //Forget wifi? remove inputStop() from below
         }
@@ -734,6 +740,24 @@ void initEEPROM(bool hard){
   //8: TODO functions/pages enabled (bitmask)
   if(hard || readEEPROM(9,false)>1) writeEEPROM(9,1,false); //9: NTP sync on
   if(hard) writeEEPROM(15,0,false); //15: last known DST on flag - clear on hard reset (to match the reset RTC/auto DST/anti-poisoning settings to trigger midnight tubes as a tube test)
+  #ifdef NETWORK_SUPPORTED
+  if(hard){ //everything in here needs no range testing
+    //51-54 NTP server IP address (4 bytes) - e.g. from https://tf.nist.gov/tf-cgi/servers.cgi
+    //Serial.println(F("setting IP address in eeprom"));
+    //Serial.print(readEEPROM(51,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(52,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(53,false),DEC); Serial.print(F(".")); Serial.println(readEEPROM(54,false),DEC);
+    writeEEPROM(51,129,false);
+    writeEEPROM(52,  6,false);
+    writeEEPROM(53, 15,false);
+    writeEEPROM(54, 27,false);
+    //Serial.print(readEEPROM(51,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(52,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(53,false),DEC); Serial.print(F(".")); Serial.println(readEEPROM(54,false),DEC);
+    //55-86 Wi-Fi SSID (32 bytes)
+    //TODO
+    //87-150 Wi-Fi WPA passphrase/key or WEP key (64 bytes)
+    //TODO
+  }
+  //151 Wi-Fi WEP key index
+  if(hard || readEEPROM(151,false)>3) writeEEPROM(151,0,false);
+  #endif
   //The vars inside the options menu
   bool isInt = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
@@ -896,9 +920,12 @@ void checkRTC(bool force){
       // }
     }
     
-    #ifdef NETWORK_OK
-    //NTP cue at minute :59
-    if(rtcGetMinute()==59 && rtcGetSecond()==0) cueNTP();
+    #ifdef NETWORK_SUPPORTED
+    //NTP cue at :59:00
+    if(readEEPROM(9,false) && rtcGetMinute()==59){
+      if(rtcGetSecond()==0) cueNTP();
+      if(rtcGetSecond()==30 && ntpSyncAgo()>=30000) cueNTP(); //if at first you don't succeed...
+    }
     #endif
     
     //Strikes - only if fn=clock, not setting, not signaling/snoozing, not night/away. Setting 21 will be off if signal type is no good
@@ -1355,6 +1382,9 @@ void updateDisplay(){
         if(readEEPROM(16,false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
         editDisplay(hr, 0, 1, readEEPROM(19,false), true);
         editDisplay(rtcGetMinute(), 2, 3, true, true);
+        #ifdef NETWORK_SUPPORTED
+        if(readEEPROM(9,false) && ntpSyncAgo()>=86400000){ blankDisplay(4,5,true); break; }
+        #endif
         if(readEEPROM(18,false)==1) editDisplay(rtcGetDate(), 4, 5, readEEPROM(19,false), true); //date
         else editDisplay(rtcGetSecond(), 4, 5, true, true); //seconds
         break;

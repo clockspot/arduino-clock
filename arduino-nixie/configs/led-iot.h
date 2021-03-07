@@ -10,7 +10,7 @@
 // Related options will also be enabled in the options menu.
 #define ENABLE_DATE_FN true // Date function, optionally including pages below
 #define ENABLE_DATE_COUNTER true // Adds date page with an anniversary counter
-#define ENABLE_DATE_RISESET false // Adds date pages with sunrise/sunset times. Requires Dusk2Dawn library by DM Kichi to be installed in IDE. TODO get this working on SAMD
+#define ENABLE_DATE_RISESET true // Adds date pages with sunrise/sunset times. Requires Dusk2Dawn library by DM Kichi to be installed in IDE. TODO get this working on SAMD
 #define ENABLE_ALARM_FN true
 #define ENABLE_ALARM_AUTOSKIP true
 #define ENABLE_ALARM_FIBONACCI true

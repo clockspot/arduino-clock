@@ -7,7 +7,7 @@
 //So this code serves those values out of a volatile array of bytes.
 //It reads them from EEPROM/flash at startup, and sets them into EEPROM/flash when changed, for recovery purposes.
 
-#define STORAGE_SPACE 51 //number of bytes
+#define STORAGE_SPACE 152 //number of bytes
 byte storageBytes[STORAGE_SPACE]; //the volatile array of bytes
 
 //#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
