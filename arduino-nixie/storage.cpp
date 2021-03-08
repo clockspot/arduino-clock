@@ -2,10 +2,8 @@
 #ifndef STORAGE_SRC //include once only
 #define STORAGE_SRC
 
-//This project was originally written to use the AVR Arduino's EEPROM locs for persistent storage, and would frequently read it directly.
-//I wanted to abstract that away, partly to add support for SAMD flash, and partly to protect against runtime errors due to EEPROM/flash failure.
-//So this code serves those values out of a volatile array of bytes.
-//It reads them from EEPROM/flash at startup, and sets them into EEPROM/flash when changed, for recovery purposes.
+// This project was originally written to use the AVR Arduino's EEPROM locs for persistent storage, and would frequently read it directly via readEEPROM(). I wanted to abstract that away, partly to add support for SAMD flash, and partly to protect against runtime errors due to EEPROM/flash failure.
+// This code serves those values out of a volatile array of bytes, which are backed by EEPROM/flash for the sole purpose of recovery after a power failure. It reads them from EEPROM/flash at startup, and sets them when changed.
 
 #define STORAGE_SPACE 152 //number of bytes
 byte storageBytes[STORAGE_SPACE]; //the volatile array of bytes

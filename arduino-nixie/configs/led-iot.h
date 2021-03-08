@@ -91,8 +91,11 @@
 // 1 = yes. Relay can be switched on and off directly with Alt button at any time (except in options menu). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
 // 0 = no. Use if the connected appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched. In this case (and/or if there is no switched relay) Alt will act as a function preset.
 
-//LED backlighting control
-#define LED_PIN -1 // -1 to disable feature; 9 if equipped (UNDB v9)
+//Backlighting control
+#define BACKLIGHT_PIN -1 // -1 to disable feature; 9 if equipped (UNDB v9)
+#define BACKLIGHT_FADE 0
+// 0 = no fading; simply switches on and off.
+// >0 = backlight fades on and off via PWM (must use PWM pin and PWM-supportive lighting, such as LEDs). This value is the amount the PWM is increased/decreased per loop cycle. 10 is a good starting choice.
 
 
 #endif

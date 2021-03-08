@@ -1,6 +1,6 @@
-// Digital clock code for the Arduino Nano in RLB Designs' Universal Nixie Driver Board
-// featuring timekeeping by DS3231 RTC, driving up to six digits multiplexed 3x2 via two SN74141 driver chips
-// Sketch by Luke McKenzie (luke@theclockspot.com) - https://github.com/clockspot/arduino-nixie
+// Universal digital clock codebase for Arduino - https://github.com/clockspot/arduino-clock
+// Sketch by Luke McKenzie (luke@theclockspot.com)
+// Written to support RLB Designs’ Universal Nixie Driver Board
 // Inspired by original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
 // Display cycling code derived from http://arduinix.com/Main/Code/ANX-6Tube-Clock-Crossfade.txt
 
@@ -15,16 +15,12 @@ const byte vMinor = 9;
 const byte vPatch = 0;
 const bool vDev = 1;
 
-////////// Other includes, global consts, and vars //////////
+////////// Variables and storage //////////
 
-#if ENABLE_DATE_RISESET
-  #include <Dusk2Dawn.h> //DM Kishi - unlicensed - install in your Arduino IDE if needed
-#endif
+/*Some variables are backed by persistent storage. These are referred to by their location in that storage. See storage.cpp. 
 
-/*Some variables are backed by persistent storage. These are referred to by their location in that storage. See storage.cpp.
-Values for these are bytes (0 to 255) or signed 16-bit ints (-32768 to 32767) where high byte is loc and low byte is loc+1.
-In updateDisplay(), special setting formats are deduced from the option max value (max 1439 is a time of day, max 156 is a UTC offset, etc)
-and whether a value is an int or byte is deduced from whether the max value > 255.
+Values for these are bytes (0 to 255) or signed 16-bit ints (-32768 to 32767) where high byte is loc and low byte is loc+1. In updateDisplay(), special setting formats are deduced from the option max value (max 1439 is a time of day, max 156 is a UTC offset, etc) and whether a value is an int or byte is deduced from whether the max value > 255.
+
 IMPORTANT! If adding more variables, be sure to increase STORAGE_SPACE in storage.cpp (and use the ones marked [free] below first).
 
 These ones are set outside the options menu (defaults defined in initEEPROM() where applicable):
@@ -46,8 +42,6 @@ These ones are set outside the options menu (defaults defined in initEEPROM() wh
   55-86 Wi-Fi SSID (32 bytes)
   87-150 Wi-Fi WPA passphrase/key or WEP key (64 bytes)
   151 Wi-Fi WEP key index
-  
-  
 
 These ones are set inside the options menu (defaults defined in arrays below).
 Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
@@ -166,6 +160,12 @@ void findFnAndPageNumbers(); //used by network
 
 #define SHOW_IRRELEVANT_OPTIONS 0 //TODO change options to settings everywhere //for debug
 
+////////// Includes //////////
+
+#if ENABLE_DATE_RISESET
+  #include <Dusk2Dawn.h> //DM Kishi - unlicensed - install in your Arduino IDE if needed
+#endif
+
 //These cpp files contain code that is conditionally included
 //based on the available hardware and settings in the config file.
 //TODO revisit - This is probably not the right way to do this –
@@ -226,7 +226,7 @@ void setup(){
   if(!ENABLE_TIME_CHIME) writeEEPROM(21,0,false); //chime off
   if(!ENABLE_SHUTOFF_NIGHT) writeEEPROM(27,0,false); //night shutoff off
   if(!ENABLE_SHUTOFF_AWAY) writeEEPROM(32,0,false); //away shutoff off
-  //if LED circuit is not switched (v5.0 board), the LED menu setting (eeprom 26) doesn't matter
+  //if backlight circuit is not switched (v5.0 board), the backlight menu setting (eeprom 26) doesn't matter
   findFnAndPageNumbers(); //initial values
   initDisplay();
   #ifdef NETWORK_SUPPORTED
@@ -246,7 +246,7 @@ void loop(){
   #endif
   cycleTimer();
   cycleDisplay(); //keeps the display hardware multiplexing cycle going
-  cycleLEDs();
+  cycleBacklight();
   cycleSignal();
 }
 
@@ -623,8 +623,7 @@ void fnOptScroll(byte dir){
       || ((PIEZO_PIN<0 && RELAY_MODE==0) && (optLoc==21||optLoc==50)) //no piezo, and relay is switch: no strike, or alarm fibonacci mode
       || ((RELAY_PIN<0 || PIEZO_PIN<0) && (optLoc==42||optLoc==43||optLoc==44)) //no relay or no piezo: no alarm/timer/strike signal
       || ((RELAY_MODE==0) && (optLoc==44)) //relay is switch: no strike signal
-      || ((LED_PIN<0) && (optLoc==26)) //no led pin: no led control
-      || ((LED_PIN<0) && (optLoc==26)) //no led pin: no led control
+      || ((BACKLIGHT_PIN<0) && (optLoc==26)) //no backlight pin: no backlight control
       //Functions disabled
       || (!ENABLE_DATE_FN && (optLoc==17||optLoc==18||optLoc==10||optLoc==12)) //date fn disabled in config: skip date and geography options - don't skip utc offset as that's now used when setting clock from network ||optLoc==14
       || (!ENABLE_ALARM_FN && (optLoc==23||optLoc==42||optLoc==39||optLoc==47||optLoc==24||optLoc==50)) //alarm fn disabled in config: skip alarm options
@@ -694,7 +693,7 @@ void switchPower(byte dir){
   } else {
     //Serial.print(dir==1?F("switch on"):F("switch off"));
   }
-  digitalWrite(RELAY_PIN,(dir==1?0:1)); updateLEDs(); //LOW = device on
+  digitalWrite(RELAY_PIN,(dir==1?0:1)); updateBacklight(); //LOW = device on
   //Serial.println(F(", switchPower"));
 }
 
@@ -715,7 +714,7 @@ void doSet(int delta){
 void clearSet(){ //Exit set state
   startSet(0,0,0,0);
   fnSetValDid=false;
-  updateLEDs(); //in case LED setting was changed
+  updateBacklight(); //in case backlight setting was changed
   checkRTC(true); //force an update to tod and updateDisplay()
 }
 
@@ -1259,7 +1258,7 @@ void timerSwitchSleepRelay(bool on){
   //When timer is set to use switched relay, it's on while timer is running, "radio sleep" style.
   //This doesn't count as a signal (using signal methods) so that other signals might not interrupt it. TODO confirm
   if(RELAY_PIN>=0 && RELAY_MODE==0 && readEEPROM(43,false)==1) { //start "radio sleep"
-    digitalWrite(RELAY_PIN,(on?LOW:HIGH)); updateLEDs(); //LOW = device on
+    digitalWrite(RELAY_PIN,(on?LOW:HIGH)); updateBacklight(); //LOW = device on
     // Serial.print(millis(),DEC);
     // if(on) Serial.println(F(" Relay on, timerSwitchSleepRelay (radio sleep)"));
     // else   Serial.println(F(" Relay off, timerSwitchSleepRelay (radio sleep)"));
@@ -1374,7 +1373,7 @@ void updateDisplay(){
     else if( readEEPROM(27,false) && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins) ) displayDim = (readEEPROM(27,false)==1?1:(unoffRemain>0?2:0)); //dim or (unoff? bright: off)
     //normal
     else displayDim = 2;
-    updateLEDs();
+    updateBacklight();
     
     switch(fn){
       case fnIsTime:
@@ -1618,8 +1617,8 @@ void initOutputs() {
     pinMode(RELAY_PIN, OUTPUT); digitalWrite(RELAY_PIN, HIGH); //LOW = device on
     quickBeep(71); //"primes" the beeper, seems necessary when relay pin is spec'd, otherwise first intentional beep doesn't happen TODO still true?
   }
-  if(LED_PIN>=0) pinMode(LED_PIN, OUTPUT);
-  updateLEDs(); //set to initial value
+  if(BACKLIGHT_PIN>=0) pinMode(BACKLIGHT_PIN, OUTPUT);
+  updateBacklight(); //set to initial value
 }
 
 //Signals are like songs played on the beeper or relay, when the alarm/timer runs out or as an indicator.
@@ -1659,7 +1658,7 @@ void signalStart(byte sigFn, byte sigDur){
     //If switched relay, except if this is a forced fnIsTimer signal (for signaling runout options)
     if(getSignalOutput()==1 && RELAY_PIN>=0 && RELAY_MODE==0 && !(sigFn==255 && signalSource==fnIsTimer)) { //turn it on now
       signalRemain = (sigFn==fnIsAlarm? SWITCH_DUR: sigDur); //For alarm signal, use switched relay duration from config (eg 2hr)
-      digitalWrite(RELAY_PIN,LOW); updateLEDs(); //LOW = device on
+      digitalWrite(RELAY_PIN,LOW); updateBacklight(); //LOW = device on
       //Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalStart"));
     } else { //start pulsing. If there is no beeper or pulsed relay, this will have no effect since cycleSignal will clear it
       signalRemain = (sigFn==fnIsAlarm? SIGNAL_DUR: sigDur); //For alarm signal, use signal duration from config (eg 2min)
@@ -1672,7 +1671,7 @@ void signalStop(){ //stop current signal and clear out signal timer if applicabl
   signalRemain = 0; snoozeRemain = 0; signalMeasureStep = 0;
   if(getSignalOutput()==0 && PIEZO_PIN>=0) noTone(PIEZO_PIN);
   if(getSignalOutput()==1 && RELAY_PIN>=0){
-    digitalWrite(RELAY_PIN,HIGH); updateLEDs(); //LOW = device on
+    digitalWrite(RELAY_PIN,HIGH); updateBacklight(); //LOW = device on
     //Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalStop"));
   }
 } //end signalStop()
@@ -1743,13 +1742,13 @@ void cycleSignal(){
       }
       //Upon new measure, start the pulse immediately
       if(signalMeasureStep==1){
-        digitalWrite(RELAY_PIN,LOW); updateLEDs(); //LOW = device on
+        digitalWrite(RELAY_PIN,LOW); updateBacklight(); //LOW = device on
         //Serial.print(millis(),DEC); Serial.println(F(" Relay on, cycleSignal"));
         signalMeasureStep = 2; //set it up to stop
       }
       //See if it's time to stop the pulse
       else if(signalMeasureStep==2 && (unsigned long)(ms()-signalMeasureStartTime)>=RELAY_PULSE) {
-        digitalWrite(RELAY_PIN,HIGH); updateLEDs(); //LOW = device on
+        digitalWrite(RELAY_PIN,HIGH); updateBacklight(); //LOW = device on
         //Serial.print(millis(),DEC); Serial.println(F(" Relay off, cycleSignal"));
         //Set up for the next event
         if(signalRemain) signalRemain--; //this measure is done
@@ -1805,51 +1804,56 @@ void quickBeep(int pitch){
   if(PIEZO_PIN>=0) { noTone(PIEZO_PIN); tone(PIEZO_PIN, getHz(pitch), 100); }
 }
 
-const byte ledFadeStep = 10; //fade speed – with every loop() we'll increment/decrement the LED brightness (between 0-255) by this amount
-byte ledStateNow = 0;
-byte ledStateTarget = 0;
-void updateLEDs(){
-  //Run whenever something is changed that might affect the LED state: initial (initOutputs), signal start/stop, relay on/off, setting change
-  if(LED_PIN>=0) {
+//BACKLIGHT_FADE is PWM fade speed – if >0, with every loop() we'll increment/decrement the PWM (between 0-255) by this amount. If 0, we'll just switch it on and off (no PWM).
+byte backlightNow = 0;
+byte backlightTarget = 0;
+void updateBacklight(){
+  //Run whenever something is changed that might affect the backlight state: initial (initOutputs), signal start/stop, relay on/off, setting change
+  if(BACKLIGHT_PIN>=0) {
     switch(readEEPROM(26,false)){
       case 0: //always off
-        ledStateTarget = 0;
-        //Serial.println(F("LEDs off always"));
+        backlightTarget = 0;
+        //Serial.println(F("Backlight off always"));
         break;
       case 1: //always on
-        ledStateTarget = 255;
-        //Serial.println(F("LEDs on always"));
+        backlightTarget = 255;
+        //Serial.println(F("Backlight on always"));
         break;
       case 2: //on, but follow night/away shutoff
-        ledStateTarget = (displayDim==2? 255: (displayDim==1? 127: 0));
-        //Serial.print(displayDim==2? F("LEDs on"): (displayDim==1? F("LEDs dim"): F("LEDs off"))); Serial.println(F(" per dim state"));
+        backlightTarget = (displayDim==2? 255: (displayDim==1? 127: 0));
+        //Serial.print(displayDim==2? F("Backlight on"): (displayDim==1? F("Backlight dim"): F("Backlight off"))); Serial.println(F(" per dim state"));
         break;
       case 3: //off, but on when alarm/timer sounds
-        ledStateTarget = (signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)? 255: 0);
-        //Serial.print(signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)?F("LEDs on"):F("LEDs off")); Serial.println(F(" per alarm/timer"));
+        backlightTarget = (signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)? 255: 0);
+        //Serial.print(signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)?F("Backlight on"):F("Backlight off")); Serial.println(F(" per alarm/timer"));
         break;
       case 4: //off, but on with switched relay
         if(RELAY_PIN>=0 && RELAY_MODE==0) {
-          ledStateTarget = (!digitalRead(RELAY_PIN)? 255: 0); //LOW = device on
-          //Serial.print(!digitalRead(RELAY_PIN)? F("LEDs on"): F("LEDs off")); Serial.println(F(" per switched relay"));
+          backlightTarget = (!digitalRead(RELAY_PIN)? 255: 0); //LOW = device on
+          //Serial.print(!digitalRead(RELAY_PIN)? F("Backlight on"): F("Backlight off")); Serial.println(F(" per switched relay"));
         }
         break;
       default: break;
     } //end switch
-  } //if LED_PIN
-} //end updateLEDs
-void cycleLEDs() {
-  //Allows us to fade the LEDs to ledStateTarget by stepping via ledFadeStep
-  //TODO: it appears setting analogWrite(pin,0) does not completely turn the LEDs off. Anything else we could do?
-  if(ledStateNow != ledStateTarget) {
-    if(ledStateNow < ledStateTarget) {
-      ledStateNow = (ledStateTarget-ledStateNow <= ledFadeStep? ledStateTarget: ledStateNow+ledFadeStep);
-    } else {
-      ledStateNow = (ledStateNow-ledStateTarget <= ledFadeStep? ledStateTarget: ledStateNow-ledFadeStep);
+  } //if BACKLIGHT_PIN
+} //end updateBacklight
+void cycleBacklight() {
+  //Allows us to fade the backlight to backlightTarget by stepping via BACKLIGHT_FADE, if applicable
+  //TODO: it appears setting analogWrite(pin,0) does not completely turn the backlight off. Anything else we could do?
+  if(backlightNow != backlightTarget) {
+    if(BACKLIGHT_FADE){ //PWM
+      if(backlightNow < backlightTarget) { //fade up
+        backlightNow = (backlightTarget-backlightNow <= BACKLIGHT_FADE? backlightTarget: backlightNow+BACKLIGHT_FADE);
+      } else { //fade down
+        backlightNow = (backlightNow-backlightTarget <= BACKLIGHT_FADE? backlightTarget: backlightNow-BACKLIGHT_FADE);
+      }
+      // Serial.print(backlightNow,DEC);
+      // Serial.print(F(" => "));
+      // Serial.println(backlightTarget,DEC);
+      analogWrite(BACKLIGHT_PIN,backlightNow);
+    } else { //just switch
+      backlightNow = backlightTarget = (backlightTarget<255? 0: 255);
+      digitalWrite(BACKLIGHT_PIN,(backlightNow?LOW:HIGH)); //LOW = device on
     }
-    // Serial.print(ledStateNow,DEC);
-    // Serial.print(F(" => "));
-    // Serial.println(ledStateTarget,DEC);
-    analogWrite(LED_PIN,ledStateNow);
   }
 }

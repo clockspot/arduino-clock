@@ -4,7 +4,7 @@ Your clock has four main functions: [time of day](#time-of-day), [calendar](#cal
 
 To set anything, simply hold **Select** until the display blinks; use **Up/Down** to set, and **Select** to save.
 
-Additional settings are available in the [settings menu](#settings-menu). If you have a Wi-Fi-enabled clock, you can configure these settings (and more) on the [settings webpage](#wi-fi-support), where you can also configure the clock to set itself.
+Additional settings are available in the [settings menu](#settings-menu). If you have a Wi-Fi-enabled clock, you can configure these settings (and more) on the [settings page](#wi-fi-support), where you can also configure the clock to set itself.
 
 ## Time of day
 
@@ -74,7 +74,7 @@ If your clock has _neither_ a switch signal nor [Wi-Fi support](#wi-fi-support),
 * To enter the settings menu, hold **Select** for 3 seconds until the hour displays `1`. This indicates option number 1.
 * Use **Up/Down** to go to the option number you want to set (see table below); press **Select** to open it for setting (display will blink); use **Up/Down** to set; and **Select** to save.
 * When all done, hold **Select** to exit the menu.
-* If you have a Wi-Fi-enabled clock, you can configure these settings (and more) on the [settings webpage](#wi-fi-support).
+* If you have a Wi-Fi-enabled clock, you can configure these settings (and more) on the [settings page](#wi-fi-support).
 
 |  | Option | Settings |
 | --- | --- | --- |
@@ -121,19 +121,21 @@ To reset the clock to “factory” settings, hold **Select** for 15 seconds whi
 
 ## Wi-Fi support
 
-If your clock is Wi-Fi-enabled, it provides a settings webpage that duplicates the settings menu above (and more), and it can set itself by synchronizing to an [NTP time server](https://en.wikipedia.org/wiki/Time_server). To use NTP sync, use the webpage to supply the credentials for your Wi-Fi network.
+If your clock is Wi-Fi-enabled, it offers a settings webpage that duplicates the menu above (and more), and can set itself by synchronizing to an [NTP time server](https://en.wikipedia.org/wiki/Time_server).
 
-To access the settings webpage, grab a device with a web browser, and briefly hold **Alt**.
+To access the settings page, grab a device with a web browser, and briefly hold **Alt**.
 
 * If the clock **is not** connected to Wi-Fi, it will display `7777`.
-	* This indicates the clock is broadcasting a Wi-Fi access point called “Clock”. Connect your device to “Clock” and browse to [7.7.7.7](http://7.7.7.7).
+	* This indicates it is broadcasting a Wi-Fi network called “Clock.” Connect your device to “Clock” and browse to [7.7.7.7](http://7.7.7.7).
 	
 * If the clock **is** connected to Wi-Fi, it will flash its IP address (as a series of four numbers).
-	* Connect your device to the same Wi-Fi network, and browse to that IP address.
-	* If you don't know what Wi-Fi network the clock is connected to, hold **Alt** for 10 seconds. It will disconnect from that network and broadcast the “Clock” access point, as above.
+	* Connect your device to the same Wi-Fi network as the clock, and browse to that IP address.
+	* If you don’t know what Wi-Fi network the clock is connected to, hold **Alt** for 10 seconds. It will disconnect from that network and broadcast the “Clock” access point, as above.
 
-For security, the clock will stop serving the settings page (and “Clock” access point, if applicable) after two minutes of inactivity.
+If you change the Wi-Fi settings, the clock will immediately attempt to (re)connect, and will display its IP address if successful, or `7777` if not. To continue configuring the clock, reconnect to it as above.
 
-When NTP sync is enabled, the clock will attempt to synchronize itself every hour (at minute 59). The settings webpage will indicate how recently the clock was last synced.
+For security, the settings page (and “Clock” network if applicable) will stop after two minutes of inactivity.
 
-**If the clock displays the time without seconds,** this indicates it was unable to sync in the last 24 hours. Check to make sure the clock is connected to Wi-Fi and configured to use a valid NTP server, and try a manual sync. If no Wi-Fi is available or you're unable to sync for other reasons (such as network limitations), disable Wi-Fi or NTP sync to restore the seconds display.
+When NTP sync is enabled, the clock will attempt to synchronize every hour (at minute 59). The settings page will indicate how recently the clock was last synced.
+
+**If the clock displays the time without seconds,** this indicates it was unable to sync in the last 24 hours. Check to make sure the clock is connected to Wi-Fi and configured to use a valid NTP server, and try a manual sync. If no Wi-Fi is available or you’re unable to sync for other reasons (such as network limitations), disable Wi-Fi or NTP sync to restore the seconds display.
