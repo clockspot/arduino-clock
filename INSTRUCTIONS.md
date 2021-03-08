@@ -85,9 +85,9 @@ If your clock has _neither_ a switch signal nor [Wi-Fi support](#wi-fi-support),
 | 4 | Leading zeros | 0 = no<br/>1 = yes |
 | 5 | Digit fade | 0–20 (in hundredths of a second) |
 | 6 | Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ)<br/>If the clock is not powered at the time, it will correct itself when powered up.<br/>If you observe DST but your locale’s rules are not represented here, leave this set to 0 and set the clock manually (and the [DST offset](#settingsgeography) if applicable). |
-| 7 | Backlight | 0 = always off<br/>1 = always on<br/>2 = on, but follow night/away shutoff if enabled<br/>3 = off, but on when alarm/timer signals</br>4 = off, but on with [switch signal](#signals) (if equipped)<br/>(Clocks with backlighting only) |
+| 7 | Backlight | 0 = always off<br/>1 = always on<br/>2 = on until night/away shutoff (if enabled)<br/>3 = on when alarm/timer signals</br>4 = on with [switch signal](#signals) (if equipped)<br/>(Clocks with backlighting only) |
 | 8 | Anti-cathode poisoning | Briefly cycles all digits to prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)<br/>0 = once a day, either at midnight or when night shutoff starts (if enabled)<br/>1 = at the top of every hour<br/>2 = at the top of every minute<br/>(Will not trigger during night/away shutoff) |
-|  | <a name="settingsalarm"></a>**Alarm** |  |
+|  | <a name="settingsalarm"></a>**Alarm** | (Clocks with signals only) |
 | 10 | Alarm auto-skip | 0 = alarm triggers every day<br/>1 = work week only, skipping weekends (per settings below)<br/>2 = weekend only, skipping work week |
 | 11 | Alarm signal | 0 = beeper (uses pitch and pattern below)<br/>1 = switch (will stay on for 2 hours)<br/>2 = pulse<br/>(Clocks with multiple signal types only) |
 | 12 | Alarm beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>(Clocks with beeper only) |
@@ -123,7 +123,7 @@ To reset the clock to “factory” settings, hold **Select** for 15 seconds whi
 
 If your clock is Wi-Fi-enabled, it offers a settings webpage that duplicates the menu above (and more), and can set itself by synchronizing to an [NTP time server](https://en.wikipedia.org/wiki/Time_server).
 
-To access the settings page, grab a device with a web browser, and briefly hold **Alt**.
+**To access the settings page,** grab a device with a web browser, and briefly hold **Alt**.
 
 * If the clock **is not** connected to Wi-Fi, it will display `7777`.
 	* This indicates it is broadcasting a Wi-Fi network called “Clock.” Connect your device to “Clock” and browse to [7.7.7.7](http://7.7.7.7).
@@ -136,6 +136,4 @@ If you change the Wi-Fi settings, the clock will immediately attempt to (re)conn
 
 For security, the settings page (and “Clock” network if applicable) will stop after two minutes of inactivity.
 
-When NTP sync is enabled, the clock will attempt to synchronize every hour (at minute 59). The settings page will indicate how recently the clock was last synced.
-
-**If the clock displays the time without seconds,** this indicates it was unable to sync in the last 24 hours. Check to make sure the clock is connected to Wi-Fi and configured to use a valid NTP server, and try a manual sync. If no Wi-Fi is available or you’re unable to sync for other reasons (such as network limitations), disable Wi-Fi or NTP sync to restore the seconds display.
+**When NTP sync is enabled,** the clock will attempt to synchronize every hour (at minute 59). The settings page will indicate how recently the clock was last synced. If the clock displays the time without seconds, this indicates it has not synced in the last 24 hours (or since the time was set manually). Check to make sure the clock is connected to Wi-Fi and configured to use a valid NTP server, and try a manual sync. If no Wi-Fi is available or you’re unable to sync for other reasons (such as network limitations), disable Wi-Fi or NTP sync to restore the seconds display.

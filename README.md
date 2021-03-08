@@ -1,6 +1,6 @@
 # Universal Arduino Digital Clock
 
-![Nixie clocks](https://i.imgur.com/FemMWax.jpg)
+![Arduino clocks](https://theclockspot.com/arduino-clock.jpg)
 
 ## Operating instructions
 

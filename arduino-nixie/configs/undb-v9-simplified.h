@@ -1,4 +1,4 @@
-//UNDB v9, relay enabled, buttons as labeled, with 6-digit display.
+//UNDB v9, relay disabled, buttons as labeled, with 6-digit display.
 //Also for v8 modified to v9 spec (Sel/Alt on A6/A7, Up/Down on A0/A1, relay on A3, led on 9, and cathode B4 on A2)
 
 #ifndef CONFIG
@@ -9,16 +9,17 @@
 
 // Which functionality is enabled in this clock?
 // Related options will also be enabled in the options menu.
+// The operating instructions assume all of these are enabled except temp and tubetest.
 #define ENABLE_DATE_FN true // Date function, optionally including pages below
-#define ENABLE_DATE_COUNTER true // Adds date page with an anniversary counter
-#define ENABLE_DATE_RISESET true // Adds date pages with sunrise/sunset times. Requires Dusk2Dawn library by DM Kichi to be installed in IDE.
+#define ENABLE_DATE_COUNTER false // Adds date page with an anniversary counter
+#define ENABLE_DATE_RISESET false // Adds date pages with sunrise/sunset times. Requires DM Kichi's Dusk2Dawn library to be installed in IDE.
 #define ENABLE_ALARM_FN true
-#define ENABLE_ALARM_AUTOSKIP true
-#define ENABLE_ALARM_FIBONACCI true
-#define ENABLE_TIMER_FN true
+#define ENABLE_ALARM_AUTOSKIP false
+#define ENABLE_ALARM_FIBONACCI false
+#define ENABLE_TIMER_FN false
 #define ENABLE_TIME_CHIME true
 #define ENABLE_SHUTOFF_NIGHT true // If disabled, tubes will be full brightness all the time.
-#define ENABLE_SHUTOFF_AWAY true // Requires night shutoff.
+#define ENABLE_SHUTOFF_AWAY false // Requires night shutoff.
 #define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
 #define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 
@@ -94,24 +95,26 @@
 
 ///// Other Outputs /////
 
-//What are the signal pin(s) connected to?
-#define PIEZO_PIN 10
-#define RELAY_PIN A3 // -1 to disable feature (no relay item equipped); A3 if equipped (UNDB v9)
-#define RELAY_MODE 0 //If relay is equipped, what does it do?
-// 0 = switched mode: the relay will be switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in SWITCH_DUR.
-// 1 = pulsed mode: the relay will be pulsed, like the beeper is, to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in RELAY_PULSE.
-#define SIGNAL_DUR 180 //sec - when pulsed signal is going, pulses are sent once/sec for this period (e.g. 180 = 3min)
-#define SWITCH_DUR 7200 //sec - when alarm triggers switched relay, it's switched on for this period (e.g. 7200 = 2hr)
-#define PIEZO_PULSE 250 //ms - used with piezo via tone()
-#define RELAY_PULSE 200 //ms - used with pulsed relay
+//What are the pins for each signal type? -1 to disable that signal type
+#define PIEZO_PIN 10 //Drives a piezo beeper
+#define SWITCH_PIN -1 //Switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in SWITCH_DUR. (A3 for UNDB v9)
+#define PULSE_PIN -1 //Simple pulses to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in RELAY_PULSE. Pulse frequency behaves like the piezo signal.
+//Default signal type for each function:
+//0=piezo, 1=switch, 2=pulse
+#define ALARM_SIGNAL 0
+#define TIMER_SIGNAL 0
+#define CHIME_SIGNAL 0
+#define SIGNAL_DUR 180 //sec - when piezo/pulse signal is going, it's pulsed once/sec for this period (e.g. 180 = 3min)
+#define SWITCH_DUR 7200 //sec - when alarm triggers switch signal, it's switched on for this period (e.g. 7200 = 2hr)
+#define PULSE_LENGTH 200 //ms - length of pulse signal's individual pulses (e.g. to drive a solenoid to ring a bell)
 
 //Soft power switches
 #define ENABLE_SOFT_ALARM_SWITCH 1
 // 1 = yes. Alarm can be switched on and off when clock is displaying the alarm time (fnIsAlarm).
-// 0 = no. Alarm will be permanently on. Use with switched relay if the appliance has its own switch on this relay circuit.
-#define ENABLE_SOFT_POWER_SWITCH 1 //works with switched relay only
-// 1 = yes. Relay can be switched on and off directly with Alt button at any time (except in options menu). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
-// 0 = no. Use if the connected appliance has its own power switch (independent of this relay circuit) or does not need to be manually switched. In this case (and/or if there is no switched relay) Alt will act as a function preset.
+// 0 = no. Alarm will be permanently on. Use with switch signal if the appliance has its own switch on this circuit (and note that, if another signal type(s) is available and selected for the alarm, the user won't be able to switch it off). Also disables skip feature. Note that the instructions do not reflect this option.
+#define ENABLE_SOFT_POWER_SWITCH 1 //switch signal only
+// 1 = yes. Switch signal can be toggled on and off directly with Alt button at any time (except in options menu). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
+// 0 = no. Use if the connected appliance has its own power switch (independent of this circuit, e.g. some Sony Digimatic clock radios) or does not need to be manually switched. In this case (and/or if there is no switch signal option, and if no Wi-Fi support) Alt will act as a function preset. Note that the instructions do not reflect this option.
 
 //Backlighting control
 #define BACKLIGHT_PIN 9 // -1 to disable feature; 9 if equipped (UNDB v9)

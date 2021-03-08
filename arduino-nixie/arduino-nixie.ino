@@ -7,7 +7,8 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/led-iot.h"
+//#include "configs/led-iot.h"
+#include "configs/undb-v9.h"
 
 ////////// Software version //////////
 const byte vMajor = 1;
@@ -53,11 +54,11 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   18 Display date during time
   19 Leading zeros in time hour, calendar, and chrono/timer
   20 Digit fade duration
-  21 Strike - skipped when no piezo and relay is switch (start=0)
+  21 Strike - piezo or pulse signal only (start=0)
   22 Auto DST
   23 Alarm days
   24 Alarm snooze
-  25 [free] - formerly Timer interval mode - skipped when no piezo and relay is switch (start=0)
+  25 [free] - formerly Timer interval mode (now a volatile var)
   26 Backlight behavior - skipped when no backlight pin
   27 Night shutoff
   28-29 Night start, mins
@@ -67,17 +68,17 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   34 Last day of workweek
   35-36 Work starts at, mins
   37-38 Work ends at, mins
-  39 Alarm beeper pitch - skipped when no piezo
-  40 Timer beeper pitch - skipped when no piezo
-  41 Strike beeper pitch - skipped when no piezo
-  42 Alarm signal, 0=beeper, 1=relay - skipped when no relay (start=0) or no piezo (start=0)
-  43 Timer signal - skipped when no relay (start=0) or no piezo (start=1)
-  44 Strike signal - skipped when no pulse relay (start=0) or no piezo (start=1)
+  39 Alarm beeper pitch - piezo signal only
+  40 Timer beeper pitch - piezo signal only
+  41 Strike beeper pitch - piezo signal only
+  42 Alarm signal (0=piezo, 1=switch, 2=pulse)
+  43 Timer signal
+  44 Strike signal
   45 Temperature format - skipped when !ENABLE_TEMP_FN TODO also useful for weather display
   46 Anti-cathode poisoning
-  47 Alarm beeper pattern - skipped when no piezo
-  48 Timer beeper pattern - skipped when no piezo
-  49 Strike beeper pattern - skipped when no piezo
+  47 Alarm beeper pattern - piezo signal only
+  48 Timer beeper pattern - piezo signal only
+  49 Strike beeper pattern - piezo signal only
   50 Alarm Fibonacci mode
 */
 
@@ -85,12 +86,12 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //Option numbers/order can be changed (though try to avoid for user convenience);
 //but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
 //The current values array is wasteful, since they have to all be ints here; but there should be room. We will initialize them at startup.
-//                       General                    Alarm              Timer        Strike       Night and away shutoff           Geo
+//                       General                    Alarm              Timer     Strike       Night and away shutoff           Geo
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13,14,15, 21,22,23, 30,31,32,33, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52};
 const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,47,24,50, 43,40,48, 21,44,41,49, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14};
 const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,76, 4, 9, 0,  0,76, 2,  0, 0,68, 5,  0,1320, 360, 0, 1, 5, 480,1080,     0,    0,100};
 const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0, 0, 0,  0,49, 0,  0, 0,49, 0,  0,   0,   0, 0, 0, 0,   0,   0,  -900,-1800, 52};
-const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 1,88, 5,60, 1,  1,88, 5,  4, 1,88, 5,  2,1439,1439, 2, 6, 6,1439,1439,   900, 1800,156};
+const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 2,88, 5,60, 1,  2,88, 5,  4, 2,88, 5,  2,1439,1439, 2, 6, 6,1439,1439,   900, 1800,156};
 
 //The rest of these variables are not backed by persistent storage, so they are regular named vars.
 
@@ -199,20 +200,30 @@ void setup(){
   initEEPROM(checkForHeldButtonAtStartup()); //Do a hard init of EEPROM if button is held; else do a soft init to make sure vals in range
   //Some options need to be set to a fixed value per the configuration.
   //These options will also be skipped in fnOptScroll so the user can't change them.
-  if(RELAY_PIN<0 || PIEZO_PIN<0) { //If no relay or no piezo, set each signal output to [if no relay, then piezo; else relay]  
-    writeEEPROM(42,(RELAY_PIN<0?0:1),false); //alarm
-    writeEEPROM(43,(RELAY_PIN<0?0:1),false); //timer
-    writeEEPROM(44,(RELAY_PIN<0?0:1),false); //strike
+  
+  //Signals: if the current eeprom selection is not available,
+  //try to use the default specified in the config, failing to pulse and then switch (alarm/timer only)
+  if((readEEPROM(42,false)==0 && PIEZO_PIN<0) || (readEEPROM(42,false)==1 && SWITCH_PIN<0) || (readEEPROM(42,false)==2 && PULSE_PIN<0))
+    writeEEPROM(42,(ALARM_SIGNAL==0 && PIEZO_PIN>=0? 0: (ALARM_SIGNAL==2 && PULSE_PIN>=0? 2: 1)),false); //alarm
+  if((readEEPROM(43,false)==0 && PIEZO_PIN<0) || (readEEPROM(43,false)==1 && SWITCH_PIN<0) || (readEEPROM(43,false)==2 && PULSE_PIN<0))
+    writeEEPROM(43,(TIMER_SIGNAL==0 && PIEZO_PIN>=0? 0: (TIMER_SIGNAL==2 && PULSE_PIN>=0? 2: 1)),false); //timer
+  if((readEEPROM(44,false)==0 && PIEZO_PIN<0) || (readEEPROM(44,false)==1 && SWITCH_PIN<0) || (readEEPROM(44,false)==2 && PULSE_PIN<0))
+    writeEEPROM(44,(CHIME_SIGNAL==0 && PIEZO_PIN>=0? 0: 2),false); //chime
+  
+  if((PIEZO_PIN<0 && SWITCH_PIN<0 && PULSE_PIN<0) || !ENABLE_ALARM_FN){ //can't do alarm
+    writeEEPROM(2,0,false); //force alarm off
+    writeEEPROM(23,0,false); //force autoskip off
+    writeEEPROM(50,0,false); //force fibonacci off
+  } else { //ok to do alarm
+    if(!ENABLE_SOFT_ALARM_SWITCH) writeEEPROM(2,1,false); //no soft alarm switch: force alarm on
+    if(!ENABLE_SOFT_ALARM_SWITCH || !ENABLE_ALARM_AUTOSKIP) writeEEPROM(23,0,false); //no soft switch or no autoskip: force autoskip off
+    if((PIEZO_PIN<0 && PULSE_PIN<0) || !ENABLE_ALARM_FIBONACCI) writeEEPROM(50,0,false); //no fibonacci, or no piezo or pulse: force fibonacci off
   }
-  if(PIEZO_PIN>=0 && RELAY_MODE==0) { //If piezo and switched relay
-    writeEEPROM(44,0,false); //strike forced to piezo
+  
+  if((PIEZO_PIN<0 && PULSE_PIN<0) || !ENABLE_TIME_CHIME){ //can't do chime
+    writeEEPROM(21,0,false); //force chime off
   }
-  if(PIEZO_PIN<0 && RELAY_MODE==0) { //If switched relay and no piezo
-    writeEEPROM(21,0,false); //turn off strike
-    writeEEPROM(50,0,false); //turn off fibonacci mode
-  }
-  if(!ENABLE_ALARM_FN) writeEEPROM(2,0,false); //force alarm off if disabled in config
-  else if(!ENABLE_SOFT_ALARM_SWITCH) writeEEPROM(2,1,false); //force alarm on if software switch is disabled
+  
   switch(readEEPROM(7,false)){ //if the preset is set to a function that is no longer enabled, use alarm if enabled, else use time
     case fnIsDate: if(!ENABLE_DATE_FN) writeEEPROM(7,(ENABLE_ALARM_FN?fnIsAlarm:fnIsTime),false); break;
     case fnIsAlarm: if(!ENABLE_ALARM_FN) writeEEPROM(7,fnIsTime,false); break;
@@ -221,9 +232,6 @@ void setup(){
     case fnIsTest: if(!ENABLE_TUBETEST_FN) writeEEPROM(7,(ENABLE_ALARM_FN?fnIsAlarm:fnIsTime),false); break;
     default: writeEEPROM(7,(ENABLE_ALARM_FN?fnIsAlarm:fnIsTime),false); break;
   }
-  if(!ENABLE_ALARM_AUTOSKIP) writeEEPROM(23,0,false); //alarm autoskip off
-  if(!ENABLE_ALARM_FIBONACCI) writeEEPROM(50,0,false); //fibonacci off
-  if(!ENABLE_TIME_CHIME) writeEEPROM(21,0,false); //chime off
   if(!ENABLE_SHUTOFF_NIGHT) writeEEPROM(27,0,false); //night shutoff off
   if(!ENABLE_SHUTOFF_AWAY) writeEEPROM(32,0,false); //away shutoff off
   //if backlight circuit is not switched (v5.0 board), the backlight menu setting (eeprom 26) doesn't matter
@@ -265,8 +273,8 @@ void ctrlEvt(byte ctrl, byte evt){
   if(signalRemain>0 && evt==1){
     signalStop();
     if(signalSource==fnIsAlarm) { //If this was the alarm
-      //If the alarm is using the switched relay and this is the Alt button; or if alarm is *not* using the switched relay and this is Fibonacci mode; don't set the snooze
-      if((RELAY_MODE==0 && readEEPROM(42,false)==1 && CTRL_ALT!=0 && ctrl==CTRL_ALT) || (readEEPROM(50,false) && !(RELAY_PIN>=0 && RELAY_MODE==0 && readEEPROM(42,false)==1))) {
+      //If the alarm is using the switch signal and this is the Alt button; or if alarm is *not* using the switch signal and this is Fibonacci mode; don't set the snooze
+      if((readEEPROM(42,false)==1 && CTRL_ALT!=0 && ctrl==CTRL_ALT) || (readEEPROM(42,false)!=1 && readEEPROM(50,false))) {
         quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
         displayBlink(); //to indicate this as well
       } else { //start snooze
@@ -336,9 +344,9 @@ void ctrlEvt(byte ctrl, byte evt){
       if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL hold: enter setting mode
         switch(fn){
           case fnIsTime: //set mins
-            startSet(rtcGetTOD(),0,1439,1); break; //TODO pull from time
+            startSet(rtcGetTOD(),0,1439,1); break;
           case fnIsDate: //depends what page we're on
-            if(fnPg==0){ //regular date display: set year //TODO pull from time
+            if(fnPg==0){ //regular date display: set year
               fnSetValDate[1]=rtcGetMonth(), fnSetValDate[2]=rtcGetDate(); startSet(rtcGetYear(),2000,9999,1);
             } else if(fnPg==fnDateCounter){ //month, date, direction
               startSet(readEEPROM(5,false),1,12,1);
@@ -418,8 +426,8 @@ void ctrlEvt(byte ctrl, byte evt){
           networkStartAdmin();
         }
         #else
-        //if switched relay, and soft switch enabled, we'll switch power.
-        if(ENABLE_SOFT_POWER_SWITCH && RELAY_PIN>=0 && RELAY_MODE==0) { switchPower(2); inputStop(); }
+        //if switch signal, and soft switch enabled, we'll switch power.
+        if(ENABLE_SOFT_POWER_SWITCH && SWITCH_PIN>=0) { switchPower(2); inputStop(); }
         //Otherwise, this becomes our function preset.
         else {
           //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
@@ -462,6 +470,9 @@ void ctrlEvt(byte ctrl, byte evt){
             case fnIsTime: //save in RTC
               if(fnSetValDid){ //but only if the value was actually changed
                 rtcSetTime(fnSetVal/60,fnSetVal%60,0);
+                #ifdef NETWORK_SUPPORTED
+                ntpSyncLast = 0;
+                #endif
                 millisAtLastCheck = 0; //see ms()
                 calcSun();
                 isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),fnSetVal/60,true);
@@ -481,6 +492,9 @@ void ctrlEvt(byte ctrl, byte evt){
                   case 3: //write year/month/date to RTC
                     rtcSetDate(fnSetValDate[0],fnSetValDate[1],fnSetVal,
                       dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal));
+                    #ifdef NETWORK_SUPPORTED
+                    ntpSyncLast = 0;
+                    #endif
                     calcSun();
                     isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,rtcGetHour(),true);
                     clearSet(); break;
@@ -589,10 +603,11 @@ void fnScroll(byte dir){
   //0=down, 1=up
   //Switch to the next (up) or previous (down) enabled function. This determines the order.
   //We'll use switch blocks *without* breaks to cascade to the next enabled function
+  bool alarmOK = (PIEZO_PIN>=0 || SWITCH_PIN>=0 || PULSE_PIN>=0) && ENABLE_ALARM_FN; //skip alarm if no signals available
   if(dir) { // up
     switch(fn) {
       case fnIsTime: if(ENABLE_DATE_FN) { fn = fnIsDate; break; }
-      case fnIsDate: if(ENABLE_ALARM_FN) { fn = fnIsAlarm; break; }
+      case fnIsDate: if(alarmOK) { fn = fnIsAlarm; break; }
       case fnIsAlarm: if(ENABLE_TIMER_FN) { fn = fnIsTimer; break; }
       case fnIsTimer: if(ENABLE_TEMP_FN) { fn = fnIsTemp; break; }
       case fnIsTemp: if(ENABLE_TUBETEST_FN) { fn = fnIsTest; break; }
@@ -603,7 +618,7 @@ void fnScroll(byte dir){
       case fnIsTime: if(ENABLE_TUBETEST_FN) { fn = fnIsTest; break; } 
       case fnIsTest: if(ENABLE_TEMP_FN) { fn = fnIsTemp; break; }
       case fnIsTemp: if(ENABLE_TIMER_FN) { fn = fnIsTimer; break; }
-      case fnIsTimer: if(ENABLE_ALARM_FN) { fn = fnIsAlarm; break; }
+      case fnIsTimer: if(alarmOK) { fn = fnIsAlarm; break; }
       case fnIsAlarm: if(ENABLE_DATE_FN) { fn = fnIsDate; break; }
       case fnIsDate: default: fn = fnIsTime; break;
     }
@@ -618,11 +633,12 @@ void fnOptScroll(byte dir){
   //Certain options don't apply to some configurations; skip those.
   byte optLoc = optsLoc[fn-fnOpts];
   if(!SHOW_IRRELEVANT_OPTIONS && ( //see also: network requestType=1
-      //Hardware config
-      (PIEZO_PIN<0 && (optLoc==39||optLoc==40||optLoc==41||optLoc==47||optLoc==48||optLoc==49)) //no piezo: no signal pitches or alarm/timer/strike beeper pattern
-      || ((PIEZO_PIN<0 && RELAY_MODE==0) && (optLoc==21||optLoc==50)) //no piezo, and relay is switch: no strike, or alarm fibonacci mode
-      || ((RELAY_PIN<0 || PIEZO_PIN<0) && (optLoc==42||optLoc==43||optLoc==44)) //no relay or no piezo: no alarm/timer/strike signal
-      || ((RELAY_MODE==0) && (optLoc==44)) //relay is switch: no strike signal
+      //Signals disabled
+      (PIEZO_PIN<0 && (optLoc==39||optLoc==40||optLoc==41||optLoc==47||optLoc==48||optLoc==49)) //no piezo: skip all pitches and patterns
+      || ((PIEZO_PIN<0 || PULSE_PIN<0) && (optLoc==44)) //no piezo or pulse: skip strike signal type
+      || ((PIEZO_PIN<0 && PULSE_PIN<0) && (optLoc==21||optLoc==50)) //no piezo and pulse: skip the rest of strike, and alarm fibonacci mode
+      || (((PIEZO_PIN>=0)+(SWITCH_PIN>=0)+(PULSE_PIN>=0)<2) && (optLoc==42||optLoc==43)) //fewer than two signal types: skip alarm/timer signal type
+      || (((PIEZO_PIN>=0)+(SWITCH_PIN>=0)+(PULSE_PIN>=0)<1) && (optLoc==23||optLoc==24)) //no signal types: skip the rest of alarm (autoskip and snooze)
       || ((BACKLIGHT_PIN<0) && (optLoc==26)) //no backlight pin: no backlight control
       //Functions disabled
       || (!ENABLE_DATE_FN && (optLoc==17||optLoc==18||optLoc==10||optLoc==12)) //date fn disabled in config: skip date and geography options - don't skip utc offset as that's now used when setting clock from network ||optLoc==14
@@ -678,22 +694,22 @@ void switchAlarm(byte dir){
 void switchPower(byte dir){
   //0=down, 1=up, 2=toggle
   signalRemain = 0; snoozeRemain = 0; //in case alarm is going now - alternatively use signalStop()?
-  //If the timer is running down and is using the switched relay, this instruction conflicts with it, so cancel it
+  //If the timer is running down and is using the switch signal, this instruction conflicts with it, so cancel it
   if(timerState&1 && !((timerState>>1)&1) && readEEPROM(43,false)==1) {
     timerClear();
     updateDisplay();
     return;
   }
-  //RELAY_PIN state is the reverse of the appliance state: LOW = device on, HIGH = device off
+  //SWITCH_PIN state is the reverse of the appliance state: LOW = device on, HIGH = device off
   // Serial.print(millis(),DEC);
-  // Serial.print(F(" Relay requested to "));
+  // Serial.print(F(" Switch pin requested to "));
   if(dir==2) { //toggle
-    dir = (digitalRead(RELAY_PIN)?1:0); //LOW = device on, so this effectively does our dir reversion for us
+    dir = (digitalRead(SWITCH_PIN)?1:0); //LOW = device on, so this effectively does our dir reversion for us
     //Serial.print(dir==1?F("toggle on"):F("toggle off"));
   } else {
     //Serial.print(dir==1?F("switch on"):F("switch off"));
   }
-  digitalWrite(RELAY_PIN,(dir==1?0:1)); updateBacklight(); //LOW = device on
+  digitalWrite(SWITCH_PIN,(dir==1?0:1)); updateBacklight(); //LOW = device on
   //Serial.println(F(", switchPower"));
 }
 
@@ -704,9 +720,28 @@ void startSet(int n, int m, int x, byte p){ //Enter set state at page p, and sta
   updateDisplay();
 }
 void doSet(int delta){
-  //Does actual setting of fnSetVal, as told to by ctrlEvt or doSetHold. Makes sure it stays within range.
-  if(delta>0) if(fnSetValMax-fnSetVal<delta) fnSetVal-=((fnSetValMax-fnSetValMin)+1-delta); else fnSetVal=fnSetVal+delta;
-  if(delta<0) if(fnSetVal-fnSetValMin<abs(delta)) fnSetVal+=((fnSetValMax-fnSetValMin)+1+delta); else fnSetVal=fnSetVal+delta;
+  //Does actual setting of fnSetVal, as told to by ctrlEvt. Makes sure it stays within range.
+  bool did = false;
+  while(!did){
+    if(delta>0) if(fnSetValMax-fnSetVal<delta) fnSetVal-=((fnSetValMax-fnSetValMin)+1-delta); else fnSetVal=fnSetVal+delta;
+    if(delta<0) if(fnSetVal-fnSetValMin<abs(delta)) fnSetVal+=((fnSetValMax-fnSetValMin)+1+delta); else fnSetVal=fnSetVal+delta;
+    //In some special settings-menu cases, we have to make sure it's a valid value, and if not, doSet again in order to skip it
+    if(fn>=fnOpts){ //in settings menu
+      switch(optsLoc[fn-fnOpts]){ //setting loc, per current setting index
+        case 42: case 43: case 44: //signal type: only allow those which are equipped
+          if( (fnSetVal==0 && PIEZO_PIN>=0)
+            ||(fnSetVal==1 && SWITCH_PIN>=0)
+            ||(fnSetVal==2 && PULSE_PIN>=0)) did = true;
+          //else leave as false
+          break;
+        case 26: //backlighting: skip "follow switch signal" option if not equipped
+          if(fnSetVal<4 || (fnSetVal==4 && SWITCH_PIN>=0)) did = true;
+          //else leave as false
+          break;
+        default: did = true; break;
+      }
+    } else did = true;
+  }
   fnSetValDid=true;
   updateDisplay();
 }
@@ -727,6 +762,9 @@ void initEEPROM(bool hard){
   if(hard) {
     rtcSetDate(2021,1,1,dayOfWeek(2021,1,1));
     rtcSetTime(0,0,0);
+    #ifdef NETWORK_SUPPORTED
+    ntpSyncLast = 0;
+    #endif
   }
   //The vars outside the options menu
   if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //0-1: alarm at 7am
@@ -843,7 +881,7 @@ void checkRTC(bool force){
         //Serial.print("sr "); Serial.println(snoozeRemain,DEC);
         if(snoozeRemain<=0 && readEEPROM(2,false)) { //alarm on
           fnSetPg = 0; fn = fnIsTime;
-          if((readEEPROM(50,false) && !(RELAY_PIN>=0 && RELAY_MODE==0 && readEEPROM(42,false)==1))) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond()); //fibonacci sequence
+          if(readEEPROM(50,false) && readEEPROM(42,false)!=1) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond()); //fibonacci sequence
           else signalStart(fnIsAlarm,1); //regular alarm
         }
       }
@@ -863,8 +901,8 @@ void checkRTC(bool force){
     //DST change check: every 2am
     if(rtcGetSecond()==0 && rtcGetMinute()==0 && rtcGetHour()==2) autoDST();
     //Alarm check: at top of minute for normal alarm, or 23 seconds past for fibonacci (which starts 26m37s early)
-    //Only do fibonacci if enabled and if the alarm is not using the switched relay - otherwise do regular
-    bool fibOK = readEEPROM(50,false) && !(RELAY_PIN>=0 && RELAY_MODE==0 && readEEPROM(42,false)==1);
+    //Only do fibonacci if enabled and if the alarm is not using the switch signal - otherwise do regular
+    bool fibOK = readEEPROM(50,false) && readEEPROM(42,false)!=1;
     if((rtcGetSecond()==0 && !fibOK) || (rtcGetSecond()==23 && fibOK)){
       int alarmTime = readEEPROM(0,true);
       if(rtcGetSecond()==23){ alarmTime-=27; if(alarmTime<0) alarmTime+=1440; } //set min to n-27 with midnight rollover
@@ -1166,7 +1204,7 @@ void timerStart(){
   //If chrono (count up), timestamp is an origin in the past: now minus duration.
   //If timer (count down), timestamp is a destination in the future: now plus duration.
   timerTime = ((timerState>>1)&1? ms() - timerTime: ms() + timerTime);
-  if(!((timerState>>1)&1)) timerSwitchSleepRelay(1); //possibly switch the relay, but only if counting down
+  if(!((timerState>>1)&1)) timerSleepSwitch(1); //possibly toggle the switch signal, but only if counting down
   quickBeep(69);
 } //end timerStart()
 void timerStop(){
@@ -1176,7 +1214,7 @@ void timerStop(){
   //If chrono (count up), timestamp is an origin in the past: duration is now minus timestamp.
   //If timer (count down), timestamp is a destination in the future: duration is timestamp minus now.
   timerTime = ((timerState>>1)&1? ms() - timerTime: timerTime - ms());
-  if(!((timerState>>1)&1)) timerSwitchSleepRelay(0); //possibly switch the relay, but only if counting down
+  if(!((timerState>>1)&1)) timerSleepSwitch(0); //possibly toggle the switch signal, but only if counting down
   quickBeep(64);
   bitWrite(timerState,4,0); //set timer lap display (bit 4) to off (0)
   updateDisplay(); //since cycleTimer won't do it
@@ -1185,7 +1223,7 @@ void timerClear(){
   bitWrite(timerState,0,0); //set timer running (bit 0) to off (0)
   bitWrite(timerState,1,1); //set timer direction (bit 1) to up (1) TODO is this necessary
   timerTime = 0; //set timer duration
-  timerSwitchSleepRelay(0);
+  timerSleepSwitch(0);
   bitWrite(timerState,4,0); //set timer lap display (bit 4) to off (0)
   //updateDisplay is called not long after this
 }
@@ -1214,24 +1252,24 @@ void cycleTimer(){
         //runout action and display
         if((timerState>>3)&1){ //runout chrono - keep target, change direction, kill sleep, change display
           bitWrite(timerState,1,1); //set timer direction (bit 1) to up (1)
-          timerSwitchSleepRelay(0);
+          timerSleepSwitch(0);
           fnSetPg = 0; fn = fnIsTimer;
         } else {
           if((timerState>>2)&1){ //runout repeat - keep direction, change target, keep sleep, don't change display
             timerTime += (timerInitialMins*60000)+(timerInitialSecs*1000); //set timer duration ahead by initial setting
           } else { //runout clear - clear timer, change display
             timerClear();
-            //If switched relay (radio sleep), go to time of day; otherwise go to empty timer to appear with signal
-            fnSetPg = 0; fn = (RELAY_PIN>=0 && RELAY_MODE==0 && readEEPROM(43,false)==1 ? fnIsTime: fnIsTimer);
+            //If switch signal (radio sleep), go to time of day; otherwise go to empty timer to appear with signal
+            fnSetPg = 0; fn = (readEEPROM(43,false)==1 ? fnIsTime: fnIsTimer);
             updateDisplay();
           }
         }
-        //signal (if not switched relay)
+        //piezo or pulse signal
         if((timerState>>2)&1){ //short signal (piggybacks on runout repeat flag)
-          if(RELAY_PIN<0 || RELAY_MODE!=0 || readEEPROM(43,false)!=1) signalStart(fnIsTimer,1);
+          if(readEEPROM(43,false)!=1) signalStart(fnIsTimer,1);
           //using 1 instead of 0, because in signalStart, fnIsTimer "quick measure" has a custom pitch for runout option setting
         } else { //long signal
-          if(RELAY_PIN<0 || RELAY_MODE!=0 || readEEPROM(43,false)!=1) signalStart(fnIsTimer,SIGNAL_DUR);
+          if(readEEPROM(43,false)!=1) signalStart(fnIsTimer,SIGNAL_DUR);
         }
       }
     } else { //If we are counting up,
@@ -1254,14 +1292,14 @@ void cycleTimer(){
     if(fn==fnIsTimer) updateDisplay();
   }
 } //end cycleTimer()
-void timerSwitchSleepRelay(bool on){
-  //When timer is set to use switched relay, it's on while timer is running, "radio sleep" style.
-  //This doesn't count as a signal (using signal methods) so that other signals might not interrupt it. TODO confirm
-  if(RELAY_PIN>=0 && RELAY_MODE==0 && readEEPROM(43,false)==1) { //start "radio sleep"
-    digitalWrite(RELAY_PIN,(on?LOW:HIGH)); updateBacklight(); //LOW = device on
+void timerSleepSwitch(bool on){
+  //When timer is set to use switch signal, it's on while timer is running, "radio sleep" style.
+  //We won't use the true signal methods so that other signals might not interrupt it. TODO confirm
+  if(readEEPROM(43,false)==1) { //start "radio sleep"
+    digitalWrite(SWITCH_PIN,(on?LOW:HIGH)); updateBacklight(); //LOW = device on
     // Serial.print(millis(),DEC);
-    // if(on) Serial.println(F(" Relay on, timerSwitchSleepRelay (radio sleep)"));
-    // else   Serial.println(F(" Relay off, timerSwitchSleepRelay (radio sleep)"));
+    // if(on) Serial.println(F(" Switch signal on, timerSleepSwitch"));
+    // else   Serial.println(F(" Switch signal off, timerSleepSwitch"));
   }
 }
 
@@ -1613,18 +1651,15 @@ void displayWeather(byte which){
 
 void initOutputs() {
   if(PIEZO_PIN>=0) pinMode(PIEZO_PIN, OUTPUT);
-  if(RELAY_PIN>=0) {
-    pinMode(RELAY_PIN, OUTPUT); digitalWrite(RELAY_PIN, HIGH); //LOW = device on
-    quickBeep(71); //"primes" the beeper, seems necessary when relay pin is spec'd, otherwise first intentional beep doesn't happen TODO still true?
-  }
+  if(SWITCH_PIN>=0) { pinMode(SWITCH_PIN, OUTPUT); digitalWrite(SWITCH_PIN, HIGH); } //LOW = device on
+  if(PULSE_PIN>=0) { pinMode(PULSE_PIN, OUTPUT); digitalWrite(PULSE_PIN, HIGH); } //LOW = device on
   if(BACKLIGHT_PIN>=0) pinMode(BACKLIGHT_PIN, OUTPUT);
   updateBacklight(); //set to initial value
 }
 
-//Signals are like songs played on the beeper or relay, when the alarm/timer runs out or as an indicator.
-//Like songs, a signal is made up of measures (usually 1sec each) tracked by the signalRemain counter.
-//Measures are made up of steps such as beeps and relay pulses, tracked by signalMeasureStep.
-//When used with switched relay, it simply turns on at the start, and off at the end, like a clock radio – the measures just wait it out.
+//Signals are like songs made up of measures (usually 1sec each) tracked by the signalRemain counter.
+//Measures are made up of steps such as piezo beeps and pulses, tracked by signalMeasureStep.
+//When used with switch signal, it simply turns on at the start, and off at the end, like a clock radio – the measures just wait it out.
 //Timed using ms() instead of millis() – see timer/chrono for details.
 unsigned long signalMeasureStartTime = 0; //to keep track of individual measures
 byte signalMeasureStep = 0; //step number, or 255 if waiting for next measure, or 0 if not signaling
@@ -1655,12 +1690,12 @@ void signalStart(byte sigFn, byte sigDur){
   signalMeasureStartTime = ms();
   signalMeasureStep = 1; //waiting to start a new measure
   if(sigDur!=0){ //long-duration signal (alarm, sleep, etc) - set signalRemain
-    //If switched relay, except if this is a forced fnIsTimer signal (for signaling runout options)
-    if(getSignalOutput()==1 && RELAY_PIN>=0 && RELAY_MODE==0 && !(sigFn==255 && signalSource==fnIsTimer)) { //turn it on now
-      signalRemain = (sigFn==fnIsAlarm? SWITCH_DUR: sigDur); //For alarm signal, use switched relay duration from config (eg 2hr)
-      digitalWrite(RELAY_PIN,LOW); updateBacklight(); //LOW = device on
-      //Serial.print(millis(),DEC); Serial.println(F(" Relay on, signalStart"));
-    } else { //start pulsing. If there is no beeper or pulsed relay, this will have no effect since cycleSignal will clear it
+    //If switch signal, except if this is a forced fnIsTimer signal (for signaling runout options)
+    if(getSignalOutput()==1 && !(sigFn==255 && signalSource==fnIsTimer)) { //turn it on now
+      signalRemain = (sigFn==fnIsAlarm? SWITCH_DUR: sigDur); //For alarm signal, use switch signal duration from config (eg 2hr)
+      digitalWrite(SWITCH_PIN,LOW); updateBacklight(); //LOW = device on
+      //Serial.print(millis(),DEC); Serial.println(F(" Switch signal on, signalStart"));
+    } else { //start piezo or pulse signal. If neither is present, this will have no effect since cycleSignal will clear it
       signalRemain = (sigFn==fnIsAlarm? SIGNAL_DUR: sigDur); //For alarm signal, use signal duration from config (eg 2min)
     }
   }
@@ -1670,10 +1705,15 @@ void signalStop(){ //stop current signal and clear out signal timer if applicabl
   //Serial.println(F("signalStop"));
   signalRemain = 0; snoozeRemain = 0; signalMeasureStep = 0;
   if(getSignalOutput()==0 && PIEZO_PIN>=0) noTone(PIEZO_PIN);
-  if(getSignalOutput()==1 && RELAY_PIN>=0){
-    digitalWrite(RELAY_PIN,HIGH); updateBacklight(); //LOW = device on
-    //Serial.print(millis(),DEC); Serial.println(F(" Relay off, signalStop"));
+  if(getSignalOutput()==1 && SWITCH_PIN>=0){
+    digitalWrite(SWITCH_PIN,HIGH); //LOW = device on
+    //Serial.print(millis(),DEC); Serial.println(F(" Switch signal off, signalStop"));
   }
+  if(getSignalOutput()==2 && PULSE_PIN>=0){
+    digitalWrite(PULSE_PIN,HIGH); //LOW = device on
+    //Serial.print(millis(),DEC); Serial.println(F(" Pulse signal off, signalStop"));
+  }
+  updateBacklight();
 } //end signalStop()
 void cycleSignal(){
   //Called on every loop to control the signal.
@@ -1731,9 +1771,9 @@ void cycleSignal(){
         }
       }
     } //end beeper
-    else if(getSignalOutput()==1 && RELAY_PIN>=0 && RELAY_MODE==1){ //pulsed relay
-      //We don't follow the beep pattern here, we simply energize the relay for RELAY_PULSE time
-      //Unlike beeper, we need to use a signalMeasureStep (2) to stop the relay.
+    else if(getSignalOutput()==2 && PULSE_PIN>=0){ //pulse signal
+      //We don't follow the beep pattern here, we simply energize the pulse signal for PULSE_LENGTH time
+      //Unlike beeper, we need to use a signalMeasureStep (2) to stop the pulse.
       //See if it's time to start a new measure
       if(signalMeasureStep==255 && (unsigned long)(ms()-signalMeasureStartTime)>=measureDur){
         //Serial.println(F("Starting new measure, sPS -1 -> 1"));
@@ -1742,21 +1782,21 @@ void cycleSignal(){
       }
       //Upon new measure, start the pulse immediately
       if(signalMeasureStep==1){
-        digitalWrite(RELAY_PIN,LOW); updateBacklight(); //LOW = device on
-        //Serial.print(millis(),DEC); Serial.println(F(" Relay on, cycleSignal"));
+        digitalWrite(PULSE_PIN,LOW); updateBacklight(); //LOW = device on
+        //Serial.print(millis(),DEC); Serial.println(F(" Pulse signal on, cycleSignal"));
         signalMeasureStep = 2; //set it up to stop
       }
       //See if it's time to stop the pulse
-      else if(signalMeasureStep==2 && (unsigned long)(ms()-signalMeasureStartTime)>=RELAY_PULSE) {
-        digitalWrite(RELAY_PIN,HIGH); updateBacklight(); //LOW = device on
-        //Serial.print(millis(),DEC); Serial.println(F(" Relay off, cycleSignal"));
+      else if(signalMeasureStep==2 && (unsigned long)(ms()-signalMeasureStartTime)>=PULSE_LENGTH) {
+        digitalWrite(PULSE_PIN,HIGH); updateBacklight(); //LOW = device on
+        //Serial.print(millis(),DEC); Serial.println(F(" Pulse signal off, cycleSignal"));
         //Set up for the next event
         if(signalRemain) signalRemain--; //this measure is done
         if(signalRemain) signalMeasureStep = 255; //if more measures, set up to start another measure
         else signalMeasureStep = 0; //otherwise, go idle - not using signalStop so as to let the beep expire on its own & fibonacci snooze continue
       }
-    } //end pulsed relay
-    else { //switched relay / default
+    } //end pulse signal
+    else { //switch signal / default
       //Simply decrement signalRemain until it runs out - signalMeasureStep doesn't matter as long as it stays nonzero as at start
       //See if it's time to start a new measure
       if((unsigned long)(ms()-signalMeasureStartTime)>=measureDur){
@@ -1765,8 +1805,8 @@ void cycleSignal(){
       }
       //Set up for the next event
       if(signalRemain) signalRemain--; //this measure is done - but no need to change signalMeasureStep as we haven't changed it
-      if(!signalRemain) signalStop(); //go idle - will kill the relay
-    } //end switched relay
+      if(!signalRemain) signalStop(); //go idle - will kill the switch signal
+    } //end switch signal / default
   } //end if there's a measure going
 } //end cycleSignal()
 word getSignalPitch(){ //for current signal: chime, timer, or (default) alarm
@@ -1779,10 +1819,10 @@ word getHz(byte note){
   word mult = 440*pow(2,reloct);
   return mult;
 }
-byte getSignalOutput(){ //for current signal: chime, timer, or (default) alarm: 0=piezo, 1=relay
+byte getSignalOutput(){ //for current signal: chime, timer, or (default) alarm: 0=piezo, 1=switch, 2=pulse
   return readEEPROM((signalSource==fnIsTime?44:(signalSource==fnIsTimer?43:42)),false);
 }
-byte getSignalPattern(){ //for current signal: chime, timer, or (default) alarm:
+byte getSignalPattern(){ //for current signal: chime, timer, or (default) alarm: (applies only to piezo)
   //0 = long (1/2-second beep)
   //1 = short (1/4-second beep)
   //2 = double (two 1/8-second beeps)
@@ -1808,7 +1848,7 @@ void quickBeep(int pitch){
 byte backlightNow = 0;
 byte backlightTarget = 0;
 void updateBacklight(){
-  //Run whenever something is changed that might affect the backlight state: initial (initOutputs), signal start/stop, relay on/off, setting change
+  //Run whenever something is changed that might affect the backlight state: initial (initOutputs), signal start/stop, switch signal on/off, setting change
   if(BACKLIGHT_PIN>=0) {
     switch(readEEPROM(26,false)){
       case 0: //always off
@@ -1827,10 +1867,10 @@ void updateBacklight(){
         backlightTarget = (signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)? 255: 0);
         //Serial.print(signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)?F("Backlight on"):F("Backlight off")); Serial.println(F(" per alarm/timer"));
         break;
-      case 4: //off, but on with switched relay
-        if(RELAY_PIN>=0 && RELAY_MODE==0) {
-          backlightTarget = (!digitalRead(RELAY_PIN)? 255: 0); //LOW = device on
-          //Serial.print(!digitalRead(RELAY_PIN)? F("Backlight on"): F("Backlight off")); Serial.println(F(" per switched relay"));
+      case 4: //off, but on with switch signal
+        if(SWITCH_PIN>=0) {
+          backlightTarget = (!digitalRead(SWITCH_PIN)? 255: 0); //LOW = device on
+          //Serial.print(!digitalRead(SWITCH_PIN)? F("Backlight on"): F("Backlight off")); Serial.println(F(" per switch signal"));
         }
         break;
       default: break;
