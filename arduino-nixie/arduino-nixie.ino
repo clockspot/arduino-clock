@@ -85,7 +85,6 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //Options menu numbers (displayed in UI and readme), locs, and default/min/max/current values.
 //Option numbers/order can be changed (though try to avoid for user convenience);
 //but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
-//The current values array is wasteful, since they have to all be ints here; but there should be room. We will initialize them at startup.
 //                       General                    Alarm              Timer     Strike       Night and away shutoff           Geo
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13,14,15, 21,22,23, 30,31,32,33, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52};
 const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,47,24,50, 43,40,48, 21,44,41,49, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14};
@@ -158,6 +157,8 @@ void updateDisplay(); //used by network
 void goToFn(byte thefn); //used by network
 int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp); //used by network
 void findFnAndPageNumbers(); //used by network
+word getHz(byte note); //used by network (play beeper pitch sample)
+void signalStart(byte sigFn, byte sigDur); //used by network (play beeper pattern sample)
 
 #define SHOW_IRRELEVANT_OPTIONS 0 //TODO change options to settings everywhere //for debug
 

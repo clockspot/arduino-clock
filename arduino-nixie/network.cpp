@@ -13,7 +13,6 @@
 String wssid = "Riley";
 String wpass = "5802301644"; //wpa pass or wep key
 byte wki = 0; //wep key index - 0 if using wpa
-//TODO how to persistent store this - one byte at a time up to the max
 
 unsigned int localPort = 2390; // local port to listen for UDP packets
 #define NTP_PACKET_SIZE 48 // NTP time stamp is in the first 48 bytes of the message
@@ -26,9 +25,6 @@ WiFiServer server(80);
 #define NTP_TIMEOUT 1000 //how long to wait for a request to finish - the longer it takes, the less reliable the result is
 #define NTP_MINFREQ 5000 //how long to enforce a wait between request starts (NIST requires at least 4sec between requests or will ban the client)
 #define NTPOK_THRESHOLD 3600000 //if no sync within 60 minutes, the time is considered stale
-
-//TODO hide second 58 when no wifi; 59 when NTP is bad (old or 0), and retry every minute 0-5
-//TODO notice when a leap second is coming and handle it
 
 //Declare a few functions so I can put them out of order
 //Placed here so I can avoid making header files for the moment
@@ -398,12 +394,12 @@ void checkClients(){
             if(ntpSyncDiff<60){ client.print(ntpSyncDiff,DEC); client.print(F(" second(s) ago")); }
             else if(ntpSyncDiff<3600){ client.print(ntpSyncDiff/60,DEC); client.print(F(" minute(s) ago")); }
             else if(ntpSyncDiff<86400){ client.print(ntpSyncDiff/3600,DEC); client.print(F(" hour(s) ago")); }
-            else { client.print(F(" over 24 hours ago")); } //TODO is there a display indication of this
+            else { client.print(F(" over 24 hours ago")); }
           } else {
             if(ntpStartLast) client.print(F("No sync since time was set manually"));
             else client.print(F("Never synced"));
           }
-          client.print(F("<br/></span><a id='syncnow' value='' href='#' onclick='document.getElementById(\"lastsync\").innerHTML=\"\"; save(this); return false;'>Sync&nbsp;now</a><br/></span><span class='explain'>Requires Wi-Fi. If using this, be sure to set your <a href='#utcoffset'>UTC offset</a> and <a href='#autodst'>auto DST</a> below.</span></li>")); //TODO sync now results in "OK!" even if it isn't necessarily ok. Get feedback to the client by making it synchronous in that case only? Also e.g. "Please wait" instead of "Saving"
+          client.print(F("<br/></span><a id='syncnow' value='' href='#' onclick='document.getElementById(\"lastsync\").innerHTML=\"\"; save(this); return false;'>Sync&nbsp;now</a><br/></span><span class='explain'>Requires Wi-Fi. If using this, be sure to set your <a href='#utcoffset'>UTC offset</a> and <a href='#autodst'>auto DST</a> below.</span></li>"));
           
         client.print(F("<li id='ntpserverli' style='display: ")); if(readEEPROM(9,false)==0) client.print(F("none")); else client.print(F("block")); client.print(F(";'><label>NTP server</label><input type='text' id='ntpip' onchange='promptsave(\"ntpip\")' onkeyup='promptsave(\"ntpip\")' onblur='unpromptsave(\"ntpip\"); save(this)' value='")); client.print(readEEPROM(51,false),DEC); client.print(F(".")); client.print(readEEPROM(52,false),DEC); client.print(F(".")); client.print(readEEPROM(53,false),DEC); client.print(F(".")); client.print(readEEPROM(54,false),DEC); client.print(F("' />")); client.print(F(" <a id='ntpipsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'><a href='https://en.wikipedia.org/wiki/IPv4#Addressing' target='_blank'>IPv4</a> address, e.g. one of <a href='https://tf.nist.gov/tf-cgi/servers.cgi' target='_blank'>NIST's time servers</a></span></li>"));
         
@@ -433,7 +429,7 @@ void checkClients(){
             // const unsigned int FN_SUN = 1<<2; //4
             // const unsigned int FN_WEATHER = 1<<3; //8
         //Function preset ???????
-        //TODO leap second support? Add NTP sync at top of hour also
+        //TODO leap second support?
         
         #if SHOW_IRRELEVANT_OPTIONS || ENABLE_DATE_COUNTER
         client.print(F("<li><label>Day counter</label><select id='b4' onchange='if(this.value==0) document.getElementById(\"daycounterdeets\").style.display=\"none\"; else document.getElementById(\"daycounterdeets\").style.display=\"inline\"; save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(4,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
@@ -443,7 +439,7 @@ void checkClients(){
           default: break; } client.print(F("</option>")); } client.print(F("</select>"));
           client.print(F("<br/><span id='daycounterdeets' style='display: ")); if(readEEPROM(4,false)==0) client.print(F("none")); else client.print(F("inline"));
           client.print(F(";'><span></span><label for='b5'>Month&nbsp;</label><input type='number' id='b5' onchange='promptsave(\"b5\")' onkeyup='promptsave(\"b5\")' onblur='unpromptsave(\"b5\"); save(this)' min='1' max='12' step='1' value='")); client.print(readEEPROM(5,false),DEC); client.print(F("' />")); client.print(F(" <a id='b5save' href='#' onclick='return false' style='display: none;'>save</a>")); //Extra span is there to prevent "first" styling on the month label
-          client.print(F("<br/><label for='b6'>Date&nbsp;</label><input type='number' id='b6' onchange='promptsave(\"b6\")' onkeyup='promptsave(\"b6\")' onblur='unpromptsave(\"b6\"); save(this)' min='1' max='31' step='1' value='")); client.print(readEEPROM(6,false),DEC); client.print(F("' />")); client.print(F(" <a id='b6save' href='#' onclick='return false' style='display: none;'>save</a><br/></span><span class='explain'>Appears after date. Repeats annually.</span></li>")); //TODO tip count day of year and program override to display 0 as 366 //TODO when month changes, set date max, or can you? what about 2/29? it should just do 3/1 in those cases
+          client.print(F("<br/><label for='b6'>Date&nbsp;</label><input type='number' id='b6' onchange='promptsave(\"b6\")' onkeyup='promptsave(\"b6\")' onblur='unpromptsave(\"b6\"); save(this)' min='1' max='31' step='1' value='")); client.print(readEEPROM(6,false),DEC); client.print(F("' />")); client.print(F(" <a id='b6save' href='#' onclick='return false' style='display: none;'>save</a><br/></span><span class='explain'>Appears after date. Repeats annually.</span></li>"));
         #endif
 
         client.print(F("<li><label>Display date during time?</label><select id='b18' onchange='save(this)'>")); for(char i=0; i<=3; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(18,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
@@ -852,19 +848,21 @@ void checkClients(){
               goToFn(fnIsDate); fnPg = 254; break;
             case 22: //auto dst
               isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),true); break;
-            case 39: //alarm pitch //TODO beep
+            case 39: case 47: //alarm pitch/pattern
               goToFn(fnIsAlarm); break;
-            case 40: //timer pitch //TODO beep
+            case 40: case 48: //timer pitch/pattern
               goToFn(fnIsTimer); break;
-            case 41: //strike pitch //TODO beep
-              goToFn(fnIsTime); break;
-            case 47: //alarm pattern //TODO beep
-              goToFn(fnIsAlarm); break;
-            case 48: //timer pattern //TODO beep
-              goToFn(fnIsTimer); break;
-            case 49: //strike pattern //TODO beep
+            case 41: case 49: //strike pitch/pattern
               goToFn(fnIsTime); break;
             default: break;
+          }
+          if(key==39 || key==40 || key==41){ //play beeper pitch sample - compare to updateDisplay()
+            if(PIEZO_PIN>=0) { noTone(PIEZO_PIN); tone(PIEZO_PIN, getHz(val), 100); }
+          }
+          if(key==47 || key==48 || key==49){ //play beeper pattern sample - compare to updateDisplay()
+            signalPattern = fnSetVal;
+            signalSource = (key==49?fnIsTime:(key==48?fnIsTimer:fnIsAlarm));
+            signalStart(-1,1); //Play a sample using the above source and pattern
           }
         }
         updateDisplay();
