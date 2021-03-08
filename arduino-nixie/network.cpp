@@ -413,7 +413,7 @@ void checkClients(){
         #if SHOW_IRRELEVANT_OPTIONS || ENABLE_DATE_FN
         client.print(F("<li><label>Current date</label><label for='curdatey'>Year&nbsp;</label><input type='number' id='curdatey' onchange='promptsave(\"curdatey\")' onkeyup='promptsave(\"curdatey\")' onblur='unpromptsave(\"curdatey\"); save(this)' min='2000' max='9999' step='1' value='")); client.print(rtcGetYear(),DEC); client.print(F("' />")); client.print(F(" <a id='curdateysave' href='#' onclick='return false' style='display: none;'>save</a>"));
         client.print(F("<br/><label for='curdatem'>Month&nbsp;</label><input type='number' id='curdatem' onchange='promptsave(\"curdatem\")' onkeyup='promptsave(\"curdatem\")' onblur='unpromptsave(\"curdatem\"); save(this)' min='1' max='12' step='1' value='")); client.print(rtcGetMonth(),DEC); client.print(F("' />")); client.print(F(" <a id='curdatemsave' href='#' onclick='return false' style='display: none;'>save</a>"));
-        client.print(F("<br/><label for='curdated'>Date&nbsp;</label><input type='number' id='curdated' onchange='promptsave(\"curdated\")' onkeyup='promptsave(\"curdated\")' onblur='unpromptsave(\"curdated\"); save(this)' min='1' max='31' step='1' value='")); client.print(rtcGetDate(),DEC); client.print(F("' />")); client.print(F(" <a id='curdatedsave' href='#' onclick='return false' style='display: none;'>save</a></li>")); //TODO tip count day of year and program override to display 0 as 366 //TODO when month changes, set date max, or can you? what about 2/29? it should just do 3/1 in those cases
+        client.print(F("<br/><label for='curdated'>Date&nbsp;</label><input type='number' id='curdated' onchange='promptsave(\"curdated\")' onkeyup='promptsave(\"curdated\")' onblur='unpromptsave(\"curdated\"); save(this)' min='1' max='31' step='1' value='")); client.print(rtcGetDate(),DEC); client.print(F("' />")); client.print(F(" <a id='curdatedsave' href='#' onclick='return false' style='display: none;'>save</a></li>"));
         
         client.print(F("<li><label>Date format</label><select id='b17' onchange='save(this)'>")); for(char i=1; i<=5; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(17,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 1: client.print(F("month/date/weekday")); break;
@@ -751,7 +751,7 @@ void checkClients(){
         //syncfreq=min
         if(currentLine.startsWith(F("wssid="))){ //wifi change
           //e.g. wssid=Network Name&wpass=qwertyuiop&wki=1
-          //TODO since the values are not html-entitied (due to the difficulty of de-entiting here), this will fail if the ssid contains "&wssid=" or pass contains "&wpass="
+          //TODO since the values are not html-entitied (due to the difficulty of de-entiting here), this will fail if the ssid contains "&wpass=" or pass contains "&wki="
           int startPos = 6;
           int endPos = currentLine.indexOf(F("&wpass="),startPos);
           wssid = currentLine.substring(startPos,endPos);
@@ -810,11 +810,10 @@ void checkClients(){
         } else if(currentLine.startsWith(F("almtod"))){
           writeEEPROM(0,currentLine.substring(7).toInt(),true);
           goToFn(fnIsAlarm);
-        } else if(currentLine.startsWith(F("alm"))){ //two settings (alarm on, alarm skip) with one control
+        } else if(currentLine.startsWith(F("alm"))){ //two settings (alarm on, alarm skip) with one control. Compare to switchAlarm()
           char alm = currentLine.substring(4).toInt();
-          if(alm<2){ writeEEPROM(2,alm,false); alarmSkip = false; }
-          else     { writeEEPROM(2,1,false);   alarmSkip = true; }
-          //TODO beeps and set fn
+          if(alm<2){ writeEEPROM(2,alm,false); alarmSkip = false; quickBeep(alm?76:64); }
+          else     { writeEEPROM(2,1,false);   alarmSkip = true;  quickBeep(71); }
           goToFn(fnIsAlarm);
         } else if(currentLine.startsWith(F("runout"))){
           char runout = currentLine.substring(7).toInt();

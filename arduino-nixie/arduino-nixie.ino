@@ -159,6 +159,7 @@ int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp); //used by n
 void findFnAndPageNumbers(); //used by network
 word getHz(byte note); //used by network (play beeper pitch sample)
 void signalStart(byte sigFn, byte sigDur); //used by network (play beeper pattern sample)
+void quickBeep(int pitch); //used by network (alarm switch change)
 
 #define SHOW_IRRELEVANT_OPTIONS 0 //TODO change options to settings everywhere //for debug
 
