@@ -20,11 +20,11 @@ const bool vDev = 1;
 
 /*Some variables are backed by persistent storage. These are referred to by their location in that storage. See storage.cpp. 
 
-Values for these are bytes (0 to 255) or signed 16-bit ints (-32768 to 32767) where high byte is loc and low byte is loc+1. In updateDisplay(), special setting formats are deduced from the option max value (max 1439 is a time of day, max 156 is a UTC offset, etc) and whether a value is an int or byte is deduced from whether the max value > 255.
+Values for these are bytes (0 to 255) or signed 16-bit ints (-32768 to 32767) where high byte is loc and low byte is loc+1. In updateDisplay(), special setting formats are deduced from the max value (max 1439 is a time of day, max 156 is a UTC offset, etc) and whether a value is an int or byte is deduced from whether the max value > 255.
 
 IMPORTANT! If adding more variables, be sure to increase STORAGE_SPACE in storage.cpp (and use the ones marked [free] below first).
 
-These ones are set outside the options menu (defaults defined in initEEPROM() where applicable):
+These ones are set outside the settings menu (defaults defined in initEEPROM() where applicable):
   0-1 Alarm time, mins
   2 Alarm on
   3 [free]
@@ -44,7 +44,7 @@ These ones are set outside the options menu (defaults defined in initEEPROM() wh
   87-150 Wi-Fi WPA passphrase/key or WEP key (64 bytes)
   151 Wi-Fi WEP key index
 
-These ones are set inside the options menu (defaults defined in arrays below).
+These ones are set inside the settings menu (defaults defined in arrays below).
 Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
   10-11 Latitude
   12-13 Longitude
@@ -82,9 +82,9 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   50 Alarm Fibonacci mode
 */
 
-//Options menu numbers (displayed in UI and readme), locs, and default/min/max/current values.
-//Option numbers/order can be changed (though try to avoid for user convenience);
-//but option locs should be maintained so EEPROM doesn't have to be reset after an upgrade.
+//Settings menu numbers (displayed in UI and readme), locs, and default/min/max/current values.
+//Setting numbers/order can be changed (though try to avoid for user convenience);
+//but locs should be maintained so AVR EEPROM doesn't need reset after an upgrade (SAMD does it anyway).
 //                       General                    Alarm              Timer     Strike       Night and away shutoff           Geo
 const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13,14,15, 21,22,23, 30,31,32,33, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52};
 const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,47,24,50, 43,40,48, 21,44,41,49, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14};
@@ -102,10 +102,10 @@ const byte fnIsAlarm = 2; //alarm time
 const byte fnIsTimer = 3; //countdown timer and chronograph
 const byte fnIsTemp = 4; //temperature per rtc – will likely read high
 const byte fnIsTest = 5; //simply cycles all tubes
-const byte fnOpts = 201; //fn values from here to 255 correspond to options in the options menu
+const byte fnOpts = 201; //fn values from here to 255 correspond to settings in the settings menu
 byte fn = 0; //currently displayed fn per above
 byte fnPg = 0; //allows a function to have multiple pages
-byte fnSetPg = 0; //whether this function is currently being set, and which option/page it's on
+byte fnSetPg = 0; //whether this function is currently being set, and which page it's on
  int fnSetVal; //the value currently being set, if any
  int fnSetValMin; //min possible
  int fnSetValMax; //max possible
@@ -161,7 +161,7 @@ word getHz(byte note); //used by network (play beeper pitch sample)
 void signalStart(byte sigFn, byte sigDur); //used by network (play beeper pattern sample)
 void quickBeep(int pitch); //used by network (alarm switch change)
 
-#define SHOW_IRRELEVANT_OPTIONS 0 //TODO change options to settings everywhere //for debug
+#define SHOW_IRRELEVANT_OPTIONS 0 //whether to show everything in settings menu and page (network)
 
 ////////// Includes //////////
 
@@ -200,8 +200,8 @@ void setup(){
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
   initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
   initEEPROM(checkForHeldButtonAtStartup()); //Do a hard init of EEPROM if button is held; else do a soft init to make sure vals in range
-  //Some options need to be set to a fixed value per the configuration.
-  //These options will also be skipped in fnOptScroll so the user can't change them.
+  //Some settings need to be set to a fixed value per the configuration.
+  //These settings will also be skipped in fnOptScroll so the user can't change them.
   
   //Signals: if the current eeprom selection is not available,
   //try to use the default specified in the config, failing to pulse and then switch (alarm/timer only)
@@ -331,11 +331,11 @@ void ctrlEvt(byte ctrl, byte evt){
     return;
   }
   
-  if(fn < fnOpts) { //normal fn running/setting (not in options menu)
+  if(fn < fnOpts) { //normal fn running/setting (not in settings menu)
 
     //TODO support evt==4 and evt==5 by removing inputStop() from eg evt==3 without clashing
 
-    if(evt==3 && ctrl==CTRL_SEL) { //CTRL_SEL long hold: enter options menu
+    if(evt==3 && ctrl==CTRL_SEL) { //CTRL_SEL long hold: enter settings menu
       inputStop();
       fn = fnOpts;
       clearSet(); //don't need updateDisplay() here because this calls updateRTC with force=true
@@ -461,10 +461,10 @@ void ctrlEvt(byte ctrl, byte evt){
     else { //fn setting
       if(evt==1) { //press
         //TODO could we do release/shorthold on CTRL_SEL so we can exit without making changes?
-        //currently no, because we don't inputStop() when short hold goes into fn setting, in case long hold may go to options menu
+        //currently no, because we don't inputStop() when short hold goes into fn setting, in case long hold may go to settings menu
         //so we can't handle a release because it would immediately save if releasing from the short hold.
         //Consider recording the input start time when going into fn setting so we can distinguish its release from a future one
-        if(ctrl==CTRL_SEL) { //CTRL_SEL push: go to next option or save and exit setting mode
+        if(ctrl==CTRL_SEL) { //CTRL_SEL push: go to next setting or save and exit setting mode
           inputStop(); //not waiting for CTRL_SELHold, so can stop listening here
           //We will set rtc time parts directly
           //con: potential for very rare clock rollover while setting; pro: can set date separate from time
@@ -541,7 +541,7 @@ void ctrlEvt(byte ctrl, byte evt){
                   if(timerTime!=0){
                     bitWrite(timerState,1,0); //set timer direction (bit 1) to down (0)
                     //timerStart(); //we won't automatically start, we'll let the user do that
-                    //TODO: in timer radio mode, skip setting setting the seconds (display placeholder) and start when done. May even want to skip runout options even if the beeper is there. Or could make it an option in the settings file.
+                    //TODO: in timer radio mode, skip setting the seconds (display placeholder) and start when done. May even want to skip runout options even if the beeper is there. Or could make it an option in the config file.
                   }
                   clearSet(); break;
                 default: break;
@@ -560,11 +560,11 @@ void ctrlEvt(byte ctrl, byte evt){
     
   } //end normal fn running/setting
   
-  else { //options menu setting - to/from EEPROM
+  else { //settings menu setting - to/from EEPROM
     
-    byte opt = fn-fnOpts; //current option index
+    byte opt = fn-fnOpts; //current setting index
     
-    if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL short hold: exit options menu
+    if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL short hold: exit settings menu
       inputStop();
       //if we were setting a value, writes setting val to EEPROM if needed
       if(fnSetPg) writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
@@ -576,18 +576,17 @@ void ctrlEvt(byte ctrl, byte evt){
       return;
     }
     
-    if(!fnSetPg){ //viewing option number
-      if(ctrl==CTRL_SEL && evt==0) { //CTRL_SEL release: enter option value setting
+    if(!fnSetPg){ //setting number
+      if(ctrl==CTRL_SEL && evt==0) { //CTRL_SEL release: enter setting value
         startSet(readEEPROM(optsLoc[opt],optsMax[opt]>255?true:false),optsMin[opt],optsMax[opt],1);
       }
       if(ctrl==CTRL_UP && evt==1) fnOptScroll(1); //next one up or cycle to beginning
       if(ctrl==CTRL_DN && evt==1) fnOptScroll(0); //next one down or cycle to end?
       updateDisplay();
-    } //end viewing option number
+    } //end setting number
 
-    else { //setting option value
-      if(ctrl==CTRL_SEL && evt==0) { //CTRL_SEL release: save and exit option value setting
-        //Writes setting val to EEPROM if needed
+    else { //setting value
+      if(ctrl==CTRL_SEL && evt==0) { //CTRL_SEL release: save value and exit
         writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
         clearSet();
       }
@@ -596,8 +595,8 @@ void ctrlEvt(byte ctrl, byte evt){
         if(ctrl==CTRL_DN) doSet(rotVel ? -10 : -1);
         updateDisplay(); //may also make sounds for sampling
       }
-    }  //end setting option value
-  } //end options menu setting
+    }  //end setting value
+  } //end settings menu setting
   
 } //end ctrlEvt
 
@@ -628,11 +627,11 @@ void fnScroll(byte dir){
 }
 void fnOptScroll(byte dir){
   //0=down, 1=up
-  //Switch to the next options fn between min and max (inclusive), looping around at range ends
+  //Switch to the next setting, looping around at range ends
   byte posLast = fnOpts+sizeof(optsLoc)-1;
   if(dir==1) fn = (fn==posLast? fnOpts: fn+1);
   if(dir==0) fn = (fn==fnOpts? posLast: fn-1);
-  //Certain options don't apply to some configurations; skip those.
+  //Certain settings don't apply to some configurations; skip those.
   byte optLoc = optsLoc[fn-fnOpts];
   if(!SHOW_IRRELEVANT_OPTIONS && ( //see also: network requestType=1
       //Signals disabled
@@ -643,9 +642,9 @@ void fnOptScroll(byte dir){
       || (((PIEZO_PIN>=0)+(SWITCH_PIN>=0)+(PULSE_PIN>=0)<1) && (optLoc==23||optLoc==24)) //no signal types: skip the rest of alarm (autoskip and snooze)
       || ((BACKLIGHT_PIN<0) && (optLoc==26)) //no backlight pin: no backlight control
       //Functions disabled
-      || (!ENABLE_DATE_FN && (optLoc==17||optLoc==18||optLoc==10||optLoc==12)) //date fn disabled in config: skip date and geography options - don't skip utc offset as that's now used when setting clock from network ||optLoc==14
-      || (!ENABLE_ALARM_FN && (optLoc==23||optLoc==42||optLoc==39||optLoc==47||optLoc==24||optLoc==50)) //alarm fn disabled in config: skip alarm options
-      || (!ENABLE_TIMER_FN && (optLoc==43||optLoc==40||optLoc==48)) //timer fn disabled in config: skip timer options
+      || (!ENABLE_DATE_FN && (optLoc==17||optLoc==18||optLoc==10||optLoc==12)) //date fn disabled in config: skip date and geography settings - don't skip utc offset as that's now used when setting clock from network ||optLoc==14
+      || (!ENABLE_ALARM_FN && (optLoc==23||optLoc==42||optLoc==39||optLoc==47||optLoc==24||optLoc==50)) //alarm fn disabled in config: skip alarm settings
+      || (!ENABLE_TIMER_FN && (optLoc==43||optLoc==40||optLoc==48)) //timer fn disabled in config: skip timer settings
       || (!ENABLE_TEMP_FN && (optLoc==45)) //temp fn disabled in config: skip temp format TODO good for weather also
       //Other functionality disabled
       || (!ENABLE_DATE_RISESET && (optLoc==10||optLoc==12)) //date rise/set disabled in config: skip geography - don't skip utc offset as that's now used when setting clock from network ||optLoc==14
@@ -768,7 +767,7 @@ void initEEPROM(bool hard){
     ntpSyncLast = 0;
     #endif
   }
-  //The vars outside the options menu
+  //The vars outside the settings menu
   if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //0-1: alarm at 7am
   //2: alarm on, handled by init
   //3: free
@@ -797,7 +796,7 @@ void initEEPROM(bool hard){
   //151 Wi-Fi WEP key index
   if(hard || readEEPROM(151,false)>3) writeEEPROM(151,0,false);
   #endif
-  //The vars inside the options menu
+  //The vars inside the settings menu
   bool isInt = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
     isInt = (optsMax[opt]>255?true:false);
@@ -828,7 +827,7 @@ void checkRTC(bool force){
   unsigned long now = millis();
   
   //Things to do every time this is called: timeouts to reset display. These may force a tick.
-  //Option/setting timeout: if we're in the options menu, or we're setting a value
+  //Setting timeout: if we're in the settings menu, or we're setting a value
   if(fnSetPg || fn>=fnOpts){
     if((unsigned long)(now-inputLast)>=SETTING_TIMEOUT*1000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
   }
@@ -1361,15 +1360,15 @@ void updateDisplay(){
     editDisplay(tempValDispQueue[0], 0, 3, false, true);
     blankDisplay(4, 5, true);
   }
-  else if(fnSetPg) { //setting value, for either fn or option
+  else if(fnSetPg) { //setting value, for either fn or settings menu
     displayDim = 2;
     // blankDisplay(4, 5, false); //taken over by startSet
-    byte fnOptCurLoc = (fn>=fnOpts? optsLoc[fn-fnOpts]: 0); //current option index loc, to tell what's being set
+    byte fnOptCurLoc = (fn>=fnOpts? optsLoc[fn-fnOpts]: 0); //current setting index loc, to tell what's being set
     if(fnSetValMax==1439) { //Time of day (0-1439 mins, 0:00–23:59): show hrs/mins
-      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero per options
+      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero per settings
       editDisplay(fnSetVal%60, 2, 3, true, false);
     } else if(fnSetValMax==5999) { //Timer duration mins (0-5999 mins, up to 99:59): show hrs/mins w/regular leading
-      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero per options
+      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero per settings
       editDisplay(fnSetVal%60, 2, 3, true, false); //minutes with leading zero always
     } else if(fnSetValMax==59) { //Timer duration secs: show with leading
       //If 6 tubes (0-5), display on 4-5
@@ -1393,9 +1392,9 @@ void updateDisplay(){
       editDisplay(abs(fnSetVal), 0, (DISPLAY_SIZE>4? 4: 3), fnSetVal<0, false);
     } else editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0, false); //some other type of value - leading zeros for negatives
   }
-  else if(fn >= fnOpts){ //options menu, but not setting a value
+  else if(fn >= fnOpts){ //settings menu, but not setting a value
     displayDim = 2;
-    editDisplay(optsNum[fn-fnOpts],0,1,false,false); //display option number on hour tubes
+    editDisplay(optsNum[fn-fnOpts],0,1,false,false); //display setting number on hour tubes
     blankDisplay(2,5,false);
   }
   else { //fn running
@@ -1506,7 +1505,7 @@ void updateDisplay(){
       case fnIsTemp: //thermometer TODO disable if rtc doesn't support it
         int temp; temp = rtcGetTemp();
         if(readEEPROM(45,false)==1) temp = temp*1.8 + 3200;
-        //TODO another option to apply offset
+        //TODO another setting to apply offset?
         editDisplay(abs(temp)/100,1,3,(temp<0?true:false),true); //leading zeros if negative
         editDisplay(abs(temp)%100,4,5,true,true);
         break;

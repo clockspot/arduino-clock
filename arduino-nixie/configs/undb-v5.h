@@ -7,7 +7,7 @@
 ///// Functionality /////
 
 // Which functionality is enabled in this clock?
-// Related options will also be enabled in the options menu.
+// Related settings will also be enabled in the settings menu.
 // The operating instructions assume all of these are enabled except temp and tubetest.
 #define ENABLE_DATE_FN true // Date function, optionally including pages below
 #define ENABLE_DATE_COUNTER true // Adds date page with an anniversary counter
@@ -45,7 +45,7 @@
 //For all input types:
 //How long (in ms) are the hold durations?
 #define CTRL_HOLD_SHORT_DUR 1000 //for entering setting mode, or hold-setting at low velocity (x1)
-#define CTRL_HOLD_LONG_DUR 3000 //for entering options menu, or hold-setting at high velocity (x10)
+#define CTRL_HOLD_LONG_DUR 3000 //for entering settings menu, or hold-setting at high velocity (x10)
 #define CTRL_HOLD_VERYLONG_DUR 5000 //for wifi IP info / admin start (Nano IoT only)
 #define CTRL_HOLD_SUPERLONG_DUR 15000 //for wifi forget (Nano IoT only)
 //What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
@@ -104,7 +104,7 @@
 // 1 = yes. Alarm can be switched on and off when clock is displaying the alarm time (fnIsAlarm).
 // 0 = no. Alarm will be permanently on. Use with switch signal if the appliance has its own switch on this circuit (and note that, if another signal type(s) is available and selected for the alarm, the user won't be able to switch it off). Also disables skip feature. Note that the instructions do not reflect this option.
 #define ENABLE_SOFT_POWER_SWITCH 1 //switch signal only
-// 1 = yes. Switch signal can be toggled on and off directly with Alt button at any time (except in options menu). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
+// 1 = yes. Switch signal can be toggled on and off directly with Alt button at any time (except in settings menu). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
 // 0 = no. Use if the connected appliance has its own power switch (independent of this circuit, e.g. some Sony Digimatic clock radios) or does not need to be manually switched. In this case (and/or if there is no switch signal option, and if no Wi-Fi support) Alt will act as a function preset. Note that the instructions do not reflect this option.
 
 //Backlighting control

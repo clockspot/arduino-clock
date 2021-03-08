@@ -14,10 +14,10 @@ The time of day can be set to display in 12h or 24h format. When setting, it is 
 
 The calendar cycles through several displays, before returning to the time of day:
 
-* **The date.** Several formats are available in settings. When setting, it will ask for the year, then the month, then the date.
+* **The date.** Several formats are available in the [settings menu](#settings-menu). When setting, it will ask for the year, then the month, then the date.
 * **Day counter.** This will count down to, or up from, a date of your choice, repeating every year. When setting, it will ask for the month, then the date, then the direction (0 = count down, 1 = count up).
   * TIP: To display the day of the year, set it to count up from December 31.
-	* To disable the day counter (Wi-Fi clocks only), use the 
+	* To disable the day counter (Wi-Fi clocks only), use the [settings page](#wi-fi-support).
 * **Sunrise/sunset.** These two displays show the previous and next apparent sunrise/sunset times (indicated by `1` or `0` on the seconds tubes – during the day, it shows sunrise then sunset; at night, sunset then sunrise), in the same 12h/24h format as the time of day.
   * Specify your latitude, longitude, and UTC offset in settings.
 	* To disable sunrise/sunset, set latitude/longitude to 0.
@@ -28,9 +28,9 @@ The calendar cycles through several displays, before returning to the time of da
 The alarm is always shown in 24h format so you can tell AM from PM.
 
 * Use **Up/Down** to switch the alarm between **on, skip, and off** (indicated by `1`/`01`/`0` on the seconds tubes, and/or high/medium/low beeps).
-	* **Skip** silences the next alarm in advance – useful if you’re taking a day off, or you wake up before your alarm. In settings, you can set the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back to **on.**
+	* **Skip** silences the next alarm in advance – useful if you’re taking a day off, or you wake up before your alarm. In the [settings menu](#settings-menu), you can set the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back to **on.**
 * When the alarm [signals](#signals), press any button – once to snooze, and again to cancel the snooze / silence the alarm for the day (it will give a short low beep, and the display will blink once).
-* **Fibonacci mode** wakes you gradually by starting the alarm about 27 minutes early, by beeping at increasingly shorter intervals per the [Fibonacci sequence](https://en.wikipedia.org/wiki/Fibonacci_number) (610 seconds, then 337, then 233...). In this mode, snooze does not take effect; any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet. This mode is enabled in settings, and applies only to [beeper and pulse signals](#signals).
+* **Fibonacci mode** wakes you gradually by starting the alarm about 27 minutes early, by beeping at increasingly shorter intervals per the [Fibonacci sequence](https://en.wikipedia.org/wiki/Fibonacci_number) (610 seconds, then 337, then 233...). In this mode, snooze does not take effect; any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet. This mode is enabled in the [settings menu](#settings-menu), and applies only to [beeper and pulse signals](#signals).
 
 ## Chrono/Timer
 
@@ -53,13 +53,13 @@ If your clock uses a rotary encoder for **Up/Down** rather than buttons, while r
 
 ## Signals
 
-Your clock can trigger signals for the time of day (chime), alarm, and timer. Depending on how your clock is equipped, you may have multiple signal types available, and in settings, you can choose which functions trigger which type.
+Your clock can trigger signals for the time of day (chime), alarm, and timer. If your clock supports multiple signal types, you can choose which type is triggered by each function in the [settings menu](#settings-menu).
 
-* **Beeper** signals are played on a piezo beeper, using various patterns and pitches (per settings).
+* **Beeper** signals are played on a piezo beeper, using various patterns and pitches.
 * **Switch** signals switch on and off to control an appliance circuit (such as for a radio).
 	* If the alarm is set to use this, it will switch on for up to two hours. **Alt** will silence the alarm for the day (unlike the other buttons, which will trigger snooze if enabled, as usual).
 	* If the timer is set to use this, it will switch on while the timer is running, like a “sleep” function.
-	* If your clock has a switch signal, **Alt** acts as a power button to switch it on and off at will.
+	* If your clock supports switch signals, **Alt** acts as a power button to switch it on and off at will.
 * **Pulse** signals simply send short pulses (such as to ring a bell).
 
 ## Function preset
@@ -71,12 +71,12 @@ If your clock has _neither_ a switch signal nor [Wi-Fi support](#wi-fi-support),
 
 ## Settings menu
 
-* To enter the settings menu, hold **Select** for 3 seconds until the hour displays `1`. This indicates option number 1.
-* Use **Up/Down** to go to the option number you want to set (see table below); press **Select** to open it for setting (display will blink); use **Up/Down** to set; and **Select** to save.
+* To enter the settings menu, hold **Select** for 3 seconds until the hour displays `1`. This indicates setting number 1.
+* Use **Up/Down** to go to the setting number you want to set (see table below); press **Select** to open it for setting (display will blink); use **Up/Down** to set; and **Select** to save.
 * When all done, hold **Select** to exit the menu.
 * If you have a Wi-Fi-enabled clock, you can configure these settings (and more) on the [settings page](#wi-fi-support).
 
-|  | Option | Settings |
+|  | Setting | Options |
 | --- | --- | --- |
 |  | <a name="settingsgeneral"></a>**General** |  |
 | 1 | Time format | 1 = 12-hour<br/>2 = 24-hour<br/>(time-of-day display only; setting times is always done in 24h) |

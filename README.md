@@ -37,7 +37,7 @@ Written to support [RLB Designs’](http://rlb-designs.com/) Universal Nixie Dri
 
 # Configuration, compilation, and upload
 
-Various options, such as enabled functionality, RTC, display, I/O pins, timeouts, and control behaviors, are specified in a config file. This allows you to maintain multiple configs for various clock hardware profiles, and simply include the relevant config at the top of the `.ino` before compiling. Several [example configs](https://github.com/clockspot/arduino-clock/tree/master/arduino-clock/configs) are provided, and [`~sample.h`](https://github.com/clockspot/arduino-clock/blob/master/arduino-clock/configs/%7Esample.h) includes all possible options with detailed comments.
+Various options, such as enabled functionality, RTC, display, I/O pins, timeouts, and control behaviors, are specified in a config file. This allows you to maintain configs for multiple clock hardware profiles, and simply include the relevant config at the top of the `.ino` before compiling. Several [example configs](https://github.com/clockspot/arduino-clock/tree/master/arduino-clock/configs) are provided, and [`~sample.h`](https://github.com/clockspot/arduino-clock/blob/master/arduino-clock/configs/%7Esample.h) includes all possible options with detailed comments.
 
 You may also wish to adjust the defaults for the clock’s user-configurable values, to best suit its intended use; these defaults are currently specified in the main code (`optsDef[]` for [settings](https://github.com/clockspot/arduino-clock/blob/master/INSTRUCTIONS.md#settings-menu) and `initEEPROM()` for other values).
 
