@@ -274,8 +274,8 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
   //We only handle press evts for up/down ctrls, as that's the only evt encoders generate,
   //and input.cpp sends repeated presses if up/down buttons are held.
   //But for sel/alt (always buttons), we can handle different hold states here.
-  if(evt==1 && ctrl==CTRL_ALT){
-    Serial.println(F("alt press"));
+  if(ctrl==CTRL_ALT){
+    Serial.print(F("alt ")); Serial.println(evt,DEC);
   }
 
   //If the version display is showing, ignore all else until Sel is released (cancel) or long-held (cancel and eeprom reset)
@@ -363,6 +363,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
 
     if(evt==3 && ctrl==CTRL_SEL) { //CTRL_SEL long hold: enter settings menu
       //inputStop(); to enable evt==4 and evt==5 per above
+      Serial.println(F("we used to inputstop here"));
       fn = fnOpts;
       clearSet(); //don't need updateDisplay() here because this calls updateRTC with force=true
       return;
@@ -398,6 +399,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
       else if((ctrl==CTRL_SEL && evt==0) || ((ctrl==CTRL_UP || ctrl==CTRL_DN) && evt==1)) { //sel release or adj press
         //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
         if(ctrl==CTRL_SEL){ //sel release
+          Serial.println(F("sel release"));
           if(fn==fnIsTimer && !(timerState&1)) timerClear(); //if timer is stopped, clear it
           fnScroll(1); //Go to next fn in the cycle
           fnPg = 0; //reset page counter in case we were in a paged display

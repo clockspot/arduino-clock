@@ -10,39 +10,46 @@ Additional settings are available in the [settings menu](#settings-menu). If you
 
 ## Time of day
 
-The time of day can be set to display in 12h or 24h format. When setting, it is shown in 24h so you can tell AM from PM; and when the time is changed, the seconds will reset to zero.
+The time of day can be [set](#settings-menu) to display in 12h or 24h format.
+
+* When setting, it is shown in 24h so you can tell AM from PM; and when the time is changed, the seconds will reset to zero.
 
 ## Calendar
 
 The calendar cycles through several displays, before returning to the time of day:
 
-* **The date.** Several formats are available in the [settings menu](#settings-menu). When setting, it will ask for the year, then the month, then the date.
-* **Day counter.** This will count down to, or up from, a date of your choice, repeating every year. When setting, it will ask for the month, then the date, then the direction (0 = count down, 1 = count up).
+* **The date.** Several formats are available in the [settings menu](#settings-menu).
+  * When setting, it will ask for the year, then the month, then the date.
+* **Day counter.** This will count down to, or up from, a date of your choice, repeating every year.
+  * When setting, it will ask for the month, then the date, then the direction (0 = count down, 1 = count up).
   * TIP: To display the day of the year, set it to count up from December 31.
-	* To disable the day counter (Wi-Fi clocks only), use the [settings page](#wi-fi-support).
+  * To disable the day counter (Wi-Fi clocks only), use the [settings page](#wi-fi-support).
 * **Sunrise/sunset.** These two displays show the previous and next apparent sunrise/sunset times (indicated by `1` or `0` on the seconds tubes – during the day, it shows sunrise then sunset; at night, sunset then sunrise), in the same 12h/24h format as the time of day.
   * Specify your latitude, longitude, and UTC offset in settings.
-	* To disable sunrise/sunset, set latitude/longitude to 0.
+  * To disable sunrise/sunset, set latitude/longitude to 0.
 * _Future software versions will add support for weather forecasts for Wi-Fi-enabled clocks._
 
 ## Alarm
 
-The alarm is always shown in 24h format so you can tell AM from PM.
+The alarm is always shown in 24h format so you can tell AM from PM. In place of seconds, it displays `1`/`01`/`0` to indicate **on, skip, and off,** and the display dims when the alarm is off.
 
-* Use **Up/Down** to switch the alarm between **on, skip, and off** (indicated by `1`/`01`/`0` on the seconds tubes, and/or high/medium/low beeps).
-	* **Skip** silences the next alarm in advance – useful if you’re taking a day off, or you wake up before your alarm. In the [settings menu](#settings-menu), you can set the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back to **on.**
-* When the alarm [signals](#signals), press any button – once to snooze, and again to cancel the snooze / silence the alarm for the day (it will give a short low beep, and the display will blink once).
-* **Fibonacci mode** wakes you gradually by starting the alarm about 27 minutes early, by beeping at increasingly shorter intervals per the [Fibonacci sequence](https://en.wikipedia.org/wiki/Fibonacci_number) (610 seconds, then 337, then 233...). In this mode, snooze does not take effect; any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet. This mode is enabled in the [settings menu](#settings-menu), and applies only to [beeper and pulse signals](#signals).
+* Use **Up/Down** to switch the alarm between **on, skip, and off,** indicated by high/medium/low beeps.
+	* **Skip** silences the next alarm in advance (hence the `01` meaning “off then on”) – useful if you’re taking a day off, or you wake up before your alarm. In the [settings menu](#settings-menu), you can set the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back to **on.**
+* When the alarm [signals](#signals), press any button – once to snooze, and again to cancel the snooze / silence the alarm for the day (it will give a short low beep, and/or the display will blink once).
+  * If the alarm is set to use a [switch signal](#signal), **Alt** will silence the alarm immediately without snoozing.
+* **Fibonacci mode** wakes you gradually by starting the alarm about 27 minutes early, by beeping at increasingly shorter intervals per the [Fibonacci sequence](https://en.wikipedia.org/wiki/Fibonacci_number) (610 seconds, then 337, then 233...). This mode is enabled in the [settings menu](#settings-menu), and applies only to [beeper and pulse signals](#signals).
+  * Snooze does not take effect in this mode. Any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet.
 
 ## Chrono/Timer
 
 This feature can count up (chrono) or down (timer), up to 100 hours each way. When idle, it displays `0` (or if you have leading zeros enabled, `000000`).
 
 * To start and stop, press **Up**.
-  * When at `0`, this will start the chrono.
-  * While the chrono is running, **Down** will briefly display a lap time.
-* To reset to `0`, press **Down** when stopped.
-* To set the timer, hold **Select**. It will prompt for hours/minutes first, then seconds. For convenience, it will recall the last-used time – to reuse this time, simply press **Select** twice. Once the timer is set, press **Up** to start it.
+  * While stopped, **Down** will reset to `0`.
+* To use the chrono, start from `0`.
+  * While the chrono is running, **Down** will display a lap time.
+* To use the timer, hold **Select** to set it.
+  * When setting, it will prompt for hours/minutes first, then seconds. For convenience, it will recall the last-used time – to reuse this time, simply press **Select** twice. Once the timer is set, press **Up** to start it.
   * While the timer is running, **Down** will cycle through the runout options (what the timer will do when it runs out – clocks with [beeper signal](#signals) only):
     * 1 beep: simply stop, with a long signal (default)
     * 2 beeps: restart, with a short signal (makes a great interval timer!)
@@ -51,22 +58,26 @@ This feature can count up (chrono) or down (timer), up to 100 hours each way. Wh
 * When the timer [signals](#signals), press any button to silence it.
 * You can switch displays while the chrono/timer is running, and it will continue to run in the background. It will reset to `0` if you switch displays while it’s stopped, if it’s stopped for an hour, if the chrono reaches 100 hours, or if power is lost.
 
-If your clock uses a rotary encoder for **Up/Down** rather than buttons, while running, **Up** will display lap times (chrono) and cycle through runout options (timer), and **Down** will stop; and to prevent accidental resets, **Down** does nothing while stopped; to reset to `0`, simply switch to another display while stopped.
+If your clock uses a knob (rotary encoder) for **Up/Down** rather than buttons, the controls differ slightly:
+
+* **Up** will start; **Down** will stop.
+* While the chrono is running, **Up** will display a lap time.
+* While the timer is running, **Up** will cycle through the runout options.
+* To reset to `0`, switch to another display while stopped. (**Down** does nothing while stopped, to prevent accidental resets.)
 
 ## Signals
 
 Your clock can trigger signals for the time of day (chime), alarm, and timer. If your clock supports multiple signal types, you can choose which type is triggered by each function in the [settings menu](#settings-menu).
 
-* **Beeper** signals are played on a piezo beeper, using various patterns and pitches.
-* **Switch** signals switch on and off to control an appliance circuit (such as for a radio).
+* **Beeper** signal is played on a piezo beeper, using various patterns and pitches.
+* **Switch** signal switches on and off to control an appliance circuit (such as for a radio). **Alt** will switch it on and off manually.
 	* If the alarm is set to use this, it will switch on for up to two hours. **Alt** will silence the alarm for the day (unlike the other buttons, which will trigger snooze if enabled, as usual).
 	* If the timer is set to use this, it will switch on while the timer is running, like a “sleep” function.
-	* If your clock supports switch signals, **Alt** acts as a power button to switch it on and off at will.
-* **Pulse** signals simply send short pulses (such as to ring a bell).
+* **Pulse** signal simply sends short pulses (such as to ring a bell).
 
 ## Function preset
 
-If your clock has _neither_ a switch signal nor [Wi-Fi support](#wi-fi-support), **Alt** acts as a function preset button.
+If your clock supports _neither_ [switch signal](#signals) nor [Wi-Fi](#wi-fi-support), **Alt** acts as a function preset button.
 
 * While viewing the display you want quick access to (such as the alarm or chrono/timer), hold **Alt** until it beeps and the display blinks once; then you can use **Alt** to jump straight there.
   * TIP: If **Alt** is set as the alarm preset, it will switch the alarm as well – so you can check and switch it with a few presses of a single button.
