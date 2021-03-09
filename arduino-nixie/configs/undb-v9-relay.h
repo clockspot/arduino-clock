@@ -51,8 +51,8 @@
 //How long (in ms) are the hold durations?
 #define CTRL_HOLD_SHORT_DUR 1000 //for entering setting mode, or hold-setting at low velocity (x1)
 #define CTRL_HOLD_LONG_DUR 3000 //for entering settings menu, or hold-setting at high velocity (x10)
-#define CTRL_HOLD_VERYLONG_DUR 5000 //for wifi IP info / admin start (Nano IoT only)
-#define CTRL_HOLD_SUPERLONG_DUR 15000 //for wifi forget (Nano IoT only)
+#define CTRL_HOLD_VERYLONG_DUR 5000 //for wifi info / admin start (Nano IoT without Alt only)
+#define CTRL_HOLD_SUPERLONG_DUR 10000 //for wifi disconnect (Nano IoT) or EEPROM reset on startup
 //What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
 #define SETTING_TIMEOUT 300 //sec
 #define FN_TEMP_TIMEOUT 5 //sec

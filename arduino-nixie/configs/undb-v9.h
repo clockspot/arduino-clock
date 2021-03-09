@@ -51,8 +51,8 @@
 //How long (in ms) are the hold durations?
 #define CTRL_HOLD_SHORT_DUR 1000 //for entering setting mode, or hold-setting at low velocity (x1)
 #define CTRL_HOLD_LONG_DUR 3000 //for entering settings menu, or hold-setting at high velocity (x10)
-#define CTRL_HOLD_VERYLONG_DUR 5000 //for wifi IP info / admin start (Nano IoT only)
-#define CTRL_HOLD_SUPERLONG_DUR 15000 //for wifi forget (Nano IoT only)
+#define CTRL_HOLD_VERYLONG_DUR 5000 //for wifi info / admin start (Nano IoT without Alt only)
+#define CTRL_HOLD_SUPERLONG_DUR 10000 //for wifi disconnect (Nano IoT) or EEPROM reset on startup
 //What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
 #define SETTING_TIMEOUT 300 //sec
 #define FN_TEMP_TIMEOUT 5 //sec
@@ -98,7 +98,7 @@
 //What are the pins for each signal type? -1 to disable that signal type
 #define PIEZO_PIN 10 //Drives a piezo beeper
 #define SWITCH_PIN -1 //Switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in SWITCH_DUR. (A3 for UNDB v9)
-#define PULSE_PIN A3 //Simple pulses to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in RELAY_PULSE. Pulse frequency behaves like the piezo signal.
+#define PULSE_PIN -1 //Simple pulses to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in RELAY_PULSE. Pulse frequency behaves like the piezo signal.
 //Default signal type for each function:
 //0=piezo, 1=switch, 2=pulse
 #define ALARM_SIGNAL 0

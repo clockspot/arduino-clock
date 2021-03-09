@@ -136,8 +136,7 @@ const byte millisCorrectionInterval = 30; //used to calibrate millis() to RTC fo
 unsigned long millisAtLastCheck = 0;
 word unoffRemain = 0; //un-off (briefly turn on tubes during full night/away shutoff) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
-
-byte versionRemain = 0; //display version at start //TODO with button held at start, long hold reset
+bool versionShowing = false; //display version if Select held at start - until it is released or long-held
 
 //If we need to temporarily display a value (or values in series), we can put them here. Can't be zero.
 //This is used by network to display IP addresses, and various other bits.
@@ -152,7 +151,7 @@ int daysInYear(word y); //used by network
 byte daysInMonth(word y, byte m); //used by network, rtcMillis
 bool isDSTByHour(int y, byte m, byte d, byte h, bool setFlag); //used by network
 void calcSun(); //used by rtc
-void ctrlEvt(byte ctrl, byte evt); //used by input
+void ctrlEvt(byte ctrl, byte evt, byte evtLast); //used by input
 void updateDisplay(); //used by network
 void goToFn(byte thefn); //used by network
 int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp); //used by network
@@ -191,15 +190,25 @@ void quickBeep(int pitch); //used by network (alarm switch change)
 ////////// Main code control //////////
 
 void setup(){
-  // Serial.begin(9600);
-  // #ifndef __AVR__ //SAMD only
-  // while(!Serial);
-  // #endif
-  rtcInit(); //TODO change nomenclature to match
-  initInputs();
-  delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
+  Serial.begin(9600);
+  #ifndef __AVR__ //SAMD only
+  while(!Serial);
+  #endif
+  rtcInit();
   initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
-  initEEPROM(checkForHeldButtonAtStartup()); //Do a hard init of EEPROM if button is held; else do a soft init to make sure vals in range
+  initEEPROM(false); //do a soft init to make sure vals in range
+  initInputs();
+  initDisplay();
+  initOutputs(); //depends on some EEPROM settings
+  delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
+  if(readBtn(CTRL_SEL)){ //if Sel is held at startup, show version, and skip init network for now (since wifi connect hangs)
+    versionShowing = 1; inputCur = CTRL_SEL;
+  } else {
+    #ifdef NETWORK_SUPPORTED
+    initNetwork();
+    #endif
+  }
+  
   //Some settings need to be set to a fixed value per the configuration.
   //These settings will also be skipped in fnOptScroll so the user can't change them.
   
@@ -238,11 +247,6 @@ void setup(){
   if(!ENABLE_SHUTOFF_AWAY) writeEEPROM(32,0,false); //away shutoff off
   //if backlight circuit is not switched (v5.0 board), the backlight menu setting (eeprom 26) doesn't matter
   findFnAndPageNumbers(); //initial values
-  initDisplay();
-  #ifdef NETWORK_SUPPORTED
-  initNetwork();
-  #endif
-  initOutputs(); //depends on some EEPROM settings
 }
 
 void loop(){
@@ -264,12 +268,26 @@ void loop(){
 
 ////////// Input handling and value setting //////////
 
-void ctrlEvt(byte ctrl, byte evt){
+void ctrlEvt(byte ctrl, byte evt, byte evtLast){
   //Handle control events from inputs, based on current fn and set state.
-  //evt: 1=press, 2=short hold, 3=long hold, 0=release.
+  //evt: 1=press, 2=short hold, 3=long hold, 4=verylong, 5=superlong, 0=release.
   //We only handle press evts for up/down ctrls, as that's the only evt encoders generate,
   //and input.cpp sends repeated presses if up/down buttons are held.
   //But for sel/alt (always buttons), we can handle different hold states here.
+  if(evt==1 && ctrl==CTRL_ALT){
+    Serial.println(F("alt press"));
+  }
+
+  //If the version display is showing, ignore all else until Sel is released (cancel) or long-held (cancel and eeprom reset)
+  if(versionShowing){
+    if(ctrl==CTRL_SEL && (evt==0 || evt==5)){ //SEL release or superlong hold
+      if(evt==5) initEEPROM(true); //superlong hold: reset EEPROM
+      versionShowing = false; inputStop(); updateDisplay();
+      #ifdef NETWORK_SUPPORTED
+      initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
+      #endif
+    } else return; //ignore other controls
+  } //end if versionShowing
 
   //If the signal is going, any press should silence it
   if(signalRemain>0 && evt==1){
@@ -315,13 +333,6 @@ void ctrlEvt(byte ctrl, byte evt){
   //   checkEffects(true);
   //   return;
   // }
-  //If the version display is going, any press should cancel it, with a display update
-  if(versionRemain>0 && evt==1){
-    versionRemain = 0;
-    inputStop();
-    updateDisplay();
-    return;
-  }
   
   //Is it a press for an un-off?
   unoffRemain = UNOFF_DUR; //always do this so continued button presses during an unoff keep it alive
@@ -331,12 +342,27 @@ void ctrlEvt(byte ctrl, byte evt){
     return;
   }
   
+  //#ifdef NETWORK_SUPPORTED
+  //Short hold, Alt; or very long hold, Sel if no Alt: start admin
+  if((evt==2 && ctrl==CTRL_ALT)||(evt==4 && ctrl==CTRL_SEL && CTRL_ALT<0)) {
+    inputStop();
+    //networkStartAdmin();
+    Serial.println(F("networkStartAdmin would happen here"));
+    return;
+  }
+  //Super long hold, Alt, or Sel if no Alt: start AP (TODO would we rather it forget wifi?)
+  if(evt==5 && (ctrl==CTRL_ALT || (ctrl==CTRL_SEL && CTRL_ALT<0))) {
+    inputStop();
+    //networkStartAP();
+    Serial.println(F("networkStartAP would happen here"));
+    return;
+  }
+  //#endif
+  
   if(fn < fnOpts) { //normal fn running/setting (not in settings menu)
 
-    //TODO support evt==4 and evt==5 by removing inputStop() from eg evt==3 without clashing
-
     if(evt==3 && ctrl==CTRL_SEL) { //CTRL_SEL long hold: enter settings menu
-      inputStop();
+      //inputStop(); to enable evt==4 and evt==5 per above
       fn = fnOpts;
       clearSet(); //don't need updateDisplay() here because this calls updateRTC with force=true
       return;
@@ -384,7 +410,7 @@ void ctrlEvt(byte ctrl, byte evt){
               if(!(timerState&1)){ //stopped
                 timerStart();
               } else { //running
-                #if CTRL_UPDN_TYPE==2 //rotary encoder
+                #ifdef INPUT_UPDN_ROTARY
                   if((timerState>>1)&1) timerLap(); //chrono: lap
                   else timerRunoutToggle(); //timer: runout option
                 #else //button
@@ -393,7 +419,7 @@ void ctrlEvt(byte ctrl, byte evt){
               }
             } else { //CTRL_DN
               if(!(timerState&1)){ //stopped
-                #if CTRL_UPDN_TYPE==1 //buttons
+                #ifdef INPUT_UPDN_BUTTONS
                   timerClear();
                   //if we wanted to reset to the previous time, we could use this; but sel hold is easy enough to get there
                   // //same as //save timer secs
@@ -405,7 +431,7 @@ void ctrlEvt(byte ctrl, byte evt){
                   updateDisplay();
                 #endif
               } else { //running
-                #if CTRL_UPDN_TYPE==2 //rotary encoder
+                #ifdef INPUT_UPDN_ROTARY
                   timerStop();
                 #else
                   if((timerState>>1)&1) timerLap(); //chrono: lap
@@ -418,44 +444,36 @@ void ctrlEvt(byte ctrl, byte evt){
         }
         //else do nothing
       } //end sel release or adj press
-      else if(CTRL_ALT>0 && ctrl==CTRL_ALT) { //alt sel press
-        #ifdef NETWORK_SUPPORTED
-        if(evt==3){
-          //Forget wifi? remove inputStop() from below
-        }
-        if(evt==2){
-          inputStop();
-          networkStartAdmin();
-        }
-        #else
-        //if switch signal, and soft switch enabled, we'll switch power.
-        if(ENABLE_SOFT_POWER_SWITCH && SWITCH_PIN>=0) { switchPower(2); inputStop(); }
-        //Otherwise, this becomes our function preset.
-        else {
-          //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
-          //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
-          if(evt==2) {
-            if(readEEPROM(7,false)!=fn) {
-              inputStop();
-              writeEEPROM(7,fn,false);
-              quickBeep(76);
-              displayBlink();
-            }
-          }
-          //On short release, jump to the preset fn.
-          else if(evt==0) {
-            inputStop();
-            if(fn!=readEEPROM(7,false)) fn=readEEPROM(7,false);
-            else {
-              //Special case: if this is the alarm, toggle the alarm switch
-              if(fn==fnIsAlarm) switchAlarm(2);
-            }
-            fnPg = 0; //reset page counter in case we were in a paged display
-            updateDisplay();
-          }
-        }
-        #endif
-      }
+      else if(CTRL_ALT>0 && ctrl==CTRL_ALT) {
+        //if switch signal, and soft switch enabled, we'll switch power on release.
+        if(ENABLE_SOFT_POWER_SWITCH && SWITCH_PIN>=0) { if(evt==0){ switchPower(2); inputStop(); } }
+        // #ifndef NETWORK_SUPPORTED
+        // //Otherwise - if holds aren't used for network stuff above - this becomes our function preset.
+        // else {
+        //   //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
+        //   //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
+        //   if(evt==2) {
+        //     if(readEEPROM(7,false)!=fn) {
+        //       inputStop();
+        //       writeEEPROM(7,fn,false);
+        //       quickBeep(76);
+        //       displayBlink();
+        //     }
+        //   }
+        //   //On short release, jump to the preset fn.
+        //   else if(evt==0) {
+        //     inputStop();
+        //     if(fn!=readEEPROM(7,false)) fn=readEEPROM(7,false);
+        //     else {
+        //       //Special case: if this is the alarm, toggle the alarm switch
+        //       if(fn==fnIsAlarm) switchAlarm(2);
+        //     }
+        //     fnPg = 0; //reset page counter in case we were in a paged display
+        //     updateDisplay();
+        //   }
+        // }
+        // #endif
+      } //end alt
     } //end fn running
 
     else { //fn setting
@@ -464,6 +482,7 @@ void ctrlEvt(byte ctrl, byte evt){
         //currently no, because we don't inputStop() when short hold goes into fn setting, in case long hold may go to settings menu
         //so we can't handle a release because it would immediately save if releasing from the short hold.
         //Consider recording the input start time when going into fn setting so we can distinguish its release from a future one
+        //TODO the above can be revisited now that we pass evtLast
         if(ctrl==CTRL_SEL) { //CTRL_SEL push: go to next setting or save and exit setting mode
           inputStop(); //not waiting for CTRL_SELHold, so can stop listening here
           //We will set rtc time parts directly
@@ -577,7 +596,7 @@ void ctrlEvt(byte ctrl, byte evt){
     }
     
     if(!fnSetPg){ //setting number
-      if(ctrl==CTRL_SEL && evt==0) { //CTRL_SEL release: enter setting value
+      if(ctrl==CTRL_SEL && evt==0 && evtLast<3) { //CTRL_SEL release (but not after holding to get into the menu): enter setting value
         startSet(readEEPROM(optsLoc[opt],optsMax[opt]>255?true:false),optsMin[opt],optsMax[opt],1);
       }
       if(ctrl==CTRL_UP && evt==1) fnOptScroll(1); //next one up or cycle to beginning
@@ -889,9 +908,6 @@ void checkRTC(bool force){
       if(unoffRemain>0) {
         unoffRemain--; //updateDisplay will naturally put it back to off state if applicable
       }
-      if(versionRemain>0) {
-        versionRemain--;
-      }
     } //end natural second
   
     //Things to do at specific times
@@ -926,7 +942,7 @@ void checkRTC(bool force){
       } //end alarm trigger
     }
     //At bottom of minute, see if we should show the date
-    if(rtcGetSecond()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0 && versionRemain==0) { /*cleanRemain==0 && scrollRemain==0 && */ 
+    if(rtcGetSecond()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0 && versionShowing==false) { /*cleanRemain==0 && scrollRemain==0 && */ 
       if(readEEPROM(18,false)>=2) { goToFn(fnIsDate); fnPg = 254; updateDisplay(); }
       //if(readEEPROM(18,false)==3) { startScroll(); }
     }
@@ -1351,7 +1367,7 @@ void updateDisplay(){
   //   }
   // } //todo move cleanRemain, scrollRemain to dispNixie
   // else
-  if(versionRemain>0) {
+  if(versionShowing) {
     editDisplay(vMajor, 0, 1, false, false);
     editDisplay(vMinor, 2, 3, false, false);
     editDisplay(vPatch, 4, 5, false, false);

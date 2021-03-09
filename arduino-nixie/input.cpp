@@ -60,7 +60,7 @@
 #endif
 
 byte inputCur = 0; //Momentary button (or IMU position) currently in use - only one allowed at a time
-byte inputCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=set by inputStop()
+byte inputCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=long, 4=verylong, 5=superlong, 10=set by inputStop()
 
 unsigned long inputLast = 0; //When an input last took place, millis()
 int inputLastTODMins = 0; //When an input last took place, time of day. Used in paginated functions so they all reflect the time of day when the input happened.
@@ -124,23 +124,29 @@ void checkBtn(byte btn){
     // Serial.print(F("Btn "));
     // Serial.print(btn,DEC);
     // Serial.println(F(" pressed"));
-    inputCur = btn; inputCurHeld = 0; inputLast = now; inputLastTODMins = rtcGetTOD();
-    ctrlEvt(btn,1); //hey, the button has been pressed
+    inputCur = btn; inputLast = now; inputLastTODMins = rtcGetTOD();
+    ctrlEvt(btn,1,inputCurHeld); //hey, the button has been pressed
+    inputCurHeld = 1; //not currently used
+    Serial.println(F("ich 1"));
   }
   //If the button is being held...
   if(inputCur==btn && bnow) {
     //If the button has passed a hold duration threshold... (ctrlEvt will only act on these for Sel/Alt)
     if((unsigned long)(now-inputLast)>=CTRL_HOLD_SUPERLONG_DUR && inputCurHeld < 5){
-      inputCurHeld = 5; ctrlEvt(btn,5);
+      ctrlEvt(btn,5,inputCurHeld); inputCurHeld = 5;
+      Serial.println(F("ich 5"));
     }
     else if((unsigned long)(now-inputLast)>=CTRL_HOLD_VERYLONG_DUR && inputCurHeld < 4){
-      inputCurHeld = 4; ctrlEvt(btn,4);
+      ctrlEvt(btn,4,inputCurHeld); inputCurHeld = 4;
+      Serial.println(F("ich 4"));
     }
     else if((unsigned long)(now-inputLast)>=CTRL_HOLD_LONG_DUR && inputCurHeld < 3){
-      inputCurHeld = 3; ctrlEvt(btn,3);
+      ctrlEvt(btn,3,inputCurHeld); inputCurHeld = 3;
+      Serial.println(F("ich 3"));
     }
     else if((unsigned long)(now-inputLast)>=CTRL_HOLD_SHORT_DUR && inputCurHeld < 2) {
-      inputCurHeld = 2; ctrlEvt(btn,2);
+      ctrlEvt(btn,2,inputCurHeld); inputCurHeld = 2;
+      Serial.println(F("ich 2"));
       holdLast = now; //starts the repeated presses code going
     }
     //While Up/Dn are being held, send repeated presses to ctrlEvt
@@ -148,7 +154,7 @@ void checkBtn(byte btn){
       if((btn==CTRL_UP || btn==CTRL_DN) && inputCurHeld >= 2){
         if((unsigned long)(now-holdLast)>=(inputCurHeld>=3?HOLDSET_FAST_RATE:HOLDSET_SLOW_RATE)){ //could make it nonlinear?
           holdLast = now;
-          ctrlEvt(btn,1);
+          ctrlEvt(btn,1,inputCurHeld);
         }
       }
     #endif
@@ -156,13 +162,16 @@ void checkBtn(byte btn){
   //If the button has just been released...
   if(inputCur==btn && !bnow) {
     inputCur = 0;
-    if(inputCurHeld <= 5) ctrlEvt(btn,0); //hey, the button was released
+    Serial.print(F("ich is ")); Serial.println(inputCurHeld,DEC);
+    if(inputCurHeld <= 5) { Serial.println(F("whaddaya")); ctrlEvt(btn,0,inputCurHeld); } //hey, the button was released after inputCurHeld
     inputCurHeld = 0;
+    Serial.println(F("ich 0"));
   }
 }
 void inputStop(){
   //In some cases, when handling btn evt 1/2/3/4/5, we may call this so following events 2/3/4/5/0 won't cause unintended behavior (e.g. after a fn change, or going in or out of set)
   inputCurHeld = 10;
+  Serial.println(F("ich 10"));
 }
 
 bool rotVel = 0; //high velocity setting (x10 rather than x1)
@@ -180,8 +189,8 @@ void checkRot(){
       if((unsigned long)(now-rotLastStep)<=ROT_VEL_START) rotVel = 1; //kick into high velocity setting (x10)
       else if((unsigned long)(now-rotLastStep)>=ROT_VEL_STOP) rotVel = 0; //fall into low velocity setting (x1)
       rotLastStep = now;
-      while(rotCurVal>=4) { rotCurVal-=4; ctrlEvt(CTRL_UP,1); }
-      while(rotCurVal<=-4) { rotCurVal+=4; ctrlEvt(CTRL_DN,1); }
+      while(rotCurVal>=4) { rotCurVal-=4; ctrlEvt(CTRL_UP,1,inputCurHeld); }
+      while(rotCurVal<=-4) { rotCurVal+=4; ctrlEvt(CTRL_DN,1,inputCurHeld); }
       rot.write(rotCurVal);
     }
   }

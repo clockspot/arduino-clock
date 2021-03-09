@@ -1,5 +1,7 @@
 # Operating instructions, v2.0+
 
+> [Instructions for earlier versions are here.](https://github.com/clockspot/arduino-clock/releases) To see your clock’s software version, hold **Select** briefly while powering up the clock.
+
 Your clock has four main functions: [time of day](#time-of-day), [calendar](#calendar), [alarm](#alarm), and [chrono/timer](#chronotimer). To cycle through these functions, press **Select**.
 
 To set anything, simply hold **Select** until the display blinks; use **Up/Down** to set, and **Select** to save.

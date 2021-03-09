@@ -59,8 +59,8 @@
 // #define INPUT_UPDN_ROTARY
 // #define CTRL_R1 A2
 // #define CTRL_R2 A3
-// #define ROT_VEL_START 80 //Required if CTRL_UPDN_TYPE==2. If step rate falls below this, kick into high velocity set (x10)
-// #define ROT_VEL_STOP 500 //Required if CTRL_UPDN_TYPE==2. If encoder step rate rises above this, drop into low velocity set (x1)
+// #define ROT_VEL_START 80 //If step rate falls below this, kick into high velocity set (x10)
+// #define ROT_VEL_STOP 500 //If step rate rises above this, drop into low velocity set (x1)
 
 //If using IMU motion sensor on Nano 33 IoT:
 //To use, tilt clock: backward=Sel, forward=Alt, left=Down, right=Up
@@ -75,8 +75,8 @@
 //How long (in ms) are the hold durations?
 #define CTRL_HOLD_SHORT_DUR 1000 //for entering setting mode, or hold-setting at low velocity (x1)
 #define CTRL_HOLD_LONG_DUR 3000 //for entering settings menu, or hold-setting at high velocity (x10)
-#define CTRL_HOLD_VERYLONG_DUR 5000 //for wifi IP info / admin start (Nano IoT only)
-#define CTRL_HOLD_SUPERLONG_DUR 15000 //for wifi forget (Nano IoT only)
+#define CTRL_HOLD_VERYLONG_DUR 5000 //for wifi info / admin start (Nano IoT without Alt only)
+#define CTRL_HOLD_SUPERLONG_DUR 10000 //for wifi disconnect (Nano IoT) or EEPROM reset on startup
 //What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
 #define SETTING_TIMEOUT 300 //sec
 #define FN_TEMP_TIMEOUT 5 //sec
