@@ -101,7 +101,7 @@ const byte fnIsDate = 1; //date, with optional day counter and sunrise/sunset pa
 const byte fnIsAlarm = 2; //alarm time
 const byte fnIsTimer = 3; //countdown timer and chronograph
 const byte fnIsTemp = 4; //temperature per rtc – will likely read high
-const byte fnIsTest = 5; //simply cycles all tubes
+const byte fnIsTest = 5; //simply cycles all digits for nixie tube testing
 const byte fnOpts = 201; //fn values from here to 255 correspond to settings in the settings menu
 byte fn = 0; //currently displayed fn per above
 byte fnPg = 0; //allows a function to have multiple pages
@@ -134,7 +134,7 @@ unsigned long timerTime = 0; //timestamp of timer target / chrono origin (while 
 unsigned long timerLapTime = 0; 
 const byte millisCorrectionInterval = 30; //used to calibrate millis() to RTC for timer/chrono purposes
 unsigned long millisAtLastCheck = 0;
-word unoffRemain = 0; //un-off (briefly turn on tubes during full night/away shutoff) timeout counter, seconds
+word unoffRemain = 0; //un-off (briefly turn on display during full night/away shutoff) timeout counter, seconds
 byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 bool versionShowing = false; //display version if Select held at start - until it is released or long-held
 
@@ -190,10 +190,10 @@ void quickBeep(int pitch); //used by network (alarm switch change)
 ////////// Main code control //////////
 
 void setup(){
-  Serial.begin(9600);
-  #ifndef __AVR__ //SAMD only
-  while(!Serial);
-  #endif
+  // Serial.begin(9600);
+  // #ifndef __AVR__ //SAMD only
+  // while(!Serial);
+  // #endif
   rtcInit();
   initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
   initEEPROM(false); //do a soft init to make sure vals in range
@@ -274,9 +274,6 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
   //We only handle press evts for up/down ctrls, as that's the only evt encoders generate,
   //and input.cpp sends repeated presses if up/down buttons are held.
   //But for sel/alt (always buttons), we can handle different hold states here.
-  if(ctrl==CTRL_ALT){
-    Serial.print(F("alt ")); Serial.println(evt,DEC);
-  }
 
   //If the version display is showing, ignore all else until Sel is released (cancel) or long-held (cancel and eeprom reset)
   if(versionShowing){
@@ -294,7 +291,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
     signalStop();
     if(signalSource==fnIsAlarm) { //If this was the alarm
       //If the alarm is using the switch signal and this is the Alt button; or if alarm is *not* using the switch signal and this is Fibonacci mode; don't set the snooze
-      if((readEEPROM(42,false)==1 && CTRL_ALT!=0 && ctrl==CTRL_ALT) || (readEEPROM(42,false)!=1 && readEEPROM(50,false))) {
+      if((readEEPROM(42,false)==1 && CTRL_ALT>0 && ctrl==CTRL_ALT) || (readEEPROM(42,false)!=1 && readEEPROM(50,false))) {
         quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
         displayBlink(); //to indicate this as well
       } else { //start snooze
@@ -342,28 +339,23 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
     return;
   }
   
-  //#ifdef NETWORK_SUPPORTED
+  #ifdef NETWORK_SUPPORTED
   //Short hold, Alt; or very long hold, Sel if no Alt: start admin
-  if((evt==2 && ctrl==CTRL_ALT)||(evt==4 && ctrl==CTRL_SEL && CTRL_ALT<0)) {
-    inputStop();
-    //networkStartAdmin();
-    Serial.println(F("networkStartAdmin would happen here"));
+  if((evt==2 && ctrl==CTRL_ALT)||(evt==4 && ctrl==CTRL_SEL && CTRL_ALT<=0)) {
+    networkStartAdmin();
     return;
   }
   //Super long hold, Alt, or Sel if no Alt: start AP (TODO would we rather it forget wifi?)
-  if(evt==5 && (ctrl==CTRL_ALT || (ctrl==CTRL_SEL && CTRL_ALT<0))) {
-    inputStop();
-    //networkStartAP();
-    Serial.println(F("networkStartAP would happen here"));
+  if(evt==5 && (ctrl==CTRL_ALT || (ctrl==CTRL_SEL && CTRL_ALT<=0))) {
+    networkStartAP();
     return;
   }
-  //#endif
+  #endif
   
   if(fn < fnOpts) { //normal fn running/setting (not in settings menu)
 
     if(evt==3 && ctrl==CTRL_SEL) { //CTRL_SEL long hold: enter settings menu
-      //inputStop(); to enable evt==4 and evt==5 per above
-      Serial.println(F("we used to inputstop here"));
+      //inputStop(); commented out to to enable evt==4 and evt==5 per above
       fn = fnOpts;
       clearSet(); //don't need updateDisplay() here because this calls updateRTC with force=true
       return;
@@ -399,7 +391,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
       else if((ctrl==CTRL_SEL && evt==0) || ((ctrl==CTRL_UP || ctrl==CTRL_DN) && evt==1)) { //sel release or adj press
         //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
         if(ctrl==CTRL_SEL){ //sel release
-          Serial.println(F("sel release"));
+          //Serial.println(F("sel release"));
           if(fn==fnIsTimer && !(timerState&1)) timerClear(); //if timer is stopped, clear it
           fnScroll(1); //Go to next fn in the cycle
           fnPg = 0; //reset page counter in case we were in a paged display
@@ -447,34 +439,40 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
         //else do nothing
       } //end sel release or adj press
       else if(CTRL_ALT>0 && ctrl==CTRL_ALT) {
-        //if switch signal, and soft switch enabled, we'll switch power on release.
-        if(ENABLE_SOFT_POWER_SWITCH && SWITCH_PIN>=0) { if(evt==0){ switchPower(2); inputStop(); } }
-        // #ifndef NETWORK_SUPPORTED
-        // //Otherwise - if holds aren't used for network stuff above - this becomes our function preset.
-        // else {
-        //   //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
-        //   //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
-        //   if(evt==2) {
-        //     if(readEEPROM(7,false)!=fn) {
-        //       inputStop();
-        //       writeEEPROM(7,fn,false);
-        //       quickBeep(76);
-        //       displayBlink();
-        //     }
-        //   }
-        //   //On short release, jump to the preset fn.
-        //   else if(evt==0) {
-        //     inputStop();
-        //     if(fn!=readEEPROM(7,false)) fn=readEEPROM(7,false);
-        //     else {
-        //       //Special case: if this is the alarm, toggle the alarm switch
-        //       if(fn==fnIsAlarm) switchAlarm(2);
-        //     }
-        //     fnPg = 0; //reset page counter in case we were in a paged display
-        //     updateDisplay();
-        //   }
-        // }
-        // #endif
+        //if soft power switch, we'll switch on release - but only if not held past activating settings page/AP
+        if(ENABLE_SOFT_POWER_SWITCH && SWITCH_PIN>=0) {
+          if(evt==0
+            #ifdef NETWORK_SUPPORTED
+            && evtLast<2 //if holds are used to activate settings page/AP, do not switch. If not, switch no matter how long held.
+            #endif
+          ) switchPower(2);
+        }
+        #ifndef NETWORK_SUPPORTED
+        //If neither soft power switch nor network support, this becomes our function preset
+        else {
+          //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
+          //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
+          if(evt==2) {
+            if(readEEPROM(7,false)!=fn) {
+              inputStop();
+              writeEEPROM(7,fn,false);
+              quickBeep(76);
+              displayBlink();
+            }
+          }
+          //On short release, jump to the preset fn.
+          else if(evt==0) {
+            inputStop();
+            if(fn!=readEEPROM(7,false)) fn=readEEPROM(7,false);
+            else {
+              //Special case: if this is the alarm, toggle the alarm switch
+              if(fn==fnIsAlarm) switchAlarm(2);
+            }
+            fnPg = 0; //reset page counter in case we were in a paged display
+            updateDisplay();
+          }
+        }
+        #endif
       } //end alt
     } //end fn running
 
@@ -675,6 +673,10 @@ void fnOptScroll(byte dir){
       || (!ENABLE_SHUTOFF_NIGHT && (optLoc==27||optLoc==28||optLoc==30)) //night shutoff disabled in config: skip night
       || ((!ENABLE_SHUTOFF_NIGHT || !ENABLE_SHUTOFF_AWAY) && (optLoc==32||optLoc==35||optLoc==37)) //night or away shutoff disabled in config: skip away (except workweek)
       || ((!ENABLE_SHUTOFF_NIGHT || !ENABLE_SHUTOFF_AWAY) && (!ENABLE_ALARM_AUTOSKIP || !ENABLE_ALARM_FN) && (optLoc==33||optLoc==34)) //(night or away) and alarm autoskip disabled: skip workweek
+      //Nixie-specific
+      #ifndef DISPLAY_NIXIE
+      || (optLoc==20||optLoc==46) //digit fade and anti-poisoning
+      #endif
     )) {
     fnOptScroll(dir);
   }
@@ -1389,8 +1391,8 @@ void updateDisplay(){
       editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero per settings
       editDisplay(fnSetVal%60, 2, 3, true, false); //minutes with leading zero always
     } else if(fnSetValMax==59) { //Timer duration secs: show with leading
-      //If 6 tubes (0-5), display on 4-5
-      //If 4 tubes (0-3), dislpay on 2-3
+      //If 6 digits (0-5), display on 4-5
+      //If 4 digits (0-3), dislpay on 2-3
       // blankDisplay(0, 3, false); //taken over by startSet
       editDisplay(fnSetVal, (DISPLAY_SIZE>4? 4: 2), (DISPLAY_SIZE>4? 5: 3), true, false);
     } else if(fnSetValMax==88) { //A piezo pitch. Play a short demo beep.
@@ -1405,14 +1407,14 @@ void updateDisplay(){
       editDisplay((abs(fnSetVal-100)*25)/100, 0, 1, fnSetVal<100, false); //hours, leading zero for negatives
       editDisplay((abs(fnSetVal-100)%4)*15, 2, 3, true, false); //minutes, leading zero always
     } else if(fnSetValMax==900 || fnSetValMax==1800) { //Lat/long in tenths of a degree
-      //If 6 tubes (0-5), display degrees on 0-3 and tenths on 4, with 5 blank
-      //If 4 tubes (0-3), display degrees on 0-2 and tenths on 3
+      //If 6 digits (0-5), display degrees on 0-3 and tenths on 4, with 5 blank
+      //If 4 digits (0-3), display degrees on 0-2 and tenths on 3
       editDisplay(abs(fnSetVal), 0, (DISPLAY_SIZE>4? 4: 3), fnSetVal<0, false);
     } else editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0, false); //some other type of value - leading zeros for negatives
   }
   else if(fn >= fnOpts){ //settings menu, but not setting a value
     displayDim = 2;
-    editDisplay(optsNum[fn-fnOpts],0,1,false,false); //display setting number on hour tubes
+    editDisplay(optsNum[fn-fnOpts],0,1,false,false); //display setting number on hour digits
     blankDisplay(2,5,false);
   }
   else { //fn running
@@ -1495,24 +1497,24 @@ void updateDisplay(){
         //Countup shows H:M:S, but if H<1, M:S:C, but if DISPLAY_SIZE<6 and M<1, S:C
         bool lz; lz = readEEPROM(19,false)&1;
         if((timerState>>1)&1){ //count up
-          if(DISPLAY_SIZE<6 && td<60){ //under 1 min, 4-tubers: [SS]CC--
+          if(DISPLAY_SIZE<6 && td<60){ //under 1 min, 4-digit displays: [SS]CC--
             if(td>=1||lz) editDisplay(td,0,1,lz,true); else blankDisplay(0,1,true); //secs, leading per lz, fade
             editDisplay(tdc,2,3,td>=1||lz,false); //cents, leading if >=1sec or lz, no fade
-            blankDisplay(4,5,true); //just in case 4-tube code's running on a 6-tube clock, don't look ugly
+            blankDisplay(4,5,true); //just in case 4-digit code's running on a 6-digit display, don't look ugly
           } else if(td<3600){ //under 1 hr: [MM][SS]CC
             if(td>=60||lz) editDisplay(td/60,0,1,lz,true); else blankDisplay(0,1,true); //mins, leading per lz, fade
             if(td>=1||lz) editDisplay(td%60,2,3,td>=60||lz,true); else blankDisplay(2,3,true); //secs, leading if >=1min or lz, fade
-            editDisplay(tdc,4,5,td>=1||lz,false); //cents, leading if >=1sec or lz, no fade - hidden on 4-tubers
+            editDisplay(tdc,4,5,td>=1||lz,false); //cents, leading if >=1sec or lz, no fade - hidden on 4-digit display
           } else { //over 1 hr: HHMMSS
             editDisplay(td/3600,0,1,lz,true); //hrs, leading per lz, fade
             editDisplay((td%3600)/60,2,3,true,true); //mins, leading, fade
             editDisplay(td%60,4,5,true,true); //secs, leading, fade
           }
         } else { //count down
-          if(DISPLAY_SIZE<6 && td<3600){ //under 1 hr, 4-tubers: [MM]SS--
+          if(DISPLAY_SIZE<6 && td<3600){ //under 1 hr, 4-digit displays: [MM]SS--
             if(td>=60||lz) editDisplay(td/60,0,1,lz,true); else blankDisplay(0,1,true); //mins, leading per lz, fade
             if(td>=1||lz) editDisplay(td%60,2,3,td>=60||lz,true); else blankDisplay(2,3,true); //secs, leading if >=1min or lz, fade
-            blankDisplay(4,5,true); //just in case 4-tube code's running on a 6-tube clock, don't look ugly
+            blankDisplay(4,5,true); //just in case 4-digit code's running on a 6-digit display, don't look ugly
           } else { //[HH][MM]SS
             if(td>=3600||lz) editDisplay(td/3600,0,1,lz,true); else blankDisplay(0,1,true); //hrs, leading per lz, fade
             if(td>=60||lz) editDisplay((td%3600)/60,2,3,td>=3600||lz,true); else blankDisplay(2,3,true); //mins, leading if >=1h or lz, fade
@@ -1550,7 +1552,7 @@ void updateDisplay(){
   //   Serial.print(F("   "));
   //   for(byte i=0; i<DISPLAY_SIZE; i++) {
   //     if(i%2==0 && i!=0) Serial.print(F(" ")); //spacer between units
-  //     if(displayNext[i]>9) Serial.print(F("-")); //blanked tube
+  //     if(displayNext[i]>9) Serial.print(F("-")); //blanked digit
   //     else Serial.print(displayNext[i],DEC);
   //   }
   //   Serial.println();
@@ -1657,7 +1659,7 @@ void displaySun(byte which, int d, int tod){}
 #endif
 
 void displayWeather(byte which){
-  //shows high/low temp (for day/night respectively) on main tubes, and precipitation info on seconds tubes
+  //shows high/low temp (for day/night respectively) in place of hour/min, and precipitation info in place of seconds
   //which==0: display for current sun period (after last sun event)
   //which==1: display for next sun period (after next sun event)
   //IoT: Show the weather for the current period (after last sun event): high (day) or low (night) and precip info//IoT: Show the weather for the period after the next sun event

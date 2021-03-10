@@ -26,7 +26,7 @@ byte cleanRemain = 0; //anti-cathode-poisoning clean timeout counter, increments
 
 int8_t scrollRemain = 0; //"frames" of scroll – signed byte - 0=not scrolling, >0=coming in, <0=going out, -128=scroll out at next change.
 
-byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change tubes.
+byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start. Change this to change display.
 byte displayLast[6] = {11,11,11,11,11,11}; //for noticing changes to displayNext and fading the display to it
 byte scrollDisplay[6] = {15,15,15,15,15,15}; //For animating a value into displayNext from right, and out to left
 
@@ -144,8 +144,8 @@ void cycleDisplay(){
 
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
   //Splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
-  //If there are blank places (on the left of a non-leading-zero number), uses value 15 to blank tube
-  //If number has more places than posEnd-posStart, the higher places are truncated off (e.g. 10015 on 4 tubes --> 0015)
+  //If there are blank places (on the left of a non-leading-zero number), uses value 15 to blank digit
+  //If number has more places than posEnd-posStart, the higher places are truncated off (e.g. 10015 on 4-tube display --> 0015)
   word place;
   for(byte i=0; i<=posEnd-posStart; i++){
     switch(i){ //because int(pow(10,1))==10 but int(pow(10,2))==99...

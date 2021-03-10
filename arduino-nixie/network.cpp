@@ -421,7 +421,7 @@ void checkClients(){
           case 3: client.print(F("month/date/year")); break;
           case 4: client.print(F("date/month/year")); break;
           case 5: client.print(F("year/month/date")); break;
-          default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>The weekday is displayed as a number from 0 (Sunday) to 6 (Saturday). Four-tube clocks will display only the first two values in each of these options.</span></li>"));
+          default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>The weekday is displayed as a number from 0 (Sunday) to 6 (Saturday). Four-digit displays will show only the first two values in each of these options.</span></li>"));
 
         //TODO Day count enabled BITMASK
             // const unsigned int FN_TIMER = 1<<0; //1

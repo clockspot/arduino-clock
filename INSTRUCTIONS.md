@@ -6,6 +6,8 @@ Your clock has four main functions: [time of day](#time-of-day), [calendar](#cal
 
 To set anything, simply hold **Select** until the display blinks; use **Up/Down** to set, and **Select** to save.
 
+If your clock has an **Alt** button, it will act as a [function preset](#function-preset), [power button](#signals), and/or [Wi-Fi button](#wi-fi-support), depending on your clock’s features.
+
 Additional settings are available in the [settings menu](#settings-menu). If you have a Wi-Fi-enabled clock, you can configure these settings (and more) on the [settings page](#wi-fi-support), where you can also configure the clock to set itself.
 
 ## Time of day
@@ -24,7 +26,7 @@ The calendar cycles through several displays, before returning to the time of da
   * When setting, it will ask for the month, then the date, then the direction (0 = count down, 1 = count up).
   * TIP: To display the day of the year, set it to count up from December 31.
   * To disable the day counter (Wi-Fi clocks only), use the [settings page](#wi-fi-support).
-* **Sunrise/sunset.** These two displays show the previous and next apparent sunrise/sunset times (indicated by `1` or `0` on the seconds tubes – during the day, it shows sunrise then sunset; at night, sunset then sunrise), in the same 12h/24h format as the time of day.
+* **Sunrise/sunset.** These two displays show the previous and next apparent sunrise/sunset times (indicated by `1` or `0` in place of seconds – during the day, it shows sunrise then sunset; at night, sunset then sunrise), in the same 12h/24h format as the time of day.
   * Specify your latitude, longitude, and UTC offset in settings.
   * To disable sunrise/sunset, set latitude/longitude to 0.
 * _Future software versions will add support for weather forecasts for Wi-Fi-enabled clocks._
@@ -36,7 +38,7 @@ The alarm is always shown in 24h format so you can tell AM from PM. In place of 
 * Use **Up/Down** to switch the alarm between **on, skip, and off,** indicated by high/medium/low beeps.
 	* **Skip** silences the next alarm in advance (hence the `01` meaning “off then on”) – useful if you’re taking a day off, or you wake up before your alarm. In the [settings menu](#settings-menu), you can set the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back to **on.**
 * When the alarm [signals](#signals), press any button – once to snooze, and again to cancel the snooze / silence the alarm for the day (it will give a short low beep, and/or the display will blink once).
-  * If the alarm is set to use a [switch signal](#signal), **Alt** will silence the alarm immediately without snoozing.
+  * If the alarm is set to use a [switch signal](#signal), **Alt** will switch it off without snooze.
 * **Fibonacci mode** wakes you gradually by starting the alarm about 27 minutes early, by beeping at increasingly shorter intervals per the [Fibonacci sequence](https://en.wikipedia.org/wiki/Fibonacci_number) (610 seconds, then 337, then 233...). This mode is enabled in the [settings menu](#settings-menu), and applies only to [beeper and pulse signals](#signals).
   * Snooze does not take effect in this mode. Any button press will silence the alarm for the day, even if the set alarm time hasn’t been reached yet.
 
@@ -70,8 +72,8 @@ If your clock uses a knob (rotary encoder) for **Up/Down** rather than buttons, 
 Your clock can trigger signals for the time of day (chime), alarm, and timer. If your clock supports multiple signal types, you can choose which type is triggered by each function in the [settings menu](#settings-menu).
 
 * **Beeper** signal is played on a piezo beeper, using various patterns and pitches.
-* **Switch** signal switches on and off to control an appliance circuit (such as for a radio). **Alt** will switch it on and off manually.
-	* If the alarm is set to use this, it will switch on for up to two hours. **Alt** will silence the alarm for the day (unlike the other buttons, which will trigger snooze if enabled, as usual).
+* **Switch** signal switches on and off to control an appliance circuit (such as for a radio). If supported, **Alt** acts as a power switch to toggle it on and off manually.
+	* If the alarm is set to use this, it will switch on for up to two hours. **Alt** will switch it off without snooze (unlike the other buttons, which will trigger snooze as usual).
 	* If the timer is set to use this, it will switch on while the timer is running, like a “sleep” function.
 * **Pulse** signal simply sends short pulses (such as to ring a bell).
 
@@ -93,13 +95,13 @@ If your clock supports _neither_ [switch signal](#signals) nor [Wi-Fi](#wi-fi-su
 | --- | --- | --- |
 |  | <a name="settingsgeneral"></a>**General** |  |
 | 1 | Time format | 1 = 12-hour<br/>2 = 24-hour<br/>(time-of-day display only; setting times is always done in 24h) |
-| 2 | Date format | 1 = month/date/weekday<br/>2 = date/month/weekday<br/>3 = month/date/year<br/>4 = date/month/year<br/>5 = year/month/date<br/>The weekday is displayed as a number from 0 (Sunday) to 6 (Saturday).<br/>Four-tube clocks will display only the first two values in each of these options. |
+| 2 | Date format | 1 = month/date/weekday<br/>2 = date/month/weekday<br/>3 = month/date/year<br/>4 = date/month/year<br/>5 = year/month/date<br/>The weekday is displayed as a number from 0 (Sunday) to 6 (Saturday).<br/>Four-digit displays will show only the first two values in each of these options. |
 | 3 | Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date each minute at :30 seconds<br/>3 = same as 2, but scrolls in and out |
 | 4 | Leading zeros | 0 = no<br/>1 = yes |
-| 5 | Digit fade | 0–20 (in hundredths of a second) |
+| 5 | Digit fade | 0–20, in hundredths of a second<br/>(Clocks with nixie display only) |
 | 6 | Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ)<br/>If the clock is not powered at the time, it will correct itself when powered up.<br/>If you observe DST but your locale’s rules are not represented here, leave this set to 0 and set the clock manually (and the [DST offset](#settingsgeography) if applicable). |
 | 7 | Backlight | 0 = always off<br/>1 = always on<br/>2 = on until night/away shutoff (if enabled)<br/>3 = on when alarm/timer signals</br>4 = on with [switch signal](#signals) (if equipped)<br/>(Clocks with backlighting only) |
-| 8 | Anti-cathode poisoning | Briefly cycles all digits to prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)<br/>0 = once a day, either at midnight or when night shutoff starts (if enabled)<br/>1 = at the top of every hour<br/>2 = at the top of every minute<br/>(Will not trigger during night/away shutoff) |
+| 8 | Anti-cathode poisoning | Briefly cycles all nixie tubes to prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)<br/>0 = once a day, either at midnight or when night shutoff starts (if enabled)<br/>1 = at the top of every hour<br/>2 = at the top of every minute<br/>(Will not trigger during night/away shutoff. Clocks with nixie display only) |
 |  | <a name="settingsalarm"></a>**Alarm** | (Clocks with signals only) |
 | 10 | Alarm auto-skip | 0 = alarm triggers every day<br/>1 = work week only, skipping weekends (per settings below)<br/>2 = weekend only, skipping work week |
 | 11 | Alarm signal | 0 = beeper (uses pitch and pattern below)<br/>1 = switch (will stay on for 2 hours)<br/>2 = pulse<br/>(Clocks with multiple signal types only) |
@@ -117,10 +119,10 @@ If your clock supports _neither_ [switch signal](#signals) nor [Wi-Fi](#wi-fi-su
 | 32 | Chime beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>(Clocks with beeper only) |
 | 33 | Chime beeper pattern | Same options as alarm beeper pattern. Cuckoo recommended!<br/>(Clocks with beeper only) |
 |  | <a name="settingsshutoff"></a>**Night/away shutoff** |  |
-| 40 | Night shutoff | To save tube life and/or preserve your sleep, dim or shut off tubes nightly when you’re not around or sleeping.<br/>0 = none (tubes fully on at night)<br/>1 = dim tubes at night<br/>2 = shut off tubes at night<br/>When off, you can press **Select** to illuminate the tubes briefly. |
+| 40 | Night shutoff | To save display life and/or preserve your sleep, dim or shut off the display nightly when you’re not around or sleeping.<br/>0 = none (fully on)<br/>1 = dim<br/>2 = shut off<br/>When off, you can press **Select** to illuminate the display briefly. |
 | 41 | Night starts at | Time of day. |
 | 42 | Night ends at | Time of day. Set to 0:00 to use the alarm time. |
-| 43 | Away shutoff | To further save tube life, shut off tubes during daytime hours when you’re not around. This feature is designed to accommodate your work schedule.<br/>0 = none (tubes on all day every day, except for night shutoff)<br/>1 = clock at work (shut off all day on weekends)<br/>2 = clock at home (shut off during work hours only)<br/>When off, you can press **Select** to illuminate the tubes briefly. |
+| 43 | Away shutoff | To further save display life, shut off the display during daytime hours when you’re not around. This feature is designed to accommodate your work schedule.<br/>0 = none (on all day every day, except for night shutoff)<br/>1 = clock at work (shut off all day on weekends)<br/>2 = clock at home (shut off during work hours only)<br/>When off, you can press **Select** to illuminate the display briefly. |
 | 44 | First day of work week | 0–6 (Sunday–Saturday) |
 | 45 | Last day of work week | 0–6 (Sunday–Saturday) |
 | 46 | Work starts at | Time of day. |
@@ -130,23 +132,25 @@ If your clock supports _neither_ [switch signal](#signals) nor [Wi-Fi](#wi-fi-su
 | 51 | Longitude | Your longitude, in tenths of a degree; negative (west) values are indicated with leading zeroes. (Example: Dallas is at 96.7°W, set as `00967`.) |
 | 52 | UTC offset | Your time zone’s offset from UTC (non-DST), in hours and minutes; negative (west) values are indicated with leading zeroes. (Example: Dallas is UTC–6, set as `0600`.)<br/>If you observe DST but set the clock manually rather than using the [auto DST feature](#settingsgeneral), you must add an hour to the UTC offset during DST, or the sunrise/sunset times will be an hour early. |
 
-To reset the clock to “factory” settings, hold **Select** for 15 seconds while powering up the clock.
+To reset the clock to “factory” settings, hold **Select** for 10 seconds while powering up the clock. You will see the time reset to 0:00.
 
 ## Wi-Fi support
 
 If your clock is Wi-Fi-enabled, it offers a settings webpage that duplicates the menu above (and more), and can set itself by synchronizing to an [NTP time server](https://en.wikipedia.org/wiki/Time_server).
 
-**To access the settings page,** grab a device with a web browser, and briefly hold **Alt**.
+**To activate the settings page,** grab a device with a web browser, and briefly hold **Alt**.
 
 * If the clock **is not** connected to Wi-Fi, it will display `7777`.
 	* This indicates it is broadcasting a Wi-Fi network called “Clock.” Connect your device to “Clock” and browse to [7.7.7.7](http://7.7.7.7).
 	
 * If the clock **is** connected to Wi-Fi, it will flash its IP address (as a series of four numbers).
 	* Connect your device to the same Wi-Fi network as the clock, and browse to that IP address.
-	* If you don’t know what Wi-Fi network the clock is connected to, hold **Alt** for 10 seconds. It will disconnect from that network and broadcast the “Clock” access point, as above.
+	* If you don’t know what Wi-Fi network the clock is connected to, hold **Alt** for 10 seconds. It will disconnect and broadcast the “Clock” network instead, as above.
 
-If you change the Wi-Fi settings, the clock will immediately attempt to (re)connect, and will display its IP address if successful, or `7777` if not. To continue configuring the clock, reconnect to it as above.
+When Wi-Fi settings are changed, the clock will immediately attempt to reconnect. As above, it will display its IP address if successful, or `7777` if not. Reconnect to the clock to continue configuring it.
 
-For security, the settings page (and “Clock” network if applicable) will stop after two minutes of inactivity.
+For security, the settings page and “Clock” network (if applicable) will deactivate after two minutes of inactivity.
 
-**When NTP sync is enabled,** the clock will attempt to synchronize every hour (at minute 59). The settings page will indicate how recently the clock was last synced. If the clock displays the time without seconds, this indicates it has not synced in the last 24 hours (or since the time was set manually). Check to make sure the clock is connected to Wi-Fi and configured to use a valid NTP server, and try a manual sync. If no Wi-Fi is available or you’re unable to sync for other reasons (such as network limitations), disable Wi-Fi or NTP sync to restore the seconds display.
+> If your clock has no **Alt** button, hold **Select** for 5 seconds to activate the page, and 10 seconds to force the “Clock” network.
+
+**When NTP sync is enabled,** the clock will attempt to synchronize every hour (at minute 59). If the clock displays the time without seconds, this indicates the time displayed was not synced to NTP in the last 24 hours. Check to make sure the clock is connected to Wi-Fi and configured to use a valid NTP server, and try a manual sync. If no Wi-Fi is available or you’re unable to sync for other reasons (such as network limitations or manual time setting), disable Wi-Fi or NTP sync to restore the seconds display.

@@ -69,7 +69,7 @@ void initInputs(){
   //TODO are there no "loose" pins left floating after this? per https://electronics.stackexchange.com/q/37696/151805
   #ifdef INPUT_BUTTONS
     pinMode(CTRL_SEL, INPUT_PULLUP);
-    #if CTRL_ALT!=0
+    #if CTRL_ALT>0
       pinMode(CTRL_ALT, INPUT_PULLUP);
     #endif
     #ifdef INPUT_UPDN_BUTTONS
@@ -124,29 +124,30 @@ void checkBtn(byte btn){
     // Serial.print(F("Btn "));
     // Serial.print(btn,DEC);
     // Serial.println(F(" pressed"));
-    inputCur = btn; inputLast = now; inputLastTODMins = rtcGetTOD();
+    inputCur = btn; inputCurHeld = 0; inputLast = now; inputLastTODMins = rtcGetTOD();
+    //Serial.println(); Serial.println(F("ich now 0 per press"));
     ctrlEvt(btn,1,inputCurHeld); //hey, the button has been pressed
-    inputCurHeld = 1; //not currently used
-    Serial.println(F("ich 1"));
+    //Serial.print(F("ich now ")); Serial.print(inputCurHeld,DEC); Serial.println(F(" after press > ctrlEvt"));
   }
   //If the button is being held...
   if(inputCur==btn && bnow) {
     //If the button has passed a hold duration threshold... (ctrlEvt will only act on these for Sel/Alt)
     if((unsigned long)(now-inputLast)>=CTRL_HOLD_SUPERLONG_DUR && inputCurHeld < 5){
-      ctrlEvt(btn,5,inputCurHeld); inputCurHeld = 5;
-      Serial.println(F("ich 5"));
+      ctrlEvt(btn,5,inputCurHeld); if(inputCurHeld<10) inputCurHeld = 5;
+      //Serial.print(F("ich now ")); Serial.print(inputCurHeld,DEC); Serial.println(F(" after 5 hold > ctrlEvt"));
     }
     else if((unsigned long)(now-inputLast)>=CTRL_HOLD_VERYLONG_DUR && inputCurHeld < 4){
-      ctrlEvt(btn,4,inputCurHeld); inputCurHeld = 4;
-      Serial.println(F("ich 4"));
+      ctrlEvt(btn,4,inputCurHeld); if(inputCurHeld<10) inputCurHeld = 4;
+      //Serial.print(F("ich now ")); Serial.print(inputCurHeld,DEC); Serial.println(F(" after 4 hold > ctrlEvt"));
     }
     else if((unsigned long)(now-inputLast)>=CTRL_HOLD_LONG_DUR && inputCurHeld < 3){
-      ctrlEvt(btn,3,inputCurHeld); inputCurHeld = 3;
-      Serial.println(F("ich 3"));
+      ctrlEvt(btn,3,inputCurHeld); if(inputCurHeld<10) inputCurHeld = 3;
+      //Serial.print(F("ich now ")); Serial.print(inputCurHeld,DEC); Serial.println(F(" after 3 hold > ctrlEvt"));
     }
     else if((unsigned long)(now-inputLast)>=CTRL_HOLD_SHORT_DUR && inputCurHeld < 2) {
-      ctrlEvt(btn,2,inputCurHeld); inputCurHeld = 2;
-      Serial.println(F("ich 2"));
+      //Serial.print(F("ich was ")); Serial.println(inputCurHeld,DEC);
+      ctrlEvt(btn,2,inputCurHeld); if(inputCurHeld<10) inputCurHeld = 2;
+      //Serial.print(F("ich now ")); Serial.print(inputCurHeld,DEC); Serial.println(F(" after 2 hold > ctrlEvt"));
       holdLast = now; //starts the repeated presses code going
     }
     //While Up/Dn are being held, send repeated presses to ctrlEvt
@@ -162,16 +163,16 @@ void checkBtn(byte btn){
   //If the button has just been released...
   if(inputCur==btn && !bnow) {
     inputCur = 0;
-    Serial.print(F("ich is ")); Serial.println(inputCurHeld,DEC);
-    if(inputCurHeld <= 5) { Serial.println(F("whaddaya")); ctrlEvt(btn,0,inputCurHeld); } //hey, the button was released after inputCurHeld
+    //Only act if the button hasn't been stopped
+    if(inputCurHeld<10) ctrlEvt(btn,0,inputCurHeld); //hey, the button was released after inputCurHeld
+    //Serial.print(F("ich now ")); Serial.print(inputCurHeld,DEC); Serial.println(F(" then 0 after release > ctrlEvt"));
     inputCurHeld = 0;
-    Serial.println(F("ich 0"));
   }
 }
 void inputStop(){
   //In some cases, when handling btn evt 1/2/3/4/5, we may call this so following events 2/3/4/5/0 won't cause unintended behavior (e.g. after a fn change, or going in or out of set)
   inputCurHeld = 10;
-  Serial.println(F("ich 10"));
+  //Serial.println(F("ich now 10 per inputStop"));
 }
 
 bool rotVel = 0; //high velocity setting (x10 rather than x1)
@@ -215,7 +216,7 @@ void checkInputs(){
   //We just need to only call checkBtn if one or the other is equipped
   #if defined(INPUT_BUTTONS) || defined(INPUT_IMU)
     checkBtn(CTRL_SEL);
-    #if CTRL_ALT!=0
+    #if CTRL_ALT>0
       checkBtn(CTRL_ALT);
     #endif
     #if defined(INPUT_UPDN_BUTTONS) || defined(INPUT_IMU)

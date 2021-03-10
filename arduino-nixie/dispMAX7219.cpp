@@ -101,8 +101,8 @@ void cycleDisplay(){
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
   if(curBrightness==-1) return;
   //Splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
-  //If there are blank places (on the left of a non-leading-zero number), uses value 15 to blank tube
-  //If number has more places than posEnd-posStart, the higher places are truncated off (e.g. 10015 on 4 tubes --> 0015)
+  //If there are blank places (on the left of a non-leading-zero number), uses value 15 to blank the digit
+  //If number has more places than posEnd-posStart, the higher places are truncated off (e.g. 10015 on 4-digit displays --> 0015)
   word place;
   for(byte i=0; i<=posEnd-posStart; i++){
     switch(i){ //because int(pow(10,1))==10 but int(pow(10,2))==99...

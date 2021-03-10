@@ -35,7 +35,7 @@
 //If using buttons for Select and optionally Alt:
 #define INPUT_BUTTONS
 #define CTRL_SEL A2 //UNDB S6/PL9
-#define CTRL_ALT 0
+#define CTRL_ALT -1 //if not using Alt, set to -1
 
 //If using buttons for Up and Down:
 #define INPUT_UPDN_BUTTONS
