@@ -69,9 +69,9 @@ void initInputs(){
   //TODO are there no "loose" pins left floating after this? per https://electronics.stackexchange.com/q/37696/151805
   #ifdef INPUT_BUTTONS
     pinMode(CTRL_SEL, INPUT_PULLUP);
-    #if CTRL_ALT>0
+    if(CTRL_ALT>0){ //preprocessor directives don't seem to work for this when e.g. "A7"
       pinMode(CTRL_ALT, INPUT_PULLUP);
-    #endif
+    }
     #ifdef INPUT_UPDN_BUTTONS
       pinMode(CTRL_UP, INPUT_PULLUP);
       pinMode(CTRL_DN, INPUT_PULLUP);
@@ -198,15 +198,6 @@ void checkRot(){
 } //end checkRot()
 #endif
 
-bool checkForHeldButtonAtStartup(){
-  //This is a bit outside the standard ctrlEvt functionality due to happening at startup
-  bool ret = readBtn(CTRL_SEL);
-  //prevent the held button from doing anything else, if applicable
-  //TODO expand this so short and long hold can happen at startup
-  inputCur = CTRL_SEL; inputStop();
-  return ret;
-}
-
 void checkInputs(){
   //TODO potential issue: if user only means to rotate or push encoder but does both?
   #ifdef INPUT_IMU
@@ -216,9 +207,9 @@ void checkInputs(){
   //We just need to only call checkBtn if one or the other is equipped
   #if defined(INPUT_BUTTONS) || defined(INPUT_IMU)
     checkBtn(CTRL_SEL);
-    #if CTRL_ALT>0
+    if(CTRL_ALT>0){ //preprocessor directives don't seem to work for this when e.g. "A7"
       checkBtn(CTRL_ALT);
-    #endif
+    }
     #if defined(INPUT_UPDN_BUTTONS) || defined(INPUT_IMU)
       checkBtn(CTRL_UP);
       checkBtn(CTRL_DN);
