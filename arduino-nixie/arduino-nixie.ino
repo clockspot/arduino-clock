@@ -2,7 +2,6 @@
 // Sketch by Luke McKenzie (luke@theclockspot.com)
 // Written to support RLB Designs’ Universal Nixie Driver Board
 // Inspired by original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
-// Display cycling code derived from http://arduinix.com/Main/Code/ANX-6Tube-Clock-Crossfade.txt
 
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
@@ -175,8 +174,7 @@ void quickBeep(int pitch); //used by network (alarm switch change)
 //rather than independently, with header files included here –
 //but it seems to work, as long as they don't reference later functions.
 //The disp and rtc options are mutually exclusive.
-#define STORAGE
-#include "storage.cpp"; //supports both AVR EEPROM and SAMD flash
+#include "storage.h"; //supports both AVR EEPROM and SAMD flash
 #include "dispNixie.cpp" //for a SN74141-multiplexed nixie array
 #include "dispMAX7219.cpp" //for a SPI MAX7219 8x8 LED array
 #include "rtcDS3231.cpp" //for an I2C DS3231 RTC module

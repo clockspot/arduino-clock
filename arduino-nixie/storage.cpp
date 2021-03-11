@@ -1,31 +1,31 @@
-#ifdef STORAGE //only compile when requested (when included in main file)
-#ifndef STORAGE_SRC //include once only
-#define STORAGE_SRC
+#include <arduino.h>
+#include "storage.h" //see notes herein
 
-// This project was originally written to use the AVR Arduino's EEPROM locs for persistent storage, and would frequently read it directly via readEEPROM(). I wanted to abstract that away, partly to add support for SAMD flash, and partly to protect against runtime errors due to EEPROM/flash failure.
-// This code serves those values out of a volatile array of bytes, which are backed by EEPROM/flash for the sole purpose of recovery after a power failure. It reads them from EEPROM/flash at startup, and sets them when changed.
+#ifdef __AVR__ //TODO is there a similar flag for SAMD
+  #include <EEPROM.h> //Arduino - GNU LPGL
+#else
+  #define FLASH_AS_EEPROM
+  #include <FlashAsEEPROM.h> //cmaglie's FlashStorage library - EEPROM mode - https://github.com/cmaglie/FlashStorage/
+  //#include <FlashStorage.h> //cmaglie's FlashStorage library - regular mode
+#endif
 
 #define STORAGE_SPACE 152 //number of bytes
 byte storageBytes[STORAGE_SPACE]; //the volatile array of bytes
 
-//#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
-#ifdef __AVR__
-  #include <EEPROM.h> //Arduino - GNU LPGL
-#endif
-
 void initStorage(){
-  //Read from real persistent storage into storageBytes
-  for(byte i=0; i<STORAGE_SPACE; i++){
-    #ifdef __AVR__
-      storageBytes[i] = EEPROM.read(i);
-    #else
-      storageBytes[i] = 0;
-    #endif
+  //If this is SAMD, write starting values if unused
+  #ifndef FLASH_AS_EEPROM
+  if(!EEPROM.isValid()){
+    for(byte i=0; i<STORAGE_SPACE; i++) EEPROM.update(i,0);
+    EEPROM.commit();
   }
+  #endif
+  //Read from real persistent storage into storageBytes
+  for(byte i=0; i<STORAGE_SPACE; i++) storageBytes[i] = EEPROM.read(i);
 }
 
 int readEEPROM(int loc, bool isInt){
-  //Read from the volatile array.
+  //Read from the volatile array, either a byte or a signed int
   //Must read int as 16-bit, since on SAMD int is 32-bit and negatives aren't read correctly
   if(isInt) return (int16_t)(storageBytes[loc]<<8)+storageBytes[loc+1];
   else return storageBytes[loc];
@@ -33,24 +33,17 @@ int readEEPROM(int loc, bool isInt){
 
 void writeEEPROM(int loc, int val, bool isInt){
   //Update the volatile array and the real persistent storage for posterity
+  //Eiither a byte or a signed int
   if(isInt){
     storageBytes[loc] = highByte(val);
     storageBytes[loc+1] = lowByte(val);
-    #ifdef __AVR__
-      EEPROM.update(loc,highByte(val));
-      EEPROM.update(loc+1,lowByte(val));
-    #else
-      //TODO
-    #endif
+    EEPROM.update(loc,highByte(val));
+    EEPROM.update(loc+1,lowByte(val));
   } else {
     storageBytes[loc] = val;
-    #ifdef __AVR__
-      EEPROM.update(loc,val);
-    #else
-      //TODO
-    #endif
+    EEPROM.update(loc,val);
   }
+  #ifdef FLASH_AS_EEPROM
+    EEPROM.commit(); //bad!! See TODO in storage.h
+  #endif
 }
-
-#endif
-#endif
