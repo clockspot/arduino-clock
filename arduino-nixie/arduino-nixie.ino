@@ -283,7 +283,10 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
       #ifdef NETWORK_SUPPORTED
       initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
       #endif
-    } else return; //ignore other controls
+      return;
+    } else {
+      return; //ignore other controls
+    }
   } //end if versionShowing
 
   //If the signal is going, any press should silence it
