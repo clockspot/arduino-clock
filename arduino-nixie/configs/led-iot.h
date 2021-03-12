@@ -32,7 +32,7 @@
 ///// Inputs /////
 //If using IMU motion sensor on Nano 33 IoT:
 //To use, tilt clock: backward=Sel, forward=Alt, left=Down, right=Up
-//This is mutually exclusive with the button/rotary controls. TODO make it possible to use both together by renaming the functions or abstracting basic input functionality
+//This is mutually exclusive with the button/rotary controls.
 #define INPUT_IMU
 //Which side of the IMU/Arduino faces clock front/side? 0=bottom, 1=top, 2=left side, 3=right side, 4=USB end, 5=butt end
 #define IMU_FRONT 0 //(UNDB: 0)

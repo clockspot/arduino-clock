@@ -3,7 +3,6 @@
 
 #ifndef __AVR__ //TODO better sensor
 //do stuff for wifinina
-#define NETWORK_SUPPORTED
 
 #include "network.h"
 #include <WiFiNINA.h>
@@ -33,10 +32,20 @@ WiFiServer server(80);
 #define NTP_MINFREQ 5000 //how long to enforce a wait between request starts (NIST requires at least 4sec between requests or will ban the client)
 #define NTPOK_THRESHOLD 3600000 //if no sync within 60 minutes, the time is considered stale
 
-//Declare a few functions so I can put them out of order
-//Placed here so I can avoid making header files for the moment
-void cueNTP();
-bool checkNTP();
+bool networkSupported(){ return true; }
+
+void initNetwork(){
+  Serial.println(F("Hello world from network.cpp"));
+  //Check status of wifi module up front
+  //if(WiFi.status()==WL_NO_MODULE){ Serial.println(F("Communication with WiFi module failed!")); while(true); }
+  //else if(WiFi.firmwareVersion()<WIFI_FIRMWARE_LATEST_VERSION) Serial.println(F("Please upgrade the firmware"));
+  networkStartWiFi();  
+}
+void cycleNetwork(){
+  checkClients();
+  checkNTP();
+  checkForWiFiStatusChange();
+}
 
 int statusLast;
 void checkForWiFiStatusChange(){
@@ -61,7 +70,7 @@ void checkForWiFiStatusChange(){
 
 void networkStartWiFi(){
   WiFi.end(); //if AP is going, stop it
-  if(wssid==F("")) return; //don't try to connect if there's no creds
+  if(wssid==F("")){ Serial.println(F("no start wifi")); return; } //don't try to connect if there's no creds
   checkForWiFiStatusChange(); //just for serial logging
   //Serial.print(millis(),DEC); Serial.println(F("blank display per start wifi"));
   blankDisplay(0,5,false); //I'm guessing if it hangs, nixies won't be able to display anyway
@@ -282,6 +291,11 @@ bool checkNTP(){ //Called on every cycle to see if there is an ntp response to h
     return true; //successfully got a time and set to it
   }
 } //end fn checkNTP
+
+void clearNTPSyncLast(){
+  //called when other code divorces displayed time from NTP sync
+  ntpSyncLast = 0;
+}
 
 unsigned long adminInputLast = 0; //for noticing when the admin page hasn't been interacted with in 2 minutes, so we can time it (and AP if applicable) out
 
@@ -878,16 +892,8 @@ void checkClients(){
   }
 }
 
-void initNetwork(){
-  //Check status of wifi module up front
-  //if(WiFi.status()==WL_NO_MODULE){ Serial.println(F("Communication with WiFi module failed!")); while(true); }
-  //else if(WiFi.firmwareVersion()<WIFI_FIRMWARE_LATEST_VERSION) Serial.println(F("Please upgrade the firmware"));
-  networkStartWiFi();  
-}
-void cycleNetwork(){
-  checkClients();
-  checkNTP();
-  checkForWiFiStatusChange();
-}
+#else
 
-#endif
+bool networkSupported(){ return false; }
+
+#endif //__AVR__ (network supported)

@@ -21,12 +21,12 @@ const bool vDev = 1;
 #if ENABLE_DATE_RISESET //this probably doesn't work, per the above, but ¯\_(ツ)_/¯
   #include <Dusk2Dawn.h> //DM Kishi - unlicensed - install in your Arduino IDE if needed - test without
 #endif
-#include "storage.h"; //for persistent storage - supports both AVR EEPROM and SAMD flash
+#include "storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash
 #include "dispNixie.h" //if DISP_NIXIE is defined in config - for a SN74141-multiplexed nixie array
 #include "dispMAX7219.h" //if DISP_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
 #include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
 #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
-#include "input.h"; //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU
+#include "input.h" //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU
 #include "network.h" //if not AVR – enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
 
 
@@ -155,10 +155,10 @@ unsigned int tempValDispLast = 0;
 ////////// Main code control //////////
 
 void setup(){
-  //Serial.begin(9600);
-  //#ifndef __AVR__ //SAMD only
-  //while(!Serial);
-  //#endif
+  Serial.begin(9600);
+  #ifndef __AVR__ //SAMD only
+  while(!Serial);
+  #endif
   rtcInit();
   initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
   byte changed = initEEPROM(false); //do a soft init to make sure vals in range
@@ -168,9 +168,7 @@ void setup(){
     versionShowing = 1;
     //skip network for now, since wifi connect hangs - we'll do it after version is done
   } else {
-    #ifdef NETWORK_SUPPORTED
-    initNetwork();
-    #endif
+    if(networkSupported()) initNetwork();
   }
   
   //Some settings need to be set to a fixed value per the configuration.
@@ -221,9 +219,7 @@ void loop(){
   checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
   millisApplyDrift();
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
-  #ifdef NETWORK_SUPPORTED
-  cycleNetwork();
-  #endif
+  if(networkSupported()) cycleNetwork();
   cycleTimer();
   cycleDisplay(displayDim,fnSetPg); //keeps the display hardware multiplexing cycle going
   cycleBacklight();
@@ -246,9 +242,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
     if(ctrl==CTRL_SEL && (evt==0 || evt==5)){ //SEL release or superlong hold
       if(evt==5){ initEEPROM(true); commitEEPROM(); } //superlong hold: reset EEPROM
       versionShowing = false; inputStop(); updateDisplay();
-      #ifdef NETWORK_SUPPORTED
-      initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
-      #endif
+      if(networkSupported()) initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
       return;
     } else {
       return; //ignore other controls
@@ -308,18 +302,18 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
     return;
   }
   
-  #ifdef NETWORK_SUPPORTED
-  //Short hold, Alt; or very long hold, Sel if no Alt: start admin
-  if((evt==2 && ctrl==CTRL_ALT)||(evt==4 && ctrl==CTRL_SEL && CTRL_ALT<=0)) {
-    networkStartAdmin();
-    return;
+  if(networkSupported()){
+    //Short hold, Alt; or very long hold, Sel if no Alt: start admin
+    if((evt==2 && ctrl==CTRL_ALT)||(evt==4 && ctrl==CTRL_SEL && CTRL_ALT<=0)) {
+      networkStartAdmin();
+      return;
+    }
+    //Super long hold, Alt, or Sel if no Alt: start AP (TODO would we rather it forget wifi?)
+    if(evt==5 && (ctrl==CTRL_ALT || (ctrl==CTRL_SEL && CTRL_ALT<=0))) {
+      networkStartAP();
+      return;
+    }
   }
-  //Super long hold, Alt, or Sel if no Alt: start AP (TODO would we rather it forget wifi?)
-  if(evt==5 && (ctrl==CTRL_ALT || (ctrl==CTRL_SEL && CTRL_ALT<=0))) {
-    networkStartAP();
-    return;
-  }
-  #endif
   
   if(fn < FN_OPTS) { //normal fn running/setting (not in settings menu)
 
@@ -410,15 +404,12 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
       else if(CTRL_ALT>0 && ctrl==CTRL_ALT) {
         //if soft power switch, we'll switch on release - but only if not held past activating settings page/AP
         if(ENABLE_SOFT_POWER_SWITCH && SWITCH_PIN>=0) {
-          if(evt==0
-            #ifdef NETWORK_SUPPORTED
-            && evtLast<2 //if holds are used to activate settings page/AP, do not switch. If not, switch no matter how long held.
-            #endif
-          ) switchPower(2);
+          //If holds are used to activate network stuff, and we've passed those thresholds, do not switch.
+          //Otherwise, switch no matter how long held.
+          if(evt==0 && !(networkSupported() && evtLast<2)) switchPower(2);
         }
-        #ifndef NETWORK_SUPPORTED
         //If neither soft power switch nor network support, this becomes our function preset
-        else {
+        else if(!networkSupported()) {
           //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
           //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
           if(evt==2) {
@@ -441,7 +432,6 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
             updateDisplay();
           }
         }
-        #endif
       } //end alt
     } //end fn running
 
@@ -460,9 +450,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
             case FN_TOD: //save in RTC
               if(fnSetValDid){ //but only if the value was actually changed
                 rtcSetTime(fnSetVal/60,fnSetVal%60,0);
-                #ifdef NETWORK_SUPPORTED
-                ntpSyncLast = 0;
-                #endif
+                if(networkSupported()) clearNTPSyncLast();
                 millisAtLastCheck = 0; //see ms()
                 calcSun();
                 isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),fnSetVal/60,true);
@@ -482,9 +470,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
                   case 3: //write year/month/date to RTC
                     rtcSetDate(fnSetValDate[0],fnSetValDate[1],fnSetVal,
                       dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal));
-                    #ifdef NETWORK_SUPPORTED
-                    ntpSyncLast = 0;
-                    #endif
+                    if(networkSupported()) clearNTPSyncLast();
                     calcSun();
                     isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,rtcGetHour(),true);
                     clearSet(); break;
@@ -752,9 +738,7 @@ bool initEEPROM(bool hard){
   if(hard) {
     rtcSetDate(2021,1,1,dayOfWeek(2021,1,1));
     rtcSetTime(0,0,0);
-    #ifdef NETWORK_SUPPORTED
-    ntpSyncLast = 0;
-    #endif
+    if(networkSupported()) clearNTPSyncLast();
   }
   //The vars outside the settings menu
   if(hard || readEEPROM(0,true)>1439) changed += writeEEPROM(0,420,true,false); //0-1: alarm at 7am
@@ -767,24 +751,24 @@ bool initEEPROM(bool hard){
   //8: TODO functions/pages enabled (bitmask)
   if(hard || readEEPROM(9,false)>1) changed += writeEEPROM(9,1,false,false); //9: NTP sync on
   if(hard) changed += writeEEPROM(15,0,false,false); //15: last known DST on flag - clear on hard reset (to match the reset RTC/auto DST/anti-poisoning settings to trigger midnight tubes as a tube test)
-  #ifdef NETWORK_SUPPORTED
-  if(hard){ //everything in here needs no range testing
-    //51-54 NTP server IP address (4 bytes) - e.g. from https://tf.nist.gov/tf-cgi/servers.cgi
-    //Serial.println(F("setting IP address in eeprom"));
-    //Serial.print(readEEPROM(51,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(52,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(53,false),DEC); Serial.print(F(".")); Serial.println(readEEPROM(54,false),DEC);
-    changed += writeEEPROM(51,129,false,false);
-    changed += writeEEPROM(52,  6,false,false);
-    changed += writeEEPROM(53, 15,false,false);
-    changed += writeEEPROM(54, 27,false,false);
-    //Serial.print(readEEPROM(51,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(52,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(53,false),DEC); Serial.print(F(".")); Serial.println(readEEPROM(54,false),DEC);
-    //55-86 Wi-Fi SSID (32 bytes)
-    //TODO
-    //87-150 Wi-Fi WPA passphrase/key or WEP key (64 bytes)
-    //TODO
-  }
-  //151 Wi-Fi WEP key index
-  if(hard || readEEPROM(151,false)>3) changed += writeEEPROM(151,0,false,false);
-  #endif
+  if(networkSupported()){
+    if(hard){ //everything in here needs no range testing
+      //51-54 NTP server IP address (4 bytes) - e.g. from https://tf.nist.gov/tf-cgi/servers.cgi
+      //Serial.println(F("setting IP address in eeprom"));
+      //Serial.print(readEEPROM(51,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(52,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(53,false),DEC); Serial.print(F(".")); Serial.println(readEEPROM(54,false),DEC);
+      changed += writeEEPROM(51,129,false,false);
+      changed += writeEEPROM(52,  6,false,false);
+      changed += writeEEPROM(53, 15,false,false);
+      changed += writeEEPROM(54, 27,false,false);
+      //Serial.print(readEEPROM(51,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(52,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(53,false),DEC); Serial.print(F(".")); Serial.println(readEEPROM(54,false),DEC);
+      //55-86 Wi-Fi SSID (32 bytes)
+      //TODO
+      //87-150 Wi-Fi WPA passphrase/key or WEP key (64 bytes)
+      //TODO
+    }
+    //151 Wi-Fi WEP key index
+    if(hard || readEEPROM(151,false)>3) changed += writeEEPROM(151,0,false,false);
+  } //end network supported
   //The vars inside the settings menu
   bool isInt = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
@@ -945,13 +929,11 @@ void checkRTC(bool force){
       // }
     }
     
-    #ifdef NETWORK_SUPPORTED
     //NTP cue at :59:00
-    if(readEEPROM(9,false) && rtcGetMinute()==59){
+    if(rtcGetMinute()==59 && networkSupported() && readEEPROM(9,false)){
       if(rtcGetSecond()==0) cueNTP();
       if(rtcGetSecond()==30 && ntpSyncAgo()>=30000) cueNTP(); //if at first you don't succeed...
     }
-    #endif
     
     //Strikes - only if fn=clock, not setting, not signaling/snoozing, not night/away. Setting 21 will be off if signal type is no good
     //The six pips
@@ -1418,9 +1400,7 @@ void updateDisplay(){
         editDisplay(hr, 0, 1, readEEPROM(19,false), true);
         editDisplay(rtcGetMinute(), 2, 3, true, true);
         //Serial.print(millis(),DEC); Serial.println(F("show display per regular (hours/mins at least)"));
-        #ifdef NETWORK_SUPPORTED
-        if(readEEPROM(9,false) && ntpSyncAgo()>=86400000){ blankDisplay(4,5,true); break; }
-        #endif
+        if(networkSupported() && readEEPROM(9,false) && ntpSyncAgo()>=86400000){ blankDisplay(4,5,true); break; }
         if(readEEPROM(18,false)==1) editDisplay(rtcGetDate(), 4, 5, readEEPROM(19,false), true); //date
         else editDisplay(rtcGetSecond(), 4, 5, true, true); //seconds
         break;

@@ -17,7 +17,7 @@ void initDisplay(){
   for(int i=0; i<NUM_MAX; i++) { lc.shutdown(i,false); lc.setIntensity(i,curBrightness); }
 }
 
-//TODO can we move this into flash?
+//TODO can we move this into flash with e.g. PROGMEM? or does that happen already?
 const char bignumWidth = 5;
 byte bignum[50]={ //First four digits - chicagolike 5x8
   B01111110, B11111111, B10000001, B11111111, B01111110, // 0
