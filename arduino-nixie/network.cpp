@@ -16,8 +16,14 @@
 //Needs to be able to save to persistent storage
 #include "storage.h"
 
-String wssid = "Riley";
-String wpass = "5802301644"; //wpa pass or wep key
+//Volatile vars that back up the wifi creds in EEPROM
+// 55-86 Wi-Fi SSID (32 bytes)
+// 87-150 Wi-Fi WPA passphrase/key or WEP key (64 bytes)
+// 151 Wi-Fi WEP key index (1 byte)
+//If the EEPROM ssid/pass are a full 32/64 chars, there won't be room for the termination character '\0', we'll add that when reading
+//TODO consider making these char arrays - but the memory usage on SAMD isn't bad as-is
+String wssid = "";
+String wpass = ""; //wpa pass or wep key
 byte wki = 0; //wep key index - 0 if using wpa
 
 unsigned int localPort = 2390; // local port to listen for UDP packets
@@ -39,7 +45,15 @@ void initNetwork(){
   //Check status of wifi module up front
   //if(WiFi.status()==WL_NO_MODULE){ Serial.println(F("Communication with WiFi module failed!")); while(true); }
   //else if(WiFi.firmwareVersion()<WIFI_FIRMWARE_LATEST_VERSION) Serial.println(F("Please upgrade the firmware"));
-  networkStartWiFi();  
+  //Get wifi credentials out of EEPROM - see wssid/wpass definitions above
+  //Read until a termination character is reached
+  for(byte i=0; i<32; i++){ if(readEEPROM(55+i,false)=='\0') break; wssid.concat((char)(readEEPROM(55+i,false))); } //Read in the SSID
+  for(byte i=0; i<64; i++){ if(readEEPROM(87+i,false)=='\0') break; wpass.concat((char)(readEEPROM(87+i,false))); } //Read in the pass
+  wki = readEEPROM(151,false); //Read in the wki
+  Serial.print(F("wssid=")); Serial.println(wssid);
+  Serial.print(F("wpass=")); Serial.println(wpass);
+  Serial.print(F("wki=")); Serial.println(wki);
+  networkStartWiFi();
 }
 void cycleNetwork(){
   checkClients();
@@ -130,7 +144,7 @@ unsigned long ntpSyncAgo(){
 
 void cueNTP(){
   // We don't want to let other code startNTP() directly since it's normally asynchronous, and that other code may delay the time until we can check the result. Exception is forced call from admin page, which calls startNTP() synchronously.
-  ntpCued = true;
+  if(readEEPROM(9,false)) ntpCued = true;
 }
 
 int startNTP(bool synchronous){ //Called at intervals to check for ntp time
@@ -422,7 +436,7 @@ void checkClients(){
           
         client.print(F("<li id='ntpserverli' style='display: ")); if(readEEPROM(9,false)==0) client.print(F("none")); else client.print(F("block")); client.print(F(";'><label>NTP server</label><input type='text' id='ntpip' onchange='promptsave(\"ntpip\")' onkeyup='promptsave(\"ntpip\")' onblur='unpromptsave(\"ntpip\"); save(this)' value='")); client.print(readEEPROM(51,false),DEC); client.print(F(".")); client.print(readEEPROM(52,false),DEC); client.print(F(".")); client.print(readEEPROM(53,false),DEC); client.print(F(".")); client.print(readEEPROM(54,false),DEC); client.print(F("' />")); client.print(F(" <a id='ntpipsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'><a href='https://en.wikipedia.org/wiki/IPv4#Addressing' target='_blank'>IPv4</a> address, e.g. one of <a href='https://tf.nist.gov/tf-cgi/servers.cgi' target='_blank'>NIST's time servers</a></span></li>"));
         
-        client.print(F("<li><label>Current time</label><input type='number' id='todh' onchange='promptsave(\"tod\")' onkeyup='promptsave(\"tod\")' onblur='unpromptsave(\"tod\"); savetod(\"tod\")' min='0' max='23' step='1' value='")); client.print(rtcGetHour(),DEC); client.print(F("' />&nbsp;:&nbsp;<input type='number' id='todm' onchange='promptsave(\"tod\")' onkeyup='promptsave(\"tod\")' onblur='unpromptsave(\"tod\"); savetod(\"tod\")' min='0' max='59' step='1' value='")); client.print(rtcGetMinute(),DEC); client.print(F("' /><input type='hidden' id='tod' /> <a id='todsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>24-hour format. Seconds will reset to 0 when saved.</span></li>"));
+        client.print(F("<li><label>Current time</label><input type='number' id='curtodh' onchange='promptsave(\"curtod\")' onkeyup='promptsave(\"curtod\")' onblur='unpromptsave(\"curtod\"); savetod(\"curtod\")' min='0' max='23' step='1' value='")); client.print(rtcGetHour(),DEC); client.print(F("' />&nbsp;:&nbsp;<input type='number' id='curtodm' onchange='promptsave(\"curtod\")' onkeyup='promptsave(\"curtod\")' onblur='unpromptsave(\"curtod\"); savetod(\"curtod\")' min='0' max='59' step='1' value='")); client.print(rtcGetMinute(),DEC); client.print(F("' /><input type='hidden' id='curtod' /> <a id='curtodsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>24-hour format. Seconds will reset to 0 when saved.</span></li>"));
         
         client.print(F("<li><label>Time format</label><select id='b16' onchange='save(this)'>")); for(char i=1; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(16,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 1: client.print(F("12-hour")); break;
@@ -760,7 +774,7 @@ void checkClients(){
         //client.print(F(""));
       } //end get
       else { //requestType==2 - handle what was POSTed
-        String clientReturn = "ok"; //To return an error, set it here. An empty response generates "Error".
+        bool clientReturn = false; //Mark true when sending an error. If none, "ok" is sent at end. If nothing sent (crash), client displays generic error.
         //client.print(currentLine);
         //syncfreq=hr
         //syncfreq=min
@@ -775,13 +789,12 @@ void checkClients(){
           wpass = currentLine.substring(startPos,endPos);
           startPos = endPos+5;
           wki = currentLine.substring(startPos).toInt();
-            // client.print(F(" wssid="));
-            // client.print(wssid);
-            // client.print(F(" wpass="));
-            // client.print(wpass);
-            // client.print(F(" wki="));
-            // client.print(wki);
-            // client.println();
+          //Persistent storage - see wssid/wpass definitions above
+          for(byte i=0; i<97; i++) writeEEPROM(55+i,0,false,false); //Clear out the old values (32+64+1)
+          for(byte i=0; i<wssid.length(); i++) writeEEPROM(55+i,wssid[i],false,false); //Write in the SSID
+          for(byte i=0; i<wpass.length(); i++) writeEEPROM(87+i,wpass[i],false,false); //Write in the pass
+          writeEEPROM(151,wki,false,false); //Write in the wki
+          commitEEPROM(); //commit all the above
           requestType = 3; //triggers an admin restart after the client is closed, below
         } else if(currentLine.startsWith(F("ntpip"))){
           //e.g. ntpip=192.168.1.255
@@ -792,22 +805,24 @@ void checkClients(){
             ntpip[i] = octet; startPos = endPos+1;
             if(ntpip[i]!=octet){ parseOK = false; break; }
           }
-          if(!parseOK) clientReturn = "Error: invalid format";
+          if(!parseOK) { clientReturn = true; client.print(F("Error: invalid format")); }
           else for(byte i=0; i<4; i++) writeEEPROM(51+i,ntpip[i],false);
           //Serial.print(F("IP should be ")); Serial.print(ntpip[0],DEC); Serial.print(F(".")); Serial.print(ntpip[1],DEC); Serial.print(F(".")); Serial.print(ntpip[2],DEC); Serial.print(F(".")); Serial.println(ntpip[3],DEC);
           //Serial.print(F("IP saved as ")); Serial.print(readEEPROM(51,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(52,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(53,false),DEC); Serial.print(F(".")); Serial.println(readEEPROM(54,false),DEC);
         } else if(currentLine.startsWith(F("syncnow"))){
+          //TODO this doesn't seem to return properly if the wifi was changed after the clock was booted - it syncs, but just hangs
           int ntpCode = startNTP(true);
           switch(ntpCode){
-            case -1: clientReturn = "Error: no Wi-Fi credentials."; break;
-            case -2: clientReturn = "Error: not connected to Wi-Fi."; break;
-            case -3: clientReturn = "Error: NTP response pending. Please try again shortly."; break; //should never see this one on the web since it's synchronous and the client blocks
-            case -4: clientReturn = "Error: too many sync requests in the last "; clientReturn += (NTP_MINFREQ/1000); clientReturn += " seconds. Please try again shortly."; break;
-            case -5: clientReturn = "Error: no NTP response received. Please confirm server."; break;
-            case 0: clientReturn = "synced"; break;
-            default: clientReturn = "Error: unhandled NTP code"; break;
+            case -1: client.print(F("Error: no Wi-Fi credentials.")); break;
+            case -2: client.print(F("Error: not connected to Wi-Fi.")); break;
+            case -3: client.print(F("Error: NTP response pending. Please try again shortly.")); break; //should never see this one on the web since it's synchronous and the client blocks
+            case -4: client.print(F("Error: too many sync requests in the last ")); client.print(NTP_MINFREQ/1000,DEC); client.print(F(" seconds. Please try again shortly.")); break;
+            case -5: client.print(F("Error: no NTP response received. Please confirm server.")); break;
+            case 0: client.print(F("synced")); break;
+            default: client.print(F("Error: unhandled NTP code")); break;
           }
-        } else if(currentLine.startsWith(F("tod"))){
+          clientReturn = true;
+        } else if(currentLine.startsWith(F("curtod"))){
           int tod = currentLine.substring(7).toInt();
           rtcSetTime(tod/60,tod%60,0);
           ntpSyncLast = 0;
@@ -876,7 +891,7 @@ void checkClients(){
           }
         }
         updateDisplay();
-        client.print(clientReturn);
+        if(!clientReturn) client.print(F("ok"));
       } //end post
     } //end if requestType
     

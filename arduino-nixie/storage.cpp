@@ -13,6 +13,7 @@
 
 #define STORAGE_SPACE 152 //number of bytes
 byte storageBytes[STORAGE_SPACE]; //the volatile array of bytes
+#define WRITE_TO_EEPROM 1 //1 for production
 
 void initStorage(){
   //If this is SAMD, write starting values if unused
@@ -22,8 +23,10 @@ void initStorage(){
   Serial.print(F("16=")); Serial.println(EEPROM.read(16));
   if(!EEPROM.isValid() || EEPROM.read(16)==0 || EEPROM.read(16)==255){ //invalid eeprom, wipe it out
     for(byte i=0; i<STORAGE_SPACE; i++) EEPROM.update(i,0);
-    EEPROM.commit();
-    Serial.println(F("WARNING: FLASH EEPROM COMMIT per init"));
+    if(WRITE_TO_EEPROM){
+      EEPROM.commit();
+      Serial.println(F("WARNING: FLASH EEPROM COMMIT per init"));
+    }
   }
   #endif
   //Read from real persistent storage into storageBytes
@@ -56,7 +59,7 @@ bool writeEEPROM(int loc, int val, bool isInt, bool commit){
     EEPROM.update(loc,val);
   }
   #ifdef FLASH_AS_EEPROM
-    if(commit){
+    if(commit && WRITE_TO_EEPROM){
       EEPROM.commit(); //bad!! See TODO in storage.h
       Serial.println(F("WARNING: FLASH EEPROM COMMIT per write"));
     }
@@ -65,7 +68,9 @@ bool writeEEPROM(int loc, int val, bool isInt, bool commit){
 }
 void commitEEPROM(){
   #ifdef FLASH_AS_EEPROM
+  if(WRITE_TO_EEPROM){
     EEPROM.commit(); //bad!! See TODO in storage.h
     Serial.println(F("WARNING: FLASH EEPROM COMMIT by request"));
+  }
   #endif
 }

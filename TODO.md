@@ -9,10 +9,11 @@
 	* wi-fi credential save fails if keys are part of the string?
 	* DST calc may behave unpredictably between 1–2am on fallback day
 	* Redo NTP on startup if it failed (networkStartWifi())
-	* Handle 2038+ epochs
+	* Make [2036-ready](https://en.wikipedia.org/wiki/Year_2038_problem#Network_Time_Protocol_timestamps)
 	* Notice when a leap second is coming and handle it
 	* When setting page is used to set day counter and date, and the month changes, set date max. For 2/29 it should just do 3/1 probably.
   * Weather support
+  * Stop using strings? There is plenty of RAM available on SAMD I think
 * Input: support other IMU orientations
 * When day counter is set to count up from 12/31, override to display 365/366 on that date
 * Bitmask to enable/disable features?

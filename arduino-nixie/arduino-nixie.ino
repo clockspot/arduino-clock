@@ -749,7 +749,6 @@ bool initEEPROM(bool hard){
   if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) changed += writeEEPROM(6,31,false,false); //6: ...31st. (This gives the day of the year)
   if(hard) changed += writeEEPROM(7,0,false,false); //7: Alt function preset
   //8: TODO functions/pages enabled (bitmask)
-  if(hard || readEEPROM(9,false)>1) changed += writeEEPROM(9,1,false,false); //9: NTP sync on
   if(hard) changed += writeEEPROM(15,0,false,false); //15: last known DST on flag - clear on hard reset (to match the reset RTC/auto DST/anti-poisoning settings to trigger midnight tubes as a tube test)
   if(networkSupported()){
     if(hard){ //everything in here needs no range testing
@@ -762,10 +761,11 @@ bool initEEPROM(bool hard){
       changed += writeEEPROM(54, 27,false,false);
       //Serial.print(readEEPROM(51,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(52,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(53,false),DEC); Serial.print(F(".")); Serial.println(readEEPROM(54,false),DEC);
       //55-86 Wi-Fi SSID (32 bytes)
-      //TODO
       //87-150 Wi-Fi WPA passphrase/key or WEP key (64 bytes)
-      //TODO
+      for(byte i=0; i<96; i++) changed += writeEEPROM(55+i,0,false,false); //Clear out the old values (32+64+1)
     }
+    //9 NTP sync enabled
+    if(hard || readEEPROM(9,false)>1) changed += writeEEPROM(9,0,false,false);
     //151 Wi-Fi WEP key index
     if(hard || readEEPROM(151,false)>3) changed += writeEEPROM(151,0,false,false);
   } //end network supported
@@ -930,7 +930,7 @@ void checkRTC(bool force){
     }
     
     //NTP cue at :59:00
-    if(rtcGetMinute()==59 && networkSupported() && readEEPROM(9,false)){
+    if(rtcGetMinute()==59 && networkSupported()){
       if(rtcGetSecond()==0) cueNTP();
       if(rtcGetSecond()==30 && ntpSyncAgo()>=30000) cueNTP(); //if at first you don't succeed...
     }
