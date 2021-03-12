@@ -259,7 +259,6 @@ bool checkNTP(){ //Called on every cycle to see if there is an ntp response to h
     //finally set the rtc
     rtcSetDate(y, m, d, dayOfWeek(y,m,d));
     rtcSetTime(hm/60,hm%60,s);
-    millisAtLastCheck = 0; //see ms()
     calcSun();
   
     // Serial.print(F("RTC set to "));
@@ -283,12 +282,11 @@ void networkStartAdmin(){
   adminInputLast = millis();
   if(WiFi.status()!=WL_CONNECTED){
     networkStartAP();
-    tempValDispQueue[0] = 7777; //display to user
-    for(char i=1; i<=3; i++) tempValDispQueue[i] = 0;
+    tempDisplay(7777); //display to user
     //Serial.println(F("Admin started at 7.7.7.7"));
   } else { //use existing wifi
     IPAddress theip = WiFi.localIP();
-    for(char i=0; i<=3; i++) tempValDispQueue[i] = theip[i]; //display to user
+    tempDisplay(theip[0],theip[1],theip[2],theip[3]); //display to user
     //Serial.print(F("Admin started at "));
     //Serial.println(theip);
   }
@@ -403,7 +401,7 @@ void checkClients(){
           
         client.print(F("<li id='ntpserverli' style='display: ")); if(readEEPROM(9,false)==0) client.print(F("none")); else client.print(F("block")); client.print(F(";'><label>NTP server</label><input type='text' id='ntpip' onchange='promptsave(\"ntpip\")' onkeyup='promptsave(\"ntpip\")' onblur='unpromptsave(\"ntpip\"); save(this)' value='")); client.print(readEEPROM(51,false),DEC); client.print(F(".")); client.print(readEEPROM(52,false),DEC); client.print(F(".")); client.print(readEEPROM(53,false),DEC); client.print(F(".")); client.print(readEEPROM(54,false),DEC); client.print(F("' />")); client.print(F(" <a id='ntpipsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'><a href='https://en.wikipedia.org/wiki/IPv4#Addressing' target='_blank'>IPv4</a> address, e.g. one of <a href='https://tf.nist.gov/tf-cgi/servers.cgi' target='_blank'>NIST's time servers</a></span></li>"));
         
-        client.print(F("<li><label>Current time</label><input type='number' id='curtodh' onchange='promptsave(\"curtod\")' onkeyup='promptsave(\"curtod\")' onblur='unpromptsave(\"curtod\"); savetod(\"curtod\")' min='0' max='23' step='1' value='")); client.print(rtcGetHour(),DEC); client.print(F("' />&nbsp;:&nbsp;<input type='number' id='curtodm' onchange='promptsave(\"curtod\")' onkeyup='promptsave(\"curtod\")' onblur='unpromptsave(\"curtod\"); savetod(\"curtod\")' min='0' max='59' step='1' value='")); client.print(rtcGetMinute(),DEC); client.print(F("' /><input type='hidden' id='curtod' /> <a id='curtodsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>24-hour format. Seconds will reset to 0 when saved.</span></li>"));
+        client.print(F("<li><label>Current time</label><input type='number' id='todh' onchange='promptsave(\"tod\")' onkeyup='promptsave(\"tod\")' onblur='unpromptsave(\"tod\"); savetod(\"tod\")' min='0' max='23' step='1' value='")); client.print(rtcGetHour(),DEC); client.print(F("' />&nbsp;:&nbsp;<input type='number' id='todm' onchange='promptsave(\"tod\")' onkeyup='promptsave(\"tod\")' onblur='unpromptsave(\"tod\"); savetod(\"tod\")' min='0' max='59' step='1' value='")); client.print(rtcGetMinute(),DEC); client.print(F("' /><input type='hidden' id='tod' /> <a id='todsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>24-hour format. Seconds will reset to 0 when saved.</span></li>"));
         
         client.print(F("<li><label>Time format</label><select id='b16' onchange='save(this)'>")); for(char i=1; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(16,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 1: client.print(F("12-hour")); break;
@@ -424,10 +422,6 @@ void checkClients(){
           default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>The weekday is displayed as a number from 0 (Sunday) to 6 (Saturday). Four-digit displays will show only the first two values in each of these options.</span></li>"));
 
         //TODO Day count enabled BITMASK
-            // const unsigned int FN_TIMER = 1<<0; //1
-            // const unsigned int FN_DAYCOUNT = 1<<1; //2
-            // const unsigned int FN_SUN = 1<<2; //4
-            // const unsigned int FN_WEATHER = 1<<3; //8
         //Function preset ???????
         //TODO leap second support?
         
@@ -498,13 +492,13 @@ void checkClients(){
         #if SHOW_IRRELEVANT_OPTIONS || (ENABLE_ALARM_FN && ((PIEZO_PIN>=0)+(SWITCH_PIN>=0)+(PULSE_PIN>=0))>0)
         client.print(F("<li><h3>Alarm</h3></li>"));
         
-        client.print(F("<li><label>Alarm is&hellip;</label><select id='alm' onchange='save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if((i<2 && readEEPROM(2,false)==i) || alarmSkip) client.print(F(" selected")); client.print(F(">")); switch(i){
+        client.print(F("<li><label>Alarm is&hellip;</label><select id='alm' onchange='save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(getAlarmState()==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("Off (0)")); break;
-          case 1: client.print(F("On (1)")); break;
-          case 2: client.print(F("On, but skip next (01)")); break;
+          case 1: client.print(F("On, but skip next (01)")); break;
+          case 2: client.print(F("On (1)")); break;
           default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
         
-        client.print(F("<li><label>Alarm time</label><input type='number' id='almtodh' onchange='promptsave(\"almtod\")' onkeyup='promptsave(\"almtod\")' onblur='unpromptsave(\"almtod\"); savetod(\"almtod\")' min='0' max='23' step='1' value='")); client.print(readEEPROM(0,true)/60,DEC); client.print(F("' />&nbsp;:&nbsp;<input type='number' id='almtodm' onchange='promptsave(\"almtod\")' onkeyup='promptsave(\"almtod\")' onblur='unpromptsave(\"almtod\"); savetod(\"almtod\")' min='0' max='59' step='1' value='")); client.print(readEEPROM(0,true)%60,DEC); client.print(F("' /><input type='hidden' id='almtod' /> <a id='almtodsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>24-hour format.</span></li>"));
+        client.print(F("<li><label>Alarm time</label><input type='number' id='almtimeh' onchange='promptsave(\"almtime\")' onkeyup='promptsave(\"almtime\")' onblur='unpromptsave(\"almtime\"); savetod(\"almtime\")' min='0' max='23' step='1' value='")); client.print(readEEPROM(0,true)/60,DEC); client.print(F("' />&nbsp;:&nbsp;<input type='number' id='almtimem' onchange='promptsave(\"almtime\")' onkeyup='promptsave(\"almtime\")' onblur='unpromptsave(\"almtime\"); savetod(\"almtime\")' min='0' max='59' step='1' value='")); client.print(readEEPROM(0,true)%60,DEC); client.print(F("' /><input type='hidden' id='almtime' /> <a id='almtimesave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>24-hour format.</span></li>"));
         
         #if SHOW_IRRELEVANT_OPTIONS || ENABLE_ALARM_AUTOSKIP
         client.print(F("<li><label>Auto-skip</label><select id='b23' onchange='save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(23,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
@@ -570,7 +564,7 @@ void checkClients(){
         #if SHOW_IRRELEVANT_OPTIONS || ENABLE_TIMER_FN
         client.print(F("<li><h3>Chrono/Timer</h3></li>"));
         
-        client.print(F("<li><label>Timer runout</label><select id='runout' onchange='save(this)'>")); for(char i=0; i<=3; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(((timerState>>2)&3)==i) client.print(F(" selected")); client.print(F(">")); switch(i){ //00 stop, 01 repeat, 10 chrono, 11 chrono short signal
+        client.print(F("<li><label>Timer runout</label><select id='runout' onchange='save(this)'>")); for(char i=0; i<=3; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(((getTimerState()>>2)&3)==i) client.print(F(" selected")); client.print(F(">")); switch(i){ //00 stop, 01 repeat, 10 chrono, 11 chrono short signal
           case 0: client.print(F("Stop, long signal")); break;
           case 1: client.print(F("Repeat, short signal")); break;
           case 2: client.print(F("Start chrono, long signal")); break;
@@ -792,33 +786,31 @@ void checkClients(){
             case 0: clientReturn = "synced"; break;
             default: clientReturn = "Error: unhandled NTP code"; break;
           }
-        } else if(currentLine.startsWith(F("curtod"))){
-          int curtod = currentLine.substring(7).toInt();
-          rtcSetTime(curtod/60,curtod%60,0);
+        } else if(currentLine.startsWith(F("tod"))){
+          int tod = currentLine.substring(7).toInt();
+          rtcSetTime(tod/60,tod%60,0);
           ntpSyncLast = 0;
-          goToFn(fnIsTime);
+          goToFn(FN_TOD);
         } else if(currentLine.startsWith(F("curdatey"))){
           rtcSetDate(currentLine.substring(9).toInt(), rtcGetMonth(), rtcGetDate(), dayOfWeek(currentLine.substring(9).toInt(), rtcGetMonth(), rtcGetDate())); //TODO what about month exceed
           ntpSyncLast = 0;
-          goToFn(fnIsDate); fnPg = 254;
+          goToFn(FN_CAL,254);
         } else if(currentLine.startsWith(F("curdatem"))){
           rtcSetDate(rtcGetYear(), currentLine.substring(9).toInt(), rtcGetDate(), dayOfWeek(rtcGetYear(), currentLine.substring(9).toInt(), rtcGetDate())); //TODO what about month exceed
-          goToFn(fnIsDate); fnPg = 254;
+          goToFn(FN_CAL,254);
         } else if(currentLine.startsWith(F("curdated"))){
           rtcSetDate(rtcGetYear(), rtcGetMonth(), currentLine.substring(9).toInt(), dayOfWeek(rtcGetYear(), rtcGetMonth(), currentLine.substring(9).toInt())); //TODO what about month exceed
-          goToFn(fnIsDate); fnPg = 254;
-        } else if(currentLine.startsWith(F("almtod"))){
+          goToFn(FN_CAL,254);
+        } else if(currentLine.startsWith(F("almtime"))){
           writeEEPROM(0,currentLine.substring(7).toInt(),true);
-          goToFn(fnIsAlarm);
-        } else if(currentLine.startsWith(F("alm"))){ //two settings (alarm on, alarm skip) with one control. Compare to switchAlarm()
-          char alm = currentLine.substring(4).toInt();
-          if(alm<2){ writeEEPROM(2,alm,false); alarmSkip = false; quickBeep(alm?76:64); }
-          else     { writeEEPROM(2,1,false);   alarmSkip = true;  quickBeep(71); }
-          goToFn(fnIsAlarm);
+          goToFn(FN_ALARM);
+        } else if(currentLine.startsWith(F("alm"))){ //two settings (alarm on, alarm skip) with one control. Compare to switchAlarmState()
+          setAlarmState(currentLine.substring(4).toInt());
+          goToFn(FN_ALARM);
         } else if(currentLine.startsWith(F("runout"))){
           char runout = currentLine.substring(7).toInt();
-          if(runout/2) timerState |= (1<<3); else timerState &= ~(1<<3); //chrono bit
-          if(runout%2) timerState |= (1<<2); else timerState &= ~(1<<2); //restart bit
+          setTimerState(3,runout/2); //chrono bit
+          setTimerState(2,runout%2); //restart bit
         } else if(currentLine.startsWith(F("nighttod"))){
           writeEEPROM(28,currentLine.substring(9).toInt(),true);
         } else if(currentLine.startsWith(F("morntod"))){
@@ -837,31 +829,29 @@ void checkClients(){
           //do special stuff for some of them
           switch(key){
             case 4: case 5: case 6: //day counter
-              //in lieu of actually switching to fnIsDate, so that only this value is seen - compare to ino
-              if(readEEPROM(4,false)) tempValDispQueue[0] = dateComp(rtcGetYear(),rtcGetMonth(),rtcGetDate(), readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)-1);
+              //in lieu of actually switching to FN_CAL, so that only this value is seen - compare to ino
+              if(readEEPROM(4,false)) tempDisplay(dateComp(rtcGetYear(),rtcGetMonth(),rtcGetDate(), readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)-1));
               findFnAndPageNumbers(); //to include or exclude the day counter from the calendar function
               break;
             case 14: //utc offset
               cueNTP(); break;
             case 17: //date format
-              goToFn(fnIsDate); fnPg = 254; break;
+              goToFn(FN_CAL,254); break;
             case 22: //auto dst
               isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),true); break;
             case 39: case 47: //alarm pitch/pattern
-              goToFn(fnIsAlarm); break;
+              goToFn(FN_ALARM); break;
             case 40: case 48: //timer pitch/pattern
-              goToFn(fnIsTimer); break;
+              goToFn(FN_TIMER); break;
             case 41: case 49: //strike pitch/pattern
-              goToFn(fnIsTime); break;
+              goToFn(FN_TOD); break;
             default: break;
           }
           if(key==39 || key==40 || key==41){ //play beeper pitch sample - compare to updateDisplay()
-            if(PIEZO_PIN>=0) { noTone(PIEZO_PIN); tone(PIEZO_PIN, getHz(val), 100); }
+            quickBeep(val);
           }
           if(key==47 || key==48 || key==49){ //play beeper pattern sample - compare to updateDisplay()
-            signalPattern = fnSetVal;
-            signalSource = (key==49?fnIsTime:(key==48?fnIsTimer:fnIsAlarm));
-            signalStart(-1,1); //Play a sample using the above source and pattern
+            quickBeepPattern((key==49?FN_TOD:(key==48?FN_TIMER:FN_ALARM)),val);
           }
         }
         updateDisplay();

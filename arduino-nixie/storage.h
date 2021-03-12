@@ -8,6 +8,7 @@
 
 void initStorage(); //Read from real persistent storage into storageBytes
 int readEEPROM(int loc, bool isInt); //Read from the volatile array
-void writeEEPROM(int loc, int val, bool isInt); //Update the volatile array and the real persistent storage for posterity
+bool writeEEPROM(int loc, int val, bool isInt, bool commit=1); //Update the volatile array and the real persistent storage for posterity
+void commitEEPROM();
 
 #endif //STORAGE_H

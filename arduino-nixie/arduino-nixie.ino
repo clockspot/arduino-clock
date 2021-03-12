@@ -3,17 +3,35 @@
 // Written to support RLB Designs’ Universal Nixie Driver Board
 // Inspired by original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
 
-////////// Hardware configuration //////////
-//Include the config file that matches your hardware setup. If needed, duplicate an existing one.
-
-//#include "configs/led-iot.h"
-#include "configs/undb-v9.h"
+#include "arduino-nixie.h";
 
 ////////// Software version //////////
 const byte vMajor = 1;
 const byte vMinor = 9;
 const byte vPatch = 0;
 const bool vDev = 1;
+
+////////// Includes //////////
+
+// These modules are used per the available hardware and features enabled in the config file.
+// The disp and rtc options are mutually exclusive and define the same functions.
+// Because the Arduino IDE preprocessor seems to #include without regard to #if blocks (see https://forum.arduino.cc/index.php?topic=134226.0), I don't have #ifdef blocks around these header file inclusions. Instead I simply include them all, and have #ifdef blocks around the corresponding cpp code so only the included code is compiled. It's dumb, but it works.
+
+#if ENABLE_DATE_RISESET //this probably doesn't work, per the above, but ¯\_(ツ)_/¯
+  #include <Dusk2Dawn.h> //DM Kishi - unlicensed - install in your Arduino IDE if needed - test without
+#endif
+#include "storage.h"; //supports both AVR EEPROM and SAMD flash
+#include "dispNixie.cpp" //for a SN74141-multiplexed nixie array
+#include "dispMAX7219.cpp" //for a SPI MAX7219 8x8 LED array
+
+#include "rtcDS3231.h" //for an I2C DS3231 RTC module
+#include "rtcMillis.h" //for a fake RTC based on millis
+
+#define INPUT
+#include "input.cpp"; //for Sel/Alt/Up/Dn - uses rtc functions
+#define NETWORK
+#include "network.cpp" //for 33 IoT WiFiNINA - uses display, rtc, and storage functions
+
 
 ////////// Variables and storage //////////
 
@@ -32,10 +50,10 @@ These ones are set outside the settings menu (defaults defined in initEEPROM() w
   6 Day count date
   7 Function preset (done by Alt when not power-switching)
   8 Functions/pages enabled (bitmask, dynamic) TODO
-    const unsigned int FN_TIMER = 1<<0; //1
-    const unsigned int FN_DAYCOUNT = 1<<1; //2
-    const unsigned int FN_SUN = 1<<2; //4
-    const unsigned int FN_WEATHER = 1<<3; //8
+    const unsigned int FN_ENAB_TIMER = 1<<0; //1
+    const unsigned int FN_ENAB_DAYCOUNT = 1<<1; //2
+    const unsigned int FN_ENAB_SUN = 1<<2; //4
+    const unsigned int FN_ENAB_WEATHER = 1<<3; //8
   9 NTP sync on
   15 DST on (last known state - set indirectly via time sets and such)
   51-54 NTP server IP address (4 bytes)
@@ -94,14 +112,6 @@ const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 2,88, 5,60, 1,  2,88, 5,
 //The rest of these variables are not backed by persistent storage, so they are regular named vars.
 
 // Functions and pages
-// Unique IDs - see also fnScroll
-const byte fnIsTime = 0; //time of day
-const byte fnIsDate = 1; //date, with optional day counter and sunrise/sunset pages
-const byte fnIsAlarm = 2; //alarm time
-const byte fnIsTimer = 3; //countdown timer and chronograph
-const byte fnIsTemp = 4; //temperature per rtc – will likely read high
-const byte fnIsTest = 5; //simply cycles all digits for nixie tube testing
-const byte fnOpts = 201; //fn values from here to 255 correspond to settings in the settings menu
 byte fn = 0; //currently displayed fn per above
 byte fnPg = 0; //allows a function to have multiple pages
 byte fnSetPg = 0; //whether this function is currently being set, and which page it's on
@@ -122,7 +132,7 @@ byte fnDateWeathernext = 255;
 
 // Volatile running values used throughout the code. (Others are defined right above the method that uses them)
 bool alarmSkip = 0;
-byte signalSource = 0; //which function triggered the signal - fnIsTime (chime), fnIsAlarm, or fnIsTimer
+byte signalSource = 0; //which function triggered the signal - FN_TOD (chime), FN_ALARM, or FN_TIMER
 byte signalPattern = 0; //the pattern for that source
 word signalRemain = 0; //alarm/timer signal timeout counter, seconds
 word snoozeRemain = 0; //snooze timeout counter, seconds
@@ -143,58 +153,18 @@ int tempValDispQueue[4];
 const int tempValDispDur = 2500; //ms
 unsigned int tempValDispLast = 0;
 
-//Declare a few functions from the main code that are used in the includes below
-//Placed here so I can avoid making header files for the moment
-byte dayOfWeek(word y, byte m, byte d); //used by network
-int daysInYear(word y); //used by network
-byte daysInMonth(word y, byte m); //used by network, rtcMillis
-bool isDSTByHour(int y, byte m, byte d, byte h, bool setFlag); //used by network
-void calcSun(); //used by rtc
-void ctrlEvt(byte ctrl, byte evt, byte evtLast); //used by input
-void updateDisplay(); //used by network
-void goToFn(byte thefn); //used by network
-int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp); //used by network
-void findFnAndPageNumbers(); //used by network
-word getHz(byte note); //used by network (play beeper pitch sample)
-void signalStart(byte sigFn, byte sigDur); //used by network (play beeper pattern sample)
-void quickBeep(int pitch); //used by network (alarm switch change)
-
 #define SHOW_IRRELEVANT_OPTIONS 0 //whether to show everything in settings menu and page (network)
-
-////////// Includes //////////
-
-#if ENABLE_DATE_RISESET
-  #include <Dusk2Dawn.h> //DM Kishi - unlicensed - install in your Arduino IDE if needed
-#endif
-
-//These cpp files contain code that is conditionally included
-//based on the available hardware and settings in the config file.
-//TODO revisit - This is probably not the right way to do this –
-//these are being compiled (or not) as part of this file,
-//rather than independently, with header files included here –
-//but it seems to work, as long as they don't reference later functions.
-//The disp and rtc options are mutually exclusive.
-#include "storage.h"; //supports both AVR EEPROM and SAMD flash
-#include "dispNixie.cpp" //for a SN74141-multiplexed nixie array
-#include "dispMAX7219.cpp" //for a SPI MAX7219 8x8 LED array
-#include "rtcDS3231.cpp" //for an I2C DS3231 RTC module
-#include "rtcMillis.cpp" //for a fake RTC based on millis
-#define INPUT
-#include "input.cpp"; //for Sel/Alt/Up/Dn - uses rtc functions
-#define NETWORK
-#include "network.cpp" //for 33 IoT WiFiNINA - uses display, rtc, and storage functions
-
 
 ////////// Main code control //////////
 
 void setup(){
-  // Serial.begin(9600);
-  // #ifndef __AVR__ //SAMD only
-  // while(!Serial);
-  // #endif
+  //Serial.begin(9600);
+  //#ifndef __AVR__ //SAMD only
+  //while(!Serial);
+  //#endif
   rtcInit();
   initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
-  initEEPROM(false); //do a soft init to make sure vals in range
+  byte changed = initEEPROM(false); //do a soft init to make sure vals in range
   initInputs();
   initDisplay();
   initOutputs(); //depends on some EEPROM settings
@@ -213,37 +183,39 @@ void setup(){
   //Signals: if the current eeprom selection is not available,
   //try to use the default specified in the config, failing to pulse and then switch (alarm/timer only)
   if((readEEPROM(42,false)==0 && PIEZO_PIN<0) || (readEEPROM(42,false)==1 && SWITCH_PIN<0) || (readEEPROM(42,false)==2 && PULSE_PIN<0))
-    writeEEPROM(42,(ALARM_SIGNAL==0 && PIEZO_PIN>=0? 0: (ALARM_SIGNAL==2 && PULSE_PIN>=0? 2: 1)),false); //alarm
+    changed += writeEEPROM(42,(ALARM_SIGNAL==0 && PIEZO_PIN>=0? 0: (ALARM_SIGNAL==2 && PULSE_PIN>=0? 2: 1)),false,false); //alarm
   if((readEEPROM(43,false)==0 && PIEZO_PIN<0) || (readEEPROM(43,false)==1 && SWITCH_PIN<0) || (readEEPROM(43,false)==2 && PULSE_PIN<0))
-    writeEEPROM(43,(TIMER_SIGNAL==0 && PIEZO_PIN>=0? 0: (TIMER_SIGNAL==2 && PULSE_PIN>=0? 2: 1)),false); //timer
+    changed += writeEEPROM(43,(TIMER_SIGNAL==0 && PIEZO_PIN>=0? 0: (TIMER_SIGNAL==2 && PULSE_PIN>=0? 2: 1)),false,false); //timer
   if((readEEPROM(44,false)==0 && PIEZO_PIN<0) || (readEEPROM(44,false)==1 && SWITCH_PIN<0) || (readEEPROM(44,false)==2 && PULSE_PIN<0))
-    writeEEPROM(44,(CHIME_SIGNAL==0 && PIEZO_PIN>=0? 0: 2),false); //chime
+    changed += writeEEPROM(44,(CHIME_SIGNAL==0 && PIEZO_PIN>=0? 0: 2),false,false); //chime
   
   if((PIEZO_PIN<0 && SWITCH_PIN<0 && PULSE_PIN<0) || !ENABLE_ALARM_FN){ //can't do alarm
-    writeEEPROM(2,0,false); //force alarm off
-    writeEEPROM(23,0,false); //force autoskip off
-    writeEEPROM(50,0,false); //force fibonacci off
+    changed += writeEEPROM(2,0,false,false); //force alarm off
+    changed += writeEEPROM(23,0,false,false); //force autoskip off
+    changed += writeEEPROM(50,0,false,false); //force fibonacci off
   } else { //ok to do alarm
-    if(!ENABLE_SOFT_ALARM_SWITCH) writeEEPROM(2,1,false); //no soft alarm switch: force alarm on
-    if(!ENABLE_SOFT_ALARM_SWITCH || !ENABLE_ALARM_AUTOSKIP) writeEEPROM(23,0,false); //no soft switch or no autoskip: force autoskip off
-    if((PIEZO_PIN<0 && PULSE_PIN<0) || !ENABLE_ALARM_FIBONACCI) writeEEPROM(50,0,false); //no fibonacci, or no piezo or pulse: force fibonacci off
+    if(!ENABLE_SOFT_ALARM_SWITCH) changed += writeEEPROM(2,1,false,false); //no soft alarm switch: force alarm on
+    if(!ENABLE_SOFT_ALARM_SWITCH || !ENABLE_ALARM_AUTOSKIP) changed += writeEEPROM(23,0,false,false); //no soft switch or no autoskip: force autoskip off
+    if((PIEZO_PIN<0 && PULSE_PIN<0) || !ENABLE_ALARM_FIBONACCI) changed += writeEEPROM(50,0,false,false); //no fibonacci, or no piezo or pulse: force fibonacci off
   }
   
   if((PIEZO_PIN<0 && PULSE_PIN<0) || !ENABLE_TIME_CHIME){ //can't do chime
-    writeEEPROM(21,0,false); //force chime off
+    changed += writeEEPROM(21,0,false,false); //force chime off
   }
   
   switch(readEEPROM(7,false)){ //if the preset is set to a function that is no longer enabled, use alarm if enabled, else use time
-    case fnIsDate: if(!ENABLE_DATE_FN) writeEEPROM(7,(ENABLE_ALARM_FN?fnIsAlarm:fnIsTime),false); break;
-    case fnIsAlarm: if(!ENABLE_ALARM_FN) writeEEPROM(7,fnIsTime,false); break;
-    case fnIsTimer: if(!ENABLE_TIMER_FN) writeEEPROM(7,(ENABLE_ALARM_FN?fnIsAlarm:fnIsTime),false); break;
-    case fnIsTemp: if(!ENABLE_TEMP_FN) writeEEPROM(7,(ENABLE_ALARM_FN?fnIsAlarm:fnIsTime),false); break;
-    case fnIsTest: if(!ENABLE_TUBETEST_FN) writeEEPROM(7,(ENABLE_ALARM_FN?fnIsAlarm:fnIsTime),false); break;
-    default: writeEEPROM(7,(ENABLE_ALARM_FN?fnIsAlarm:fnIsTime),false); break;
+    case FN_CAL: if(!ENABLE_DATE_FN) changed += writeEEPROM(7,(ENABLE_ALARM_FN?FN_ALARM:FN_TOD),false,false); break;
+    case FN_ALARM: if(!ENABLE_ALARM_FN) changed += writeEEPROM(7,FN_TOD,false,false); break;
+    case FN_TIMER: if(!ENABLE_TIMER_FN) changed += writeEEPROM(7,(ENABLE_ALARM_FN?FN_ALARM:FN_TOD),false,false); break;
+    case FN_THERM: if(!ENABLE_TEMP_FN) changed += writeEEPROM(7,(ENABLE_ALARM_FN?FN_ALARM:FN_TOD),false,false); break;
+    case FN_TUBETEST: if(!ENABLE_TUBETEST_FN) changed += writeEEPROM(7,(ENABLE_ALARM_FN?FN_ALARM:FN_TOD),false,false); break;
+    default: changed += writeEEPROM(7,(ENABLE_ALARM_FN?FN_ALARM:FN_TOD),false,false); break;
   }
-  if(!ENABLE_SHUTOFF_NIGHT) writeEEPROM(27,0,false); //night shutoff off
-  if(!ENABLE_SHUTOFF_AWAY) writeEEPROM(32,0,false); //away shutoff off
+  if(!ENABLE_SHUTOFF_NIGHT) changed += writeEEPROM(27,0,false,false); //night shutoff off
+  if(!ENABLE_SHUTOFF_AWAY) changed += writeEEPROM(32,0,false,false); //away shutoff off
   //if backlight circuit is not switched (v5.0 board), the backlight menu setting (eeprom 26) doesn't matter
+  if(changed) commitEEPROM(); //for SAMD
+  
   findFnAndPageNumbers(); //initial values
 }
 
@@ -257,7 +229,7 @@ void loop(){
   cycleNetwork();
   #endif
   cycleTimer();
-  cycleDisplay(); //keeps the display hardware multiplexing cycle going
+  cycleDisplay(displayDim,fnSetPg); //keeps the display hardware multiplexing cycle going
   cycleBacklight();
   cycleSignal();
 }
@@ -276,7 +248,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
   //If the version display is showing, ignore all else until Sel is released (cancel) or long-held (cancel and eeprom reset)
   if(versionShowing){
     if(ctrl==CTRL_SEL && (evt==0 || evt==5)){ //SEL release or superlong hold
-      if(evt==5) initEEPROM(true); //superlong hold: reset EEPROM
+      if(evt==5){ initEEPROM(true); commitEEPROM(); } //superlong hold: reset EEPROM
       versionShowing = false; inputStop(); updateDisplay();
       #ifdef NETWORK_SUPPORTED
       initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
@@ -290,7 +262,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
   //If the signal is going, any press should silence it
   if(signalRemain>0 && evt==1){
     signalStop();
-    if(signalSource==fnIsAlarm) { //If this was the alarm
+    if(signalSource==FN_ALARM) { //If this was the alarm
       //If the alarm is using the switch signal and this is the Alt button; or if alarm is *not* using the switch signal and this is Fibonacci mode; don't set the snooze
       if((readEEPROM(42,false)==1 && CTRL_ALT>0 && ctrl==CTRL_ALT) || (readEEPROM(42,false)!=1 && readEEPROM(50,false))) {
         quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
@@ -353,11 +325,11 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
   }
   #endif
   
-  if(fn < fnOpts) { //normal fn running/setting (not in settings menu)
+  if(fn < FN_OPTS) { //normal fn running/setting (not in settings menu)
 
     if(evt==3 && ctrl==CTRL_SEL) { //CTRL_SEL long hold: enter settings menu
       //inputStop(); commented out to to enable evt==4 and evt==5 per above
-      fn = fnOpts;
+      fn = FN_OPTS;
       clearSet(); //don't need updateDisplay() here because this calls updateRTC with force=true
       return;
     }
@@ -365,9 +337,9 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
     if(!fnSetPg) { //fn running
       if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL hold: enter setting mode
         switch(fn){
-          case fnIsTime: //set mins
+          case FN_TOD: //set mins
             startSet(rtcGetTOD(),0,1439,1); break;
-          case fnIsDate: //depends what page we're on
+          case FN_CAL: //depends what page we're on
             if(fnPg==0){ //regular date display: set year
               fnSetValDate[1]=rtcGetMonth(), fnSetValDate[2]=rtcGetDate(); startSet(rtcGetYear(),2000,9999,1);
             } else if(fnPg==fnDateCounter){ //month, date, direction
@@ -377,14 +349,14 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
             } else if(fnPg==fnDateWeathernow || fnDateWeathernext){ //temperature units??
               //TODO
             } break;
-          case fnIsAlarm: //set mins
+          case FN_ALARM: //set mins
             startSet(readEEPROM(0,true),0,1439,1); break;
-          case fnIsTimer: //set mins
+          case FN_TIMER: //set mins
             if(timerTime!=0 || timerState&1) { timerClear(); } // updateDisplay(); break; } //If the timer is nonzero or running, zero it. But rather than stop there, just go straight into setting – since adjDn (or cycling fns) can reset to zero
             startSet(timerInitialMins,0,5999,1); break; //minutes
           //fnIsDayCount removed in favor of paginated calendar
-          case fnIsTemp: //could do calibration here if so inclined
-          case fnIsTest:
+          case FN_THERM: //could do calibration here if so inclined
+          case FN_TUBETEST:
           default: break;
         }
         return;
@@ -393,14 +365,14 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
         //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
         if(ctrl==CTRL_SEL){ //sel release
           //Serial.println(F("sel release"));
-          if(fn==fnIsTimer && !(timerState&1)) timerClear(); //if timer is stopped, clear it
+          if(fn==FN_TIMER && !(timerState&1)) timerClear(); //if timer is stopped, clear it
           fnScroll(1); //Go to next fn in the cycle
           fnPg = 0; //reset page counter in case we were in a paged display
           checkRTC(true); //updates display
         }
         else if(ctrl==CTRL_UP || ctrl==CTRL_DN) {
-          if(fn==fnIsAlarm) switchAlarm(ctrl==CTRL_UP?1:0); //switch alarm
-          if(fn==fnIsTimer){
+          if(fn==FN_ALARM) switchAlarmState(ctrl==CTRL_UP?1:0); //switch alarm
+          if(fn==FN_TIMER){
             if(ctrl==CTRL_UP){
               if(!(timerState&1)){ //stopped
                 timerStart();
@@ -434,8 +406,8 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
                 #endif
               }
             }
-          } //end if fnIsTimer
-          //if(fn==fnIsTime) TODO volume in I2C radio
+          } //end if FN_TIMER
+          //if(fn==FN_TOD) TODO volume in I2C radio
         }
         //else do nothing
       } //end sel release or adj press
@@ -467,7 +439,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
             if(fn!=readEEPROM(7,false)) fn=readEEPROM(7,false);
             else {
               //Special case: if this is the alarm, toggle the alarm switch
-              if(fn==fnIsAlarm) switchAlarm(2);
+              if(fn==FN_ALARM) switchAlarmState(2);
             }
             fnPg = 0; //reset page counter in case we were in a paged display
             updateDisplay();
@@ -489,7 +461,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
           //We will set rtc time parts directly
           //con: potential for very rare clock rollover while setting; pro: can set date separate from time
           switch(fn){
-            case fnIsTime: //save in RTC
+            case FN_TOD: //save in RTC
               if(fnSetValDid){ //but only if the value was actually changed
                 rtcSetTime(fnSetVal/60,fnSetVal%60,0);
                 #ifdef NETWORK_SUPPORTED
@@ -500,7 +472,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
                 isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),fnSetVal/60,true);
               }
               clearSet(); break;
-            case fnIsDate: //depends what page we're on
+            case FN_CAL: //depends what page we're on
               if(fnPg==0){ //regular date display: save in RTC
                 switch(fnSetPg){
                   case 1: //save year, set month
@@ -545,10 +517,10 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
                 //TODO
               }
               break;
-            case fnIsAlarm:
+            case FN_ALARM:
               writeEEPROM(0,fnSetVal,true);
               clearSet(); break;
-            case fnIsTimer: //timer - depends what page we're on
+            case FN_TIMER: //timer - depends what page we're on
               switch(fnSetPg){
                 case 1: //save timer mins, set timer secs
                   displayBlink(); //to indicate save.
@@ -568,7 +540,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
               }
               break;
             //fnIsDayCount removed in favor of paginated calendar
-            case fnIsTemp:
+            case FN_THERM:
               break;
             default: break;
           } //end switch fn
@@ -582,13 +554,13 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
   
   else { //settings menu setting - to/from EEPROM
     
-    byte opt = fn-fnOpts; //current setting index
+    byte opt = fn-FN_OPTS; //current setting index
     
     if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL short hold: exit settings menu
       inputStop();
       //if we were setting a value, writes setting val to EEPROM if needed
       if(fnSetPg) writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
-      fn = fnIsTime;
+      fn = FN_TOD;
       //we may have changed lat/long/GMT/DST settings so recalc those
       calcSun(); //TODO pull from clock
       isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),true);
@@ -627,32 +599,32 @@ void fnScroll(byte dir){
   bool alarmOK = (PIEZO_PIN>=0 || SWITCH_PIN>=0 || PULSE_PIN>=0) && ENABLE_ALARM_FN; //skip alarm if no signals available
   if(dir) { // up
     switch(fn) {
-      case fnIsTime: if(ENABLE_DATE_FN) { fn = fnIsDate; break; }
-      case fnIsDate: if(alarmOK) { fn = fnIsAlarm; break; }
-      case fnIsAlarm: if(ENABLE_TIMER_FN) { fn = fnIsTimer; break; }
-      case fnIsTimer: if(ENABLE_TEMP_FN) { fn = fnIsTemp; break; }
-      case fnIsTemp: if(ENABLE_TUBETEST_FN) { fn = fnIsTest; break; }
-      case fnIsTest: default: fn = fnIsTime; break;
+      case FN_TOD: if(ENABLE_DATE_FN) { fn = FN_CAL; break; }
+      case FN_CAL: if(alarmOK) { fn = FN_ALARM; break; }
+      case FN_ALARM: if(ENABLE_TIMER_FN) { fn = FN_TIMER; break; }
+      case FN_TIMER: if(ENABLE_TEMP_FN) { fn = FN_THERM; break; }
+      case FN_THERM: if(ENABLE_TUBETEST_FN) { fn = FN_TUBETEST; break; }
+      case FN_TUBETEST: default: fn = FN_TOD; break;
     }
   } else { // down
     switch(fn) {
-      case fnIsTime: if(ENABLE_TUBETEST_FN) { fn = fnIsTest; break; } 
-      case fnIsTest: if(ENABLE_TEMP_FN) { fn = fnIsTemp; break; }
-      case fnIsTemp: if(ENABLE_TIMER_FN) { fn = fnIsTimer; break; }
-      case fnIsTimer: if(alarmOK) { fn = fnIsAlarm; break; }
-      case fnIsAlarm: if(ENABLE_DATE_FN) { fn = fnIsDate; break; }
-      case fnIsDate: default: fn = fnIsTime; break;
+      case FN_TOD: if(ENABLE_TUBETEST_FN) { fn = FN_TUBETEST; break; } 
+      case FN_TUBETEST: if(ENABLE_TEMP_FN) { fn = FN_THERM; break; }
+      case FN_THERM: if(ENABLE_TIMER_FN) { fn = FN_TIMER; break; }
+      case FN_TIMER: if(alarmOK) { fn = FN_ALARM; break; }
+      case FN_ALARM: if(ENABLE_DATE_FN) { fn = FN_CAL; break; }
+      case FN_CAL: default: fn = FN_TOD; break;
     }
   }
 }
 void fnOptScroll(byte dir){
   //0=down, 1=up
   //Switch to the next setting, looping around at range ends
-  byte posLast = fnOpts+sizeof(optsLoc)-1;
-  if(dir==1) fn = (fn==posLast? fnOpts: fn+1);
-  if(dir==0) fn = (fn==fnOpts? posLast: fn-1);
+  byte posLast = FN_OPTS+sizeof(optsLoc)-1;
+  if(dir==1) fn = (fn==posLast? FN_OPTS: fn+1);
+  if(dir==0) fn = (fn==FN_OPTS? posLast: fn-1);
   //Certain settings don't apply to some configurations; skip those.
-  byte optLoc = optsLoc[fn-fnOpts];
+  byte optLoc = optsLoc[fn-FN_OPTS];
   if(!SHOW_IRRELEVANT_OPTIONS && ( //see also: network requestType=1
       //Signals disabled
       (PIEZO_PIN<0 && (optLoc==39||optLoc==40||optLoc==41||optLoc==47||optLoc==48||optLoc==49)) //no piezo: skip all pitches and patterns
@@ -682,39 +654,34 @@ void fnOptScroll(byte dir){
     fnOptScroll(dir);
   }
 }
-void goToFn(byte thefn){ //A shortcut that also sets inputLast per human activity
+void goToFn(byte thefn, byte thefnPg){ //A shortcut that also sets inputLast per human activity
   fn = thefn; inputLast = millis(); inputLastTODMins = rtcGetHour()*60+rtcGetMinute();
+  fnPg = thefnPg;
 }
 
-void switchAlarm(byte dir){
+void switchAlarmState(byte dir){
   //0=down, 1=up, 2=toggle
   if(ENABLE_SOFT_ALARM_SWITCH){
-    //signalStop(); //snoozeRemain = 0; //TODO I don't think we need this anymore – test
     //There are three alarm states - on, on with skip (skips the next alarm trigger), and off.
     //Currently we use up/down buttons or a rotary control, rather than a binary switch, so we can cycle up/down through these states.
-    //On/off is stored in EEPROM to survive power loss; skip is volatile, not least because it can change automatically and I don't like making automated writes to EEPROM if I can help it. Skip state doesn't matter when alarm is off.
+    //On/off is stored in EEPROM to survive power loss; skip is volatile, not least because it can change automatically and I don't like making automated writes to EEPROM if I can help it.
     if(dir==2) dir=(readEEPROM(2,false)?0:1); //If alarm is off, cycle button goes up; otherwise down.
-    if(dir==1){
-      if(!readEEPROM(2,false)){ //if off, go straight to on, no skip
-        writeEEPROM(2,1,false); alarmSkip=0; quickBeep(76); //C7
-      }
-      else if(alarmSkip){ //else if skip, go to on
-        alarmSkip=0; quickBeep(76); //C7
-      }
-    }
-    if(dir==0){
-      if(readEEPROM(2,false)){ //if on
-        if(!alarmSkip){ //if not skip, go to skip
-          alarmSkip=1; quickBeep(71); //G6
-        }
-        else { //if skip, go to off
-          writeEEPROM(2,0,false); quickBeep(64); //C6
-        }
-      }
-    }
+    if(dir==1) setAlarmState(2); //if off or skip, go straight to on
+    if(dir==0) setAlarmState(getAlarmState()-1); //if on, skip; if skip, off
     updateDisplay();
   }
   //TODO don't make alarm permanent until leaving setting to minimize writes to eeprom as user cycles through options?
+}
+void setAlarmState(byte state){
+  //0=off, 1=on with skip, 2=on
+  if(!ENABLE_SOFT_ALARM_SWITCH || getAlarmState()==state) return; //don't act unless it's different
+  writeEEPROM(2,state>0,false); //on or off
+  alarmSkip = (state==1); //on with skip
+  quickBeep(state==2? 76: (state==1? 71: 64)); //C7, G6, C6
+}
+byte getAlarmState(){
+  //0=off, 1=on with skip, 2=on
+  return (readEEPROM(2,false)?2:0)-alarmSkip;
 }
 void switchPower(byte dir){
   //0=down, 1=up, 2=toggle
@@ -751,8 +718,8 @@ void doSet(int delta){
     if(delta>0) if(fnSetValMax-fnSetVal<delta) fnSetVal-=((fnSetValMax-fnSetValMin)+1-delta); else fnSetVal=fnSetVal+delta;
     if(delta<0) if(fnSetVal-fnSetValMin<abs(delta)) fnSetVal+=((fnSetValMax-fnSetValMin)+1+delta); else fnSetVal=fnSetVal+delta;
     //In some special settings-menu cases, we have to make sure it's a valid value, and if not, doSet again in order to skip it
-    if(fn>=fnOpts){ //in settings menu
-      switch(optsLoc[fn-fnOpts]){ //setting loc, per current setting index
+    if(fn>=FN_OPTS){ //in settings menu
+      switch(optsLoc[fn-FN_OPTS]){ //setting loc, per current setting index
         case 42: case 43: case 44: //signal type: only allow those which are equipped
           if( (fnSetVal==0 && PIEZO_PIN>=0)
             ||(fnSetVal==1 && SWITCH_PIN>=0)
@@ -779,9 +746,10 @@ void clearSet(){ //Exit set state
 }
 
 //EEPROM values are bytes (0 to 255) or signed 16-bit ints (-32768 to 32767) where high byte is loc and low byte is loc+1.
-void initEEPROM(bool hard){
+bool initEEPROM(bool hard){
   //If hard, set EEPROM and clock to defaults
   //Otherwise, just make sure stuff is in range
+  byte changed = 0;
   hard = (hard || readEEPROM(16,false)==0); //if EEPROM is uninitiated, do defaults
   //If a hard init, set the clock
   if(hard) {
@@ -792,25 +760,25 @@ void initEEPROM(bool hard){
     #endif
   }
   //The vars outside the settings menu
-  if(hard || readEEPROM(0,true)>1439) writeEEPROM(0,420,true); //0-1: alarm at 7am
+  if(hard || readEEPROM(0,true)>1439) changed += writeEEPROM(0,420,true,false); //0-1: alarm at 7am
   //2: alarm on, handled by init
   //3: free
-  if(hard || readEEPROM(4,false)<0 || readEEPROM(4,false)>2) writeEEPROM(4,2,false); //4: day counter direction: count up...
-  if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) writeEEPROM(5,12,false); //5: ...December...
-  if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) writeEEPROM(6,31,false); //6: ...31st. (This gives the day of the year)
-  if(hard) writeEEPROM(7,0,false); //7: Alt function preset
+  if(hard || readEEPROM(4,false)<0 || readEEPROM(4,false)>2) changed += writeEEPROM(4,2,false,false); //4: day counter direction: count up...
+  if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) changed += writeEEPROM(5,12,false,false); //5: ...December...
+  if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) changed += writeEEPROM(6,31,false,false); //6: ...31st. (This gives the day of the year)
+  if(hard) changed += writeEEPROM(7,0,false,false); //7: Alt function preset
   //8: TODO functions/pages enabled (bitmask)
-  if(hard || readEEPROM(9,false)>1) writeEEPROM(9,1,false); //9: NTP sync on
-  if(hard) writeEEPROM(15,0,false); //15: last known DST on flag - clear on hard reset (to match the reset RTC/auto DST/anti-poisoning settings to trigger midnight tubes as a tube test)
+  if(hard || readEEPROM(9,false)>1) changed += writeEEPROM(9,1,false,false); //9: NTP sync on
+  if(hard) changed += writeEEPROM(15,0,false,false); //15: last known DST on flag - clear on hard reset (to match the reset RTC/auto DST/anti-poisoning settings to trigger midnight tubes as a tube test)
   #ifdef NETWORK_SUPPORTED
   if(hard){ //everything in here needs no range testing
     //51-54 NTP server IP address (4 bytes) - e.g. from https://tf.nist.gov/tf-cgi/servers.cgi
     //Serial.println(F("setting IP address in eeprom"));
     //Serial.print(readEEPROM(51,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(52,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(53,false),DEC); Serial.print(F(".")); Serial.println(readEEPROM(54,false),DEC);
-    writeEEPROM(51,129,false);
-    writeEEPROM(52,  6,false);
-    writeEEPROM(53, 15,false);
-    writeEEPROM(54, 27,false);
+    changed += writeEEPROM(51,129,false,false);
+    changed += writeEEPROM(52,  6,false,false);
+    changed += writeEEPROM(53, 15,false,false);
+    changed += writeEEPROM(54, 27,false,false);
     //Serial.print(readEEPROM(51,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(52,false),DEC); Serial.print(F(".")); Serial.print(readEEPROM(53,false),DEC); Serial.print(F(".")); Serial.println(readEEPROM(54,false),DEC);
     //55-86 Wi-Fi SSID (32 bytes)
     //TODO
@@ -818,15 +786,16 @@ void initEEPROM(bool hard){
     //TODO
   }
   //151 Wi-Fi WEP key index
-  if(hard || readEEPROM(151,false)>3) writeEEPROM(151,0,false);
+  if(hard || readEEPROM(151,false)>3) changed += writeEEPROM(151,0,false,false);
   #endif
   //The vars inside the settings menu
   bool isInt = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
     isInt = (optsMax[opt]>255?true:false);
     if(hard || readEEPROM(optsLoc[opt],isInt)<optsMin[opt] || readEEPROM(optsLoc[opt],isInt)>optsMax[opt])
-      writeEEPROM(optsLoc[opt],optsDef[opt],isInt);
+      changed += writeEEPROM(optsLoc[opt],optsDef[opt],isInt,false);
   } //end for
+  return changed>0; //whether EEPROM was changed
 } //end initEEPROM()
 
 void findFnAndPageNumbers(){
@@ -852,11 +821,11 @@ void checkRTC(bool force){
   
   //Things to do every time this is called: timeouts to reset display. These may force a tick.
   //Setting timeout: if we're in the settings menu, or we're setting a value
-  if(fnSetPg || fn>=fnOpts){
-    if((unsigned long)(now-inputLast)>=SETTING_TIMEOUT*1000) { fnSetPg = 0; fn = fnIsTime; force=true; } //Time out after 2 mins
+  if(fnSetPg || fn>=FN_OPTS){
+    if((unsigned long)(now-inputLast)>=SETTING_TIMEOUT*1000) { fnSetPg = 0; fn = FN_TOD; force=true; } //Time out after 2 mins
   }
-  //Paged-display function timeout //TODO change fnIsDate to consts? //TODO timeoutPageFn var
-  else if(fn==fnIsDate && (unsigned long)(now-inputLast)>=FN_PAGE_TIMEOUT*1000) { //3sec per date page
+  //Paged-display function timeout //TODO change FN_CAL to consts? //TODO timeoutPageFn var
+  else if(fn==FN_CAL && (unsigned long)(now-inputLast)>=FN_PAGE_TIMEOUT*1000) { //3sec per date page
     // //If a scroll in is going, fast-forward to end - see also ctrlEvt
     // if(scrollRemain>0) {
     //   scrollRemain = 1;
@@ -868,13 +837,13 @@ void checkRTC(bool force){
         (!readEEPROM(10,true) && !readEEPROM(12,true) && //if no lat+long specified, skip weather/rise/set
           (fnPg==fnDateWeathernow || fnPg==fnDateWeathernext || fnPg==fnDateSunlast || fnPg==fnDateSunnext))
       )) fnPg++;
-    if(fnPg >= fnDatePages){ fnPg = 0; fn = fnIsTime; } // when we run out of pages, go back to time. When the half-minute date is triggered, fnPg is set to 254, so it will be 255 here and be cancelled after just the one page.
+    if(fnPg >= fnDatePages){ fnPg = 0; fn = FN_TOD; } // when we run out of pages, go back to time. When the half-minute date is triggered, fnPg is set to 254, so it will be 255 here and be cancelled after just the one page.
     force=true;
   }
   //Temporary-display function timeout: if we're *not* in a permanent one (time, or running/signaling timer)
   // Stopped/non-signaling timer shouldn't be permanent, but have a much longer timeout, mostly in case someone is waiting to start the chrono in sync with some event, so we'll give that an hour.
-  else if(fn!=fnIsTime && !(fn==fnIsTimer && (timerState&1 || signalRemain>0))){
-    if((unsigned long)(now-inputLast)>=(fn==fnIsTimer?3600:FN_TEMP_TIMEOUT)*1000) { fnSetPg = 0; fn = fnIsTime; force=true; }
+  else if(fn!=FN_TOD && !(fn==FN_TIMER && (timerState&1 || signalRemain>0))){
+    if((unsigned long)(now-inputLast)>=(fn==FN_TIMER?3600:FN_TEMP_TIMEOUT)*1000) { fnSetPg = 0; fn = FN_TOD; force=true; }
   }
   
   //Temporary value display queue
@@ -905,9 +874,9 @@ void checkRTC(bool force){
         snoozeRemain--;
         //Serial.print("sr "); Serial.println(snoozeRemain,DEC);
         if(snoozeRemain<=0 && readEEPROM(2,false)) { //alarm on
-          fnSetPg = 0; fn = fnIsTime;
+          fnSetPg = 0; fn = FN_TOD;
           if(readEEPROM(50,false) && readEEPROM(42,false)!=1) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond()); //fibonacci sequence
-          else signalStart(fnIsAlarm,1); //regular alarm
+          else signalStart(FN_ALARM,1); //regular alarm
         }
       }
       if(unoffRemain>0) {
@@ -931,9 +900,9 @@ void checkRTC(bool force){
       if(rtcGetHour()*60+rtcGetMinute()==alarmTime){
         //Serial.println(rtcGetSecond()==23?F("It's fibonacci time"):F("It's regular alarm time"));
         if(readEEPROM(2,false) && !alarmSkip) { //if the alarm is on and not skipped, sound it!
-          fnSetPg = 0; fn = fnIsTime;
+          fnSetPg = 0; fn = FN_TOD;
           if(rtcGetSecond()==23) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond()); //fibonacci sequence
-          else signalStart(fnIsAlarm,1); //regular alarm
+          else signalStart(FN_ALARM,1); //regular alarm
         }
         //set alarmSkip for the next instance of the alarm
         alarmSkip =
@@ -947,8 +916,8 @@ void checkRTC(bool force){
       } //end alarm trigger
     }
     //At bottom of minute, see if we should show the date
-    if(rtcGetSecond()==30 && fn==fnIsTime && fnSetPg==0 && unoffRemain==0 && versionShowing==false) { /*cleanRemain==0 && scrollRemain==0 && */ 
-      if(readEEPROM(18,false)>=2) { goToFn(fnIsDate); fnPg = 254; updateDisplay(); }
+    if(rtcGetSecond()==30 && fn==FN_TOD && fnSetPg==0 && unoffRemain==0 && versionShowing==false) { /*cleanRemain==0 && scrollRemain==0 && */ 
+      if(readEEPROM(18,false)>=2) { goToFn(FN_CAL,254); updateDisplay(); }
       //if(readEEPROM(18,false)==3) { startScroll(); }
     }
     //Anti-poisoning routine triggering: start when applicable, and not at night, during setting, or after a button press (unoff)
@@ -989,19 +958,19 @@ void checkRTC(bool force){
     
     //Strikes - only if fn=clock, not setting, not signaling/snoozing, not night/away. Setting 21 will be off if signal type is no good
     //The six pips
-    if(rtcGetMinute()==59 && rtcGetSecond()==55 && readEEPROM(21,false)==2 && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2) {
-      signalStart(fnIsTime,6); //the signal code knows to use pip durations as applicable
+    if(rtcGetMinute()==59 && rtcGetSecond()==55 && readEEPROM(21,false)==2 && signalRemain==0 && snoozeRemain==0 && fn==FN_TOD && fnSetPg==0 && displayDim==2) {
+      signalStart(FN_TOD,6); //the signal code knows to use pip durations as applicable
     }
     //Strikes on/after the hour
-    if(rtcGetSecond()==0 && (rtcGetMinute()==0 || rtcGetMinute()==30) && signalRemain==0 && snoozeRemain==0 && fn==fnIsTime && fnSetPg==0 && displayDim==2){
+    if(rtcGetSecond()==0 && (rtcGetMinute()==0 || rtcGetMinute()==30) && signalRemain==0 && snoozeRemain==0 && fn==FN_TOD && fnSetPg==0 && displayDim==2){
       byte hr; hr = rtcGetHour(); hr = (hr==0?12:(hr>12?hr-12:hr));
       switch(readEEPROM(21,false)) {
         case 1: //single beep
-          if(rtcGetMinute()==0) signalStart(fnIsTime,0); break;
+          if(rtcGetMinute()==0) signalStart(FN_TOD,0); break;
         case 3: //hour strike via normal signal cycle
-          if(rtcGetMinute()==0) signalStart(fnIsTime,hr); break;
+          if(rtcGetMinute()==0) signalStart(FN_TOD,hr); break;
         case 4: //ship's bell at :00 and :30 mins via normal signal cycle
-          signalStart(fnIsTime,((hr%4)*2)+(rtcGetMinute()==30?1:0)); break;
+          signalStart(FN_TOD,((hr%4)*2)+(rtcGetMinute()==30?1:0)); break;
         default: break;
       } //end strike type
     } //end strike
@@ -1009,7 +978,7 @@ void checkRTC(bool force){
     //Finally, update the display, whether natural tick or not, as long as we're not setting or on a scrolled display (unless forced eg. fn change)
     //This also determines night/away shutoff, which is why strikes will happen if we go into off at top of hour, and not when we come into on at the top of the hour TODO find a way to fix this
     //Also skip updating the display if this is date and not being forced, since its pages take some calculating that cause it to flicker
-    if(fnSetPg==0 && (true || force) && !(fn==fnIsDate && !force)) updateDisplay(); /*scrollRemain==0 ||*/
+    if(fnSetPg==0 && (true || force) && !(fn==FN_CAL && !force)) updateDisplay(); /*scrollRemain==0 ||*/
     
     rtcSecLast = rtcGetSecond();
     
@@ -1040,13 +1009,13 @@ void fibonacci(byte h, byte m, byte s){
       if(diff<=n) {
         if(diff>0) { //Beep and snooze
           signalPattern = 1; //short beep
-          signalSource = fnIsAlarm;
+          signalSource = FN_ALARM;
           signalStart(-1,0); //Play a signal measure using above pattern and source
           snoozeRemain = nnn;
           //Serial.print(F(" SR")); Serial.print(snoozeRemain,DEC);
         } else { //Time for regular alarm
           //Serial.print(F(" Alarm!"));
-          signalStart(fnIsAlarm,1);
+          signalStart(FN_ALARM,1);
         }
         break;
       }
@@ -1212,6 +1181,9 @@ void millisApplyDrift(){
     // Serial.println();
   }
 }
+void millisReset(){
+  millisAtLastCheck = 0; //because setting the RTC makes this unreliable
+}
 unsigned long ms(){
   // Returns millis() with the drift offset applied, for timer/chrono purposes.
   // WARNING: Since the offset is being periodically adjusted, there is the possibility of a discontinuity in ms() output – if we give out a timestamp and then effectively set the clock back, the next timestamp might possibly be earlier than the last one, which could mess up duration math. I tried to think of a way to monitor for that discontinuity – e.g. if now-then is greater than then-now, due to overflow – but it gets tricky since millis() is effectively circular, and that condition occurs naturally at rollover as well – so I think we would need a flag that millisCheckDrift sets when it sets the offset backward, and ms clears when the real time has caught up.... or something like that.
@@ -1261,7 +1233,7 @@ void timerRunoutToggle(){
     if(!((timerState>>2)&1)) timerState ^= (1<<3); //if it's 0, toggle runout chrono bit
     //do a quick signal to indicate the selection
     signalPattern = ((timerState>>2)&3)+1; //convert 00/01/10/11 to 1/2/3/4
-    signalSource = fnIsTimer;
+    signalSource = FN_TIMER;
     signalStart(-1,0); //Play a signal measure using above pattern and source
   }
 }
@@ -1275,23 +1247,23 @@ void cycleTimer(){
         if((timerState>>3)&1){ //runout chrono - keep target, change direction, kill sleep, change display
           bitWrite(timerState,1,1); //set timer direction (bit 1) to up (1)
           timerSleepSwitch(0);
-          fnSetPg = 0; fn = fnIsTimer;
+          fnSetPg = 0; fn = FN_TIMER;
         } else {
           if((timerState>>2)&1){ //runout repeat - keep direction, change target, keep sleep, don't change display
             timerTime += (timerInitialMins*60000)+(timerInitialSecs*1000); //set timer duration ahead by initial setting
           } else { //runout clear - clear timer, change display
             timerClear();
             //If switch signal (radio sleep), go to time of day; otherwise go to empty timer to appear with signal
-            fnSetPg = 0; fn = (readEEPROM(43,false)==1 ? fnIsTime: fnIsTimer);
+            fnSetPg = 0; fn = (readEEPROM(43,false)==1 ? FN_TOD: FN_TIMER);
             updateDisplay();
           }
         }
         //piezo or pulse signal
         if((timerState>>2)&1){ //short signal (piggybacks on runout repeat flag)
-          if(readEEPROM(43,false)!=1) signalStart(fnIsTimer,1);
-          //using 1 instead of 0, because in signalStart, fnIsTimer "quick measure" has a custom pitch for runout option setting
+          if(readEEPROM(43,false)!=1) signalStart(FN_TIMER,1);
+          //using 1 instead of 0, because in signalStart, FN_TIMER "quick measure" has a custom pitch for runout option setting
         } else { //long signal
-          if(readEEPROM(43,false)!=1) signalStart(fnIsTimer,SIGNAL_DUR);
+          if(readEEPROM(43,false)!=1) signalStart(FN_TIMER,SIGNAL_DUR);
         }
       }
     } else { //If we are counting up,
@@ -1311,7 +1283,7 @@ void cycleTimer(){
       }
     }
     //If it's on display, update
-    if(fn==fnIsTimer) updateDisplay();
+    if(fn==FN_TIMER) updateDisplay();
   }
 } //end cycleTimer()
 void timerSleepSwitch(bool on){
@@ -1324,8 +1296,17 @@ void timerSleepSwitch(bool on){
     // else   Serial.println(F(" Switch signal off, timerSleepSwitch"));
   }
 }
+byte getTimerState(){ return timerState; }
+void setTimerState(char pos, bool val){
+  if(val) timerState |= (1<<pos); else timerState &= ~(1<<pos);
+}
 
-
+void tempDisplay(int i0, int i1, int i2, int i3){ //TODO can you improve this
+  tempValDispQueue[0] = i0;
+  tempValDispQueue[1] = i1;
+  tempValDispQueue[2] = i2;
+  tempValDispQueue[3] = i3;
+}
 void updateDisplay(){
   //Run as needed to update display when the value being shown on it has changed
   //This formats the new value and puts it in displayNext[] for cycleDisplay() to pick up
@@ -1384,7 +1365,7 @@ void updateDisplay(){
   else if(fnSetPg) { //setting value, for either fn or settings menu
     displayDim = 2;
     // blankDisplay(4, 5, false); //taken over by startSet
-    byte fnOptCurLoc = (fn>=fnOpts? optsLoc[fn-fnOpts]: 0); //current setting index loc, to tell what's being set
+    byte fnOptCurLoc = (fn>=FN_OPTS? optsLoc[fn-FN_OPTS]: 0); //current setting index loc, to tell what's being set
     if(fnSetValMax==1439) { //Time of day (0-1439 mins, 0:00–23:59): show hrs/mins
       editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero per settings
       editDisplay(fnSetVal%60, 2, 3, true, false);
@@ -1398,12 +1379,10 @@ void updateDisplay(){
       editDisplay(fnSetVal, (DISPLAY_SIZE>4? 4: 2), (DISPLAY_SIZE>4? 5: 3), true, false);
     } else if(fnSetValMax==88) { //A piezo pitch. Play a short demo beep.
       editDisplay(fnSetVal, 0, 3, false, false);
-      if(PIEZO_PIN>=0) { noTone(PIEZO_PIN); tone(PIEZO_PIN, getHz(fnSetVal), 100); } //Can't use signalStart since we need to specify pitch directly
+      quickBeep(fnSetVal); //Can't use signalStart since we need to specify pitch directly
     } else if(fnOptCurLoc==47 || fnOptCurLoc==48 || fnOptCurLoc==49) { //Signal pattern. Play a demo measure.
       editDisplay(fnSetVal, 0, 3, false, false);
-      signalPattern = fnSetVal;
-      signalSource = (fnOptCurLoc==49?fnIsTime:(fnOptCurLoc==48?fnIsTimer:fnIsAlarm));
-      signalStart(-1,1); //Play a sample using the above source and pattern
+      quickBeepPattern((fnOptCurLoc==49?FN_TOD:(fnOptCurLoc==48?FN_TIMER:FN_ALARM)),fnSetVal);
     } else if(fnSetValMax==156) { //Timezone offset from UTC in quarter hours plus 100 (since we're not set up to support signed bytes)
       editDisplay((abs(fnSetVal-100)*25)/100, 0, 1, fnSetVal<100, false); //hours, leading zero for negatives
       editDisplay((abs(fnSetVal-100)%4)*15, 2, 3, true, false); //minutes, leading zero always
@@ -1413,14 +1392,14 @@ void updateDisplay(){
       editDisplay(abs(fnSetVal), 0, (DISPLAY_SIZE>4? 4: 3), fnSetVal<0, false);
     } else editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0, false); //some other type of value - leading zeros for negatives
   }
-  else if(fn >= fnOpts){ //settings menu, but not setting a value
+  else if(fn >= FN_OPTS){ //settings menu, but not setting a value
     displayDim = 2;
-    editDisplay(optsNum[fn-fnOpts],0,1,false,false); //display setting number on hour digits
+    editDisplay(optsNum[fn-FN_OPTS],0,1,false,false); //display setting number on hour digits
     blankDisplay(2,5,false);
   }
   else { //fn running
     
-    //Set displayDim per night/away settings - fnIsAlarm may override this
+    //Set displayDim per night/away settings - FN_ALARM may override this
     //issue: moving from off alarm to next fn briefly shows alarm in full brightness. I think because of the display delays. TODO
     word todmins = rtcGetHour()*60+rtcGetMinute();
     //In order of precedence: //TODO can we fade between dim states? 
@@ -1436,7 +1415,7 @@ void updateDisplay(){
     updateBacklight();
     
     switch(fn){
-      case fnIsTime:
+      case FN_TOD:
         byte hr; hr = rtcGetHour();
         if(readEEPROM(16,false)==1) hr = (hr==0?12:(hr>12?hr-12:hr));
         editDisplay(hr, 0, 1, readEEPROM(19,false), true);
@@ -1448,7 +1427,7 @@ void updateDisplay(){
         if(readEEPROM(18,false)==1) editDisplay(rtcGetDate(), 4, 5, readEEPROM(19,false), true); //date
         else editDisplay(rtcGetSecond(), 4, 5, true, true); //seconds
         break;
-      case fnIsDate: //a paged display
+      case FN_CAL: //a paged display
         if(fnPg==0 || fnPg==254){ //plain ol' date - 0 will continue to other pages, 254 will only display date then return to time (e.g. at half minute)
           byte df; df = readEEPROM(17,false); //1=m/d/w, 2=d/m/w, 3=m/d/y, 4=d/m/y, 5=y/m/d
           if(df<=4) {
@@ -1471,9 +1450,9 @@ void updateDisplay(){
         else if(fnPg==fnDateWeathernow) displayWeather(0);
         else if(fnPg==fnDateSunnext) displaySun(1,rtcGetDate(),inputLastTODMins);
         else if(fnPg==fnDateWeathernext) displayWeather(1);
-        break; //end fnIsDate
+        break; //end FN_CAL
       //fnIsDayCount removed in favor of paginated calendar
-      case fnIsAlarm: //alarm
+      case FN_ALARM: //alarm
         displayDim = (readEEPROM(2,false)?2:1); //status bright/dim
         word almTime; almTime = readEEPROM(0,true);
         editDisplay(almTime/60, 0, 1, readEEPROM(19,false), true); //hours with leading zero
@@ -1485,7 +1464,7 @@ void updateDisplay(){
           blankDisplay(5,5,true);
         }
         break;
-      case fnIsTimer: //timer - display time
+      case FN_TIMER: //timer - display time
         unsigned long td; td = (!(timerState&1)? timerTime: //If stopped, use stored duration
           //If running, use same math timerStop() does to calculate duration
           ((timerState>>1)&1? ((timerState>>4)&1? timerLapTime: ms()) - timerTime: //count up - use timerLapTime during lap display
@@ -1523,14 +1502,14 @@ void updateDisplay(){
           }
         }
         break;
-      case fnIsTemp: //thermometer TODO disable if rtc doesn't support it
+      case FN_THERM: //thermometer TODO disable if rtc doesn't support it
         int temp; temp = rtcGetTemp();
         if(readEEPROM(45,false)==1) temp = temp*1.8 + 3200;
         //TODO another setting to apply offset?
         editDisplay(abs(temp)/100,1,3,(temp<0?true:false),true); //leading zeros if negative
         editDisplay(abs(temp)%100,4,5,true,true);
         break;
-      case fnIsTest:
+      case FN_TUBETEST:
         editDisplay(rtcGetSecond(),0,0,true,false);
         editDisplay(rtcGetSecond(),1,1,true,false);
         editDisplay(rtcGetSecond(),2,2,true,false);
@@ -1570,9 +1549,9 @@ void updateDisplay(){
 //   if(m<10) Serial.print(F("0")); Serial.print(m,DEC); Serial.print(F("-"));
 //   if(d<10) Serial.print(F("0")); Serial.print(d,DEC);
 // }
-// void serialPrintTime(int todMins){
-//   if(todMins/60<10) Serial.print(F("0")); Serial.print(todMins/60,DEC); Serial.print(F(":"));
-//   if(todMins%60<10) Serial.print(F("0")); Serial.print(todMins%60,DEC);
+// void serialPrintTime(int mins){
+//   if(mins/60<10) Serial.print(F("0")); Serial.print(mins/60,DEC); Serial.print(F(":"));
+//   if(mins%60<10) Serial.print(F("0")); Serial.print(mins%60,DEC);
 // }
 
 //A snapshot of sun times, in minutes past midnight, calculated at clean time and when the date or time is changed.
@@ -1689,13 +1668,13 @@ void signalStart(byte sigFn, byte sigDur){
   //sigFn isn't necessarily the current fn, just the one generating the signal
   //sigDur is the number of measures to put on signalRemain,
   //   or 0 for a single "quick measure" as applicable (i.e. skipped in radio mode).
-  //Special case: if sigFn==fnIsAlarm, and sigDur>0, we'll use SIGNAL_DUR or SWITCH_DUR as appropriate.
+  //Special case: if sigFn==FN_ALARM, and sigDur>0, we'll use SIGNAL_DUR or SWITCH_DUR as appropriate.
   //If sigFn is given as -1 (255), we will use both the existing signalSource and signalPattern for purposes of configs and fibonacci.
-  if(!(sigFn==255 && signalSource==fnIsTimer)) signalStop(); // if there is a signal going per the current signalSource, stop it - can only have one signal at a time – except if this is a forced fnIsTimer signal (for signaling runout options) which is cool to overlap timer sleep
+  if(!(sigFn==255 && signalSource==FN_TIMER)) signalStop(); // if there is a signal going per the current signalSource, stop it - can only have one signal at a time – except if this is a forced FN_TIMER signal (for signaling runout options) which is cool to overlap timer sleep
   //except if this is a forced
   if(sigFn!=255) signalSource = sigFn;
   if(sigFn!=255) signalPattern = (
-    (signalSource==fnIsTime && readEEPROM(21,false)==2)? -1: //special case: the pips
+    (signalSource==FN_TOD && readEEPROM(21,false)==2)? -1: //special case: the pips
     getSignalPattern() //usual: get pattern from user settings
   );
   // Serial.print(F("signalStart, sigFn="));
@@ -1712,13 +1691,13 @@ void signalStart(byte sigFn, byte sigDur){
   signalMeasureStartTime = ms();
   signalMeasureStep = 1; //waiting to start a new measure
   if(sigDur!=0){ //long-duration signal (alarm, sleep, etc) - set signalRemain
-    //If switch signal, except if this is a forced fnIsTimer signal (for signaling runout options)
-    if(getSignalOutput()==1 && !(sigFn==255 && signalSource==fnIsTimer)) { //turn it on now
-      signalRemain = (sigFn==fnIsAlarm? SWITCH_DUR: sigDur); //For alarm signal, use switch signal duration from config (eg 2hr)
+    //If switch signal, except if this is a forced FN_TIMER signal (for signaling runout options)
+    if(getSignalOutput()==1 && !(sigFn==255 && signalSource==FN_TIMER)) { //turn it on now
+      signalRemain = (sigFn==FN_ALARM? SWITCH_DUR: sigDur); //For alarm signal, use switch signal duration from config (eg 2hr)
       digitalWrite(SWITCH_PIN,LOW); updateBacklight(); //LOW = device on
       //Serial.print(millis(),DEC); Serial.println(F(" Switch signal on, signalStart"));
     } else { //start piezo or pulse signal. If neither is present, this will have no effect since cycleSignal will clear it
-      signalRemain = (sigFn==fnIsAlarm? SIGNAL_DUR: sigDur); //For alarm signal, use signal duration from config (eg 2min)
+      signalRemain = (sigFn==FN_ALARM? SIGNAL_DUR: sigDur); //For alarm signal, use signal duration from config (eg 2min)
     }
   }
   //cycleSignal will pick up from here
@@ -1741,7 +1720,7 @@ void cycleSignal(){
   //Called on every loop to control the signal.
   word measureDur = 1000; //interval between measure starts, ms - beep pattern can customize this
   if(signalMeasureStep){ //if there's a measure going (or waiting for a new one)
-    if((getSignalOutput()==0 || (signalRemain==0 && signalSource==fnIsTimer)) && PIEZO_PIN>=0) { // beeper, or single measure for fnIsTimer runout setting
+    if((getSignalOutput()==0 || (signalRemain==0 && signalSource==FN_TIMER)) && PIEZO_PIN>=0) { // beeper, or single measure for FN_TIMER runout setting
       //Since tone() handles the duration of each beep,
       //we only need to use signalMeasureStep to track beep starts; they'll stop on their own.
       byte bc = 0; //this many beeps
@@ -1771,7 +1750,7 @@ void cycleSignal(){
       if((unsigned long)(ms()-signalMeasureStartTime)>=(signalMeasureStep-1)*bd*2){
         word piezoPitch = (signalPattern==5 && signalMeasureStep==2? getSignalPitch()*0.7937: //cuckoo: go down major third (2^(-4/12)) on 2nd beep
           (signalPattern==255? 1000: //the pips: use 1000Hz just like the Beeb
-            (signalRemain==0 && signalSource==fnIsTimer? getHz(69): //fnIsTimer runout setting: use timer start pitch
+            (signalRemain==0 && signalSource==FN_TIMER? getHz(69): //FN_TIMER runout setting: use timer start pitch
               getSignalPitch() //usual: get pitch from user settings
             )
           )
@@ -1832,7 +1811,7 @@ void cycleSignal(){
   } //end if there's a measure going
 } //end cycleSignal()
 word getSignalPitch(){ //for current signal: chime, timer, or (default) alarm
-  return getHz(readEEPROM((signalSource==fnIsTime?41:(signalSource==fnIsTimer?40:39)),false));
+  return getHz(readEEPROM((signalSource==FN_TOD?41:(signalSource==FN_TIMER?40:39)),false));
 }
 word getHz(byte note){
   //Given a piano key note, return frequency
@@ -1842,7 +1821,7 @@ word getHz(byte note){
   return mult;
 }
 byte getSignalOutput(){ //for current signal: chime, timer, or (default) alarm: 0=piezo, 1=switch, 2=pulse
-  return readEEPROM((signalSource==fnIsTime?44:(signalSource==fnIsTimer?43:42)),false);
+  return readEEPROM((signalSource==FN_TOD?44:(signalSource==FN_TIMER?43:42)),false);
 }
 byte getSignalPattern(){ //for current signal: chime, timer, or (default) alarm: (applies only to piezo)
   //0 = long (1/2-second beep)
@@ -1851,7 +1830,7 @@ byte getSignalPattern(){ //for current signal: chime, timer, or (default) alarm:
   //5 = cuckoo (two 1/8-second beeps, descending major third)
   //3 = triple (three 1/12-second beeps)
   //4 = quad (four 1/16-second beeps)
-  return readEEPROM((signalSource==fnIsTime?49:(signalSource==fnIsTimer?48:47)),false);
+  return readEEPROM((signalSource==FN_TOD?49:(signalSource==FN_TIMER?48:47)),false);
 }
 void quickBeep(int pitch){
   //This is separate from signal system
@@ -1864,6 +1843,11 @@ void quickBeep(int pitch){
   //C7 = 76 //loudest
   //F7 = 81
   if(PIEZO_PIN>=0) { noTone(PIEZO_PIN); tone(PIEZO_PIN, getHz(pitch), 100); }
+}
+void quickBeepPattern(int source, int pattern){
+  signalPattern = pattern;
+  signalSource = source;
+  signalStart(-1,1); //Play a sample using the above source and pattern
 }
 
 //BACKLIGHT_FADE is PWM fade speed – if >0, with every loop() we'll increment/decrement the PWM (between 0-255) by this amount. If 0, we'll just switch it on and off (no PWM).
@@ -1886,8 +1870,8 @@ void updateBacklight(){
         //Serial.print(displayDim==2? F("Backlight on"): (displayDim==1? F("Backlight dim"): F("Backlight off"))); Serial.println(F(" per dim state"));
         break;
       case 3: //off, but on when alarm/timer sounds
-        backlightTarget = (signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)? 255: 0);
-        //Serial.print(signalRemain && (signalSource==fnIsAlarm || signalSource==fnIsTimer)?F("Backlight on"):F("Backlight off")); Serial.println(F(" per alarm/timer"));
+        backlightTarget = (signalRemain && (signalSource==FN_ALARM || signalSource==FN_TIMER)? 255: 0);
+        //Serial.print(signalRemain && (signalSource==FN_ALARM || signalSource==FN_TIMER)?F("Backlight on"):F("Backlight off")); Serial.println(F(" per alarm/timer"));
         break;
       case 4: //off, but on with switch signal
         if(SWITCH_PIN>=0) {

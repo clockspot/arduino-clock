@@ -57,7 +57,7 @@ void initDisplay(){
   for(byte i=0; i<3; i++) { pinMode(anodes[i],OUTPUT); }
 }
 
-void cycleDisplay(){
+void cycleDisplay(byte displayDim, byte fnSetPg){
   unsigned long now = millis();
   
   if(displayBlinkStart){

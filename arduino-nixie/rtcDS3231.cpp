@@ -1,8 +1,8 @@
-#ifdef RTC_DS3231 //only compile when requested (when included in main file)
-#ifndef RTC_DS3231_SRC //include once only
-#define RTC_DS3231_SRC
+#include <arduino.h>
+#include "arduino-nixie.h"
 
-//#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
+#ifdef RTC_DS3231 //see arduino-nixie.ino
+
 #include <Wire.h> //Arduino - GNU LPGL - for I2C access to DS3231
 #include <DS3231.h> //NorthernWidget - The Unlicense - install in your Arduino IDE
 
@@ -19,6 +19,7 @@ void rtcSetTime(byte h, byte m, byte s){
   ds3231.setHour(h);
   ds3231.setMinute(m);
   ds3231.setSecond(s);
+  millisReset();
 }
 void rtcSetDate(int y, byte m, byte d, byte w){
   ds3231.setYear(y%100); //TODO: should we store century on our end? Per ds3231 docs, "The century bit (bit 7 of the month register) is toggled when the years register overflows from 99 to 00."
@@ -46,5 +47,4 @@ byte rtcGetSecond(){ return tod.second(); }
 
 byte rtcGetTemp(){ return ds3231.getTemperature()*100; }
 
-#endif
 #endif

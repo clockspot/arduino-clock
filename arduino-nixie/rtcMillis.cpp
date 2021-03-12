@@ -1,10 +1,9 @@
-#ifdef RTC_MILLIS //only compile when requested (when included in main file)
-#ifndef RTC_MILLIS_SRC //include once only
-#define RTC_MILLIS_SRC
+#include <arduino.h>
+#include "arduino-nixie.h"
+
+#ifdef RTC_MILLIS //needed because arduino IDE is a piece of crap https://forum.arduino.cc/index.php?topic=134226.0
 
 ////////// FAKE RTC using millis //////////
-
-//#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
 
 //snapshot of time of day
 unsigned long todMils = 0; //time of day in milliseconds
@@ -18,6 +17,7 @@ void rtcInit(){}
 void rtcSetTime(byte h, byte m, byte s){
   todMils = (h*3600000)+(m*60000)+(s*1000);
   millisAtTOD = millis();
+  millisReset();
 }
 void rtcSetDate(int y, byte m, byte d, byte w){
   todY = y; todM = m; todD = d; todW = w;
@@ -62,5 +62,4 @@ byte rtcGetSecond(){ return (todMils/1000)%60; }
 
 byte rtcGetTemp(){ return 1000; } //a fake response - ten degrees (1000 hundredths) forever
 
-#endif
 #endif

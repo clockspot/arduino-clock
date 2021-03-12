@@ -109,7 +109,7 @@
 
 //Soft power switches
 #define ENABLE_SOFT_ALARM_SWITCH 1
-// 1 = yes. Alarm can be switched on and off when clock is displaying the alarm time (fnIsAlarm).
+// 1 = yes. Alarm can be switched on and off when clock is displaying the alarm time (FN_ALARM).
 // 0 = no. Alarm will be permanently on. Use with switch signal if the appliance has its own switch on this circuit (and note that, if another signal type(s) is available and selected for the alarm, the user won't be able to switch it off). Also disables skip feature. Note that the instructions do not reflect this option.
 #define ENABLE_SOFT_POWER_SWITCH 1 //switch signal only
 // 1 = yes. Switch signal can be toggled on and off directly with Alt button at any time (except in settings menu). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).

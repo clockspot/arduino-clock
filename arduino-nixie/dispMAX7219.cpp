@@ -75,7 +75,7 @@ void sendToMAX7219(byte posStart, byte posEnd){ //"private"
 }
 
 unsigned long setStartLast = 0; //to control flashing during start
-void cycleDisplay(){
+void cycleDisplay(byte displayDim, byte fnSetPg){
   unsigned long now = millis();
   //MAX7219 handles its own cycling - just needs display data updates.
   //But we do need to check if the blink should be over, and whether dim has changed.
@@ -117,12 +117,12 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fad
     displayNext[posEnd-i] = (i==0&&n==0 ? 0 : (n>=place ? (n/place)%10 : (leadingZeros?0:15)));
   }
   sendToMAX7219(posStart,posEnd);
-  cycleDisplay(); //fixes brightness
+  //cycleDisplay(); //fixes brightness - can we skip this?
 }
 void blankDisplay(byte posStart, byte posEnd, byte fade){
   for(byte i=posStart; i<=posEnd; i++) { displayNext[i]=15; }
   sendToMAX7219(posStart,posEnd);
-  cycleDisplay(); //fixes brightness
+  //cycleDisplay(); //fixes brightness - can we skip this?
 }
 
 //void startScroll() {}
