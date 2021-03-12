@@ -1,5 +1,5 @@
 #include <arduino.h>
-#include "arduino-nixie.h"
+#include "arduino-clock.h"
 
 #include "input.h"
 

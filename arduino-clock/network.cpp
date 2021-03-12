@@ -1,5 +1,5 @@
 #include <arduino.h>
-#include "arduino-nixie.h"
+#include "arduino-clock.h"
 
 #ifndef __AVR__ //TODO better sensor
 //do stuff for wifinina
@@ -41,7 +41,7 @@ WiFiServer server(80);
 bool networkSupported(){ return true; }
 
 void initNetwork(){
-  Serial.println(F("Hello world from network.cpp"));
+  //Serial.println(F("Hello world from network.cpp"));
   //Check status of wifi module up front
   //if(WiFi.status()==WL_NO_MODULE){ Serial.println(F("Communication with WiFi module failed!")); while(true); }
   //else if(WiFi.firmwareVersion()<WIFI_FIRMWARE_LATEST_VERSION) Serial.println(F("Please upgrade the firmware"));
@@ -50,9 +50,9 @@ void initNetwork(){
   for(byte i=0; i<32; i++){ if(readEEPROM(55+i,false)=='\0') break; wssid.concat((char)(readEEPROM(55+i,false))); } //Read in the SSID
   for(byte i=0; i<64; i++){ if(readEEPROM(87+i,false)=='\0') break; wpass.concat((char)(readEEPROM(87+i,false))); } //Read in the pass
   wki = readEEPROM(151,false); //Read in the wki
-  Serial.print(F("wssid=")); Serial.println(wssid);
-  Serial.print(F("wpass=")); Serial.println(wpass);
-  Serial.print(F("wki=")); Serial.println(wki);
+  //Serial.print(F("wssid=")); Serial.println(wssid);
+  //Serial.print(F("wpass=")); Serial.println(wpass);
+  //Serial.print(F("wki=")); Serial.println(wki);
   networkStartWiFi();
 }
 void cycleNetwork(){
@@ -84,7 +84,7 @@ void checkForWiFiStatusChange(){
 
 void networkStartWiFi(){
   WiFi.end(); //if AP is going, stop it
-  if(wssid==F("")){ Serial.println(F("no start wifi")); return; } //don't try to connect if there's no creds
+  if(wssid==F("")) return; //don't try to connect if there's no creds
   checkForWiFiStatusChange(); //just for serial logging
   //Serial.print(millis(),DEC); Serial.println(F("blank display per start wifi"));
   blankDisplay(0,5,false); //I'm guessing if it hangs, nixies won't be able to display anyway
@@ -401,9 +401,9 @@ void checkClients(){
           client.print(F("."));
           client.print(getVersionPart(2),DEC);
           if(getVersionPart(3)) //don't link directly to anything, just the project
-            client.print(F("-dev (<a href='https://github.com/clockspot/arduino-nixie' target='_blank'>details</a>)"));
+            client.print(F("-dev (<a href='https://github.com/clockspot/arduino-clock' target='_blank'>details</a>)"));
           else { //link directly to the release of this version
-            client.print(F(" (<a href='https://github.com/clockspot/arduino-nixie/releases/tag/v")); //TODO needs fix after rename
+            client.print(F(" (<a href='https://github.com/clockspot/arduino-clock/releases/tag/v")); //TODO needs fix after rename
             client.print(getVersionPart(0),DEC);
             client.print(F("."));
             client.print(getVersionPart(1),DEC);
@@ -791,8 +791,8 @@ void checkClients(){
           wki = currentLine.substring(startPos).toInt();
           //Persistent storage - see wssid/wpass definitions above
           for(byte i=0; i<97; i++) writeEEPROM(55+i,0,false,false); //Clear out the old values (32+64+1)
-          for(byte i=0; i<wssid.length(); i++) writeEEPROM(55+i,wssid[i],false,false); //Write in the SSID
-          for(byte i=0; i<wpass.length(); i++) writeEEPROM(87+i,wpass[i],false,false); //Write in the pass
+          for(byte i=0; i<wssid.length(); i++) { if(i<55+32) writeEEPROM(55+i,wssid[i],false,false); } //Write in the SSID
+          for(byte i=0; i<wpass.length(); i++) { if(i<87+64) writeEEPROM(87+i,wpass[i],false,false); } //Write in the pass
           writeEEPROM(151,wki,false,false); //Write in the wki
           commitEEPROM(); //commit all the above
           requestType = 3; //triggers an admin restart after the client is closed, below

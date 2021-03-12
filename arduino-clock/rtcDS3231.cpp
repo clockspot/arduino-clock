@@ -1,7 +1,7 @@
 #include <arduino.h>
-#include "arduino-nixie.h"
+#include "arduino-clock.h"
 
-#ifdef RTC_DS3231 //see arduino-nixie.ino Includes section
+#ifdef RTC_DS3231 //see arduino-clock.ino Includes section
 
 #include "rtcDS3231.h"
 #include <Wire.h> //Arduino - GNU LPGL - for I2C access to DS3231

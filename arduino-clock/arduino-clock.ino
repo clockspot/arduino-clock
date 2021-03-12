@@ -4,13 +4,13 @@
 // Inspired by original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
 
 #include <arduino.h>
-#include "arduino-nixie.h";
+#include "arduino-clock.h";
 
 ////////// Software version //////////
-const byte vMajor = 1;
-const byte vMinor = 9;
+const byte vMajor = 2;
+const byte vMinor = 0;
 const byte vPatch = 0;
-const bool vDev = 1;
+const bool vDev = 0;
 
 ////////// Includes //////////
 
@@ -155,10 +155,10 @@ unsigned int tempValDispLast = 0;
 ////////// Main code control //////////
 
 void setup(){
-  Serial.begin(9600);
-  #ifndef __AVR__ //SAMD only
-  while(!Serial);
-  #endif
+  // Serial.begin(9600);
+  // #ifndef __AVR__ //SAMD only
+  // while(!Serial);
+  // #endif
   rtcInit();
   initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
   byte changed = initEEPROM(false); //do a soft init to make sure vals in range

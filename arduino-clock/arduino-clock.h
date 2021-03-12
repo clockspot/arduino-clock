@@ -4,8 +4,7 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/led-iot.h"
-//#include "configs/undb-v9-relay.h"
+#include "configs/undb-v9.h"
 
 ////////////////////////////////////////////
 

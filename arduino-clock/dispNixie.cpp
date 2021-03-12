@@ -1,7 +1,7 @@
 #include <arduino.h>
-#include "arduino-nixie.h"
+#include "arduino-clock.h"
 
-#ifdef DISP_NIXIE //see arduino-nixie.ino Includes section
+#ifdef DISP_NIXIE //see arduino-clock.ino Includes section
 
 #include "dispNixie.h"
 

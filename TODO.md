@@ -1,14 +1,13 @@
 # To-dos
 
-* Rename project to arduino-clock with first push of v2+ - replace instances of arduino-nixie within
+* Startup SEL hold doesn't seem to work with IMU
 * Reintroduce nixie clean and scroll
 * Persistent storage on EEPROM - find a solution that writes to flash less often
 * Network/NTP
-	* Persistent storage for wi-fi credentials!
 	* Why does the page sometimes drop?
 	* wi-fi credential save fails if keys are part of the string?
 	* DST calc may behave unpredictably between 1–2am on fallback day
-	* Redo NTP on startup if it failed (networkStartWifi())
+	* Redo NTP if it failed (networkStartWifi()) - per bad response - how to make it wait a retry period
 	* Make [2036-ready](https://en.wikipedia.org/wiki/Year_2038_problem#Network_Time_Protocol_timestamps)
 	* Notice when a leap second is coming and handle it
 	* When setting page is used to set day counter and date, and the month changes, set date max. For 2/29 it should just do 3/1 probably.

@@ -1,7 +1,7 @@
 #include <arduino.h>
-#include "arduino-nixie.h"
+#include "arduino-clock.h"
 
-#ifdef RTC_MILLIS //see arduino-nixie.ino Includes section
+#ifdef RTC_MILLIS //see arduino-clock.ino Includes section
 
 #include "rtcMillis.h"
 

@@ -1,7 +1,7 @@
 #include <arduino.h>
-#include "arduino-nixie.h"
+#include "arduino-clock.h"
 
-#ifdef DISP_MAX7219 //see arduino-nixie.ino Includes section
+#ifdef DISP_MAX7219 //see arduino-clock.ino Includes section
 
 #include "dispMAX7219.h"
 #include <SPI.h> //Arduino - for SPI access to MAX7219
