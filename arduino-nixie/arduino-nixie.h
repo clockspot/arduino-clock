@@ -1,7 +1,5 @@
-// Universal digital clock codebase for Arduino - https://github.com/clockspot/arduino-clock
-// Sketch by Luke McKenzie (luke@theclockspot.com)
-// Written to support RLB Designs’ Universal Nixie Driver Board
-// Inspired by original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
+#ifndef ARDUINO_CLOCK_H
+#define ARDUINO_CLOCK_H
 
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
@@ -9,7 +7,7 @@
 #include "configs/led-iot.h"
 //#include "configs/undb-v9-relay.h"
 
-
+////////////////////////////////////////////
 
 
 //Unique IDs for the functions - see also fnScroll
@@ -23,7 +21,7 @@
 
 void setup();
 void loop();
-void ctrlEvt(byte ctrl, byte evt, byte evtLast);
+void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity=0);
 void fnScroll(byte dir);
 void fnOptScroll(byte dir);
 void goToFn(byte thefn, byte thefnPg=0);
@@ -79,3 +77,6 @@ void quickBeep(int pitch);
 void quickBeepPattern(int source, int pattern);
 void updateBacklight();
 void cycleBacklight();
+byte getVersionPart(byte part);
+
+#endif //ARDUINO_CLOCK_H

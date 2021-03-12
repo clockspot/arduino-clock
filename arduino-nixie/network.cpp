@@ -1,14 +1,21 @@
-#ifdef NETWORK //only compile when requested (when included in main file)
-#ifndef NETWORK_SRC //include once only
-#define NETWORK_SRC
+#include <arduino.h>
+#include "arduino-nixie.h"
 
 #ifndef __AVR__ //TODO better sensor
 //do stuff for wifinina
 #define NETWORK_SUPPORTED
-  
-//#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
+
+#include "network.h"
 #include <WiFiNINA.h>
 #include <WiFiUdp.h>
+//Needs to be able to control the display
+#include "dispMAX7219.h"
+#include "dispNixie.h"
+//Needs to be able to control the RTC
+#include "rtcDS3231.h"
+#include "rtcMillis.h"
+//Needs to be able to save to persistent storage
+#include "storage.h"
 
 String wssid = "Riley";
 String wpass = "5802301644"; //wpa pass or wep key
@@ -360,20 +367,20 @@ void checkClients(){
         client.print(F("<li><h3>General</h3></li>"));
         
         client.print(F("<li><label>Version</label>")); //TODO upload new built version?
-          client.print(vMajor,DEC);
+          client.print(getVersionPart(0),DEC);
           client.print(F("."));
-          client.print(vMinor,DEC);
+          client.print(getVersionPart(1),DEC);
           client.print(F("."));
-          client.print(vPatch,DEC);
-          if(vDev) //don't link directly to anything, just the project
+          client.print(getVersionPart(2),DEC);
+          if(getVersionPart(3)) //don't link directly to anything, just the project
             client.print(F("-dev (<a href='https://github.com/clockspot/arduino-nixie' target='_blank'>details</a>)"));
           else { //link directly to the release of this version
             client.print(F(" (<a href='https://github.com/clockspot/arduino-nixie/releases/tag/v")); //TODO needs fix after rename
-            client.print(vMajor,DEC);
+            client.print(getVersionPart(0),DEC);
             client.print(F("."));
-            client.print(vMinor,DEC);
+            client.print(getVersionPart(1),DEC);
             client.print(F("."));
-            client.print(vPatch,DEC);
+            client.print(getVersionPart(2),DEC);
             client.print(F("' target='_blank'>details</a>)"));
           }
           client.print(F("</li>"));
@@ -883,7 +890,4 @@ void cycleNetwork(){
   checkForWiFiStatusChange();
 }
 
-#endif
-
-#endif
 #endif

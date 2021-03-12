@@ -1,4 +1,6 @@
 #include <arduino.h>
+#include "arduino-nixie.h"
+
 #include "storage.h" //see notes herein
 
 #ifdef __AVR__ //TODO is there a similar flag for SAMD

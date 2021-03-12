@@ -1,10 +1,11 @@
-#ifdef DISP_NIXIE //only compile when requested (when included in main file)
-#ifndef DISP_NIXIE_SRC //include once only
-#define DISP_NIXIE_SRC
+#include <arduino.h>
+#include "arduino-nixie.h"
+
+#ifdef DISP_NIXIE //see arduino-nixie.ino Includes section
+
+#include "dispNixie.h"
 
 // Display cycling code derived from http://arduinix.com/Main/Code/ANX-6Tube-Clock-Crossfade.txt
-
-//#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
 
 //This clock is 2x3 multiplexed: two tubes powered at a time.
 //The anode channel determines which two tubes are powered,
@@ -200,5 +201,4 @@ void displayBlink(){
 //   }
 // }
 
-#endif
-#endif
+#endif //DISP_NIXIE

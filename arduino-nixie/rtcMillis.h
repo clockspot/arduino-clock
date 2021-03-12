@@ -1,4 +1,4 @@
-#ifndef RTC_MILLIS_H //include once only
+#ifndef RTC_MILLIS_H
 #define RTC_MILLIS_H
 
 //Mutually exclusive with other rtc options

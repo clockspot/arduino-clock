@@ -3,6 +3,7 @@
 // Written to support RLB Designs’ Universal Nixie Driver Board
 // Inspired by original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
 
+#include <arduino.h>
 #include "arduino-nixie.h";
 
 ////////// Software version //////////
@@ -15,22 +16,18 @@ const bool vDev = 1;
 
 // These modules are used per the available hardware and features enabled in the config file.
 // The disp and rtc options are mutually exclusive and define the same functions.
-// Because the Arduino IDE preprocessor seems to #include without regard to #if blocks (see https://forum.arduino.cc/index.php?topic=134226.0), I don't have #ifdef blocks around these header file inclusions. Instead I simply include them all, and have #ifdef blocks around the corresponding cpp code so only the included code is compiled. It's dumb, but it works.
+// Because the Arduino IDE preprocessor seems to #include without regard to #if blocks (see https://forum.arduino.cc/index.php?topic=134226.0), I don't have #ifdef blocks around these header file inclusions. Instead I simply include them all, and have #ifdef blocks around the corresponding cpp code so only the specified code is compiled. It's dumb, but it works.
 
 #if ENABLE_DATE_RISESET //this probably doesn't work, per the above, but ¯\_(ツ)_/¯
   #include <Dusk2Dawn.h> //DM Kishi - unlicensed - install in your Arduino IDE if needed - test without
 #endif
-#include "storage.h"; //supports both AVR EEPROM and SAMD flash
-#include "dispNixie.cpp" //for a SN74141-multiplexed nixie array
-#include "dispMAX7219.cpp" //for a SPI MAX7219 8x8 LED array
-
-#include "rtcDS3231.h" //for an I2C DS3231 RTC module
-#include "rtcMillis.h" //for a fake RTC based on millis
-
-#define INPUT
-#include "input.cpp"; //for Sel/Alt/Up/Dn - uses rtc functions
-#define NETWORK
-#include "network.cpp" //for 33 IoT WiFiNINA - uses display, rtc, and storage functions
+#include "storage.h"; //for persistent storage - supports both AVR EEPROM and SAMD flash
+#include "dispNixie.h" //if DISP_NIXIE is defined in config - for a SN74141-multiplexed nixie array
+#include "dispMAX7219.h" //if DISP_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
+#include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
+#include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
+#include "input.h"; //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU
+#include "network.h" //if not AVR – enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
 
 
 ////////// Variables and storage //////////
@@ -165,12 +162,11 @@ void setup(){
   rtcInit();
   initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
   byte changed = initEEPROM(false); //do a soft init to make sure vals in range
-  initInputs();
   initDisplay();
   initOutputs(); //depends on some EEPROM settings
-  delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
-  if(readBtn(CTRL_SEL)){ //if Sel is held at startup, show version, and skip init network for now (since wifi connect hangs)
-    versionShowing = 1; inputCur = CTRL_SEL;
+  if(initInputs()){ //inits inputs and returns true if CTRL_SEL is held
+    versionShowing = 1;
+    //skip network for now, since wifi connect hangs - we'll do it after version is done
   } else {
     #ifdef NETWORK_SUPPORTED
     initNetwork();
@@ -238,7 +234,7 @@ void loop(){
 
 ////////// Input handling and value setting //////////
 
-void ctrlEvt(byte ctrl, byte evt, byte evtLast){
+void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   //Handle control events from inputs, based on current fn and set state.
   //evt: 1=press, 2=short hold, 3=long hold, 4=verylong, 5=superlong, 0=release.
   //We only handle press evts for up/down ctrls, as that's the only evt encoders generate,
@@ -545,8 +541,8 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
             default: break;
           } //end switch fn
         } //end CTRL_SEL push
-        if(ctrl==CTRL_UP) doSet(rotVel ? 10 : 1);
-        if(ctrl==CTRL_DN) doSet(rotVel ? -10 : -1);
+        if(ctrl==CTRL_UP) doSet(velocity ? 10 : 1);
+        if(ctrl==CTRL_DN) doSet(velocity ? -10 : -1);
       } //end if evt==1
     } //end fn setting
     
@@ -583,8 +579,8 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast){
         clearSet();
       }
       if(evt==1 && (ctrl==CTRL_UP || ctrl==CTRL_DN)){
-        if(ctrl==CTRL_UP) doSet(rotVel ? 10 : 1);
-        if(ctrl==CTRL_DN) doSet(rotVel ? -10 : -1);
+        if(ctrl==CTRL_UP) doSet(velocity ? 10 : 1);
+        if(ctrl==CTRL_DN) doSet(velocity ? -10 : -1);
         updateDisplay(); //may also make sounds for sampling
       }
     }  //end setting value
@@ -655,8 +651,9 @@ void fnOptScroll(byte dir){
   }
 }
 void goToFn(byte thefn, byte thefnPg){ //A shortcut that also sets inputLast per human activity
-  fn = thefn; inputLast = millis(); inputLastTODMins = rtcGetHour()*60+rtcGetMinute();
+  fn = thefn;
   fnPg = thefnPg;
+  setInputLast();
 }
 
 void switchAlarmState(byte dir){
@@ -822,17 +819,17 @@ void checkRTC(bool force){
   //Things to do every time this is called: timeouts to reset display. These may force a tick.
   //Setting timeout: if we're in the settings menu, or we're setting a value
   if(fnSetPg || fn>=FN_OPTS){
-    if((unsigned long)(now-inputLast)>=SETTING_TIMEOUT*1000) { fnSetPg = 0; fn = FN_TOD; force=true; } //Time out after 2 mins
+    if((unsigned long)(now-getInputLast())>=SETTING_TIMEOUT*1000) { fnSetPg = 0; fn = FN_TOD; force=true; } //Time out after 2 mins
   }
   //Paged-display function timeout //TODO change FN_CAL to consts? //TODO timeoutPageFn var
-  else if(fn==FN_CAL && (unsigned long)(now-inputLast)>=FN_PAGE_TIMEOUT*1000) { //3sec per date page
+  else if(fn==FN_CAL && (unsigned long)(now-getInputLast())>=FN_PAGE_TIMEOUT*1000) { //3sec per date page
     // //If a scroll in is going, fast-forward to end - see also ctrlEvt
     // if(scrollRemain>0) {
     //   scrollRemain = 1;
     //   checkEffects(true);
     // }
     //Here we just have to increment the page and decide when to reset. updateDisplay() will do the rendering
-    fnPg++; inputLast+=(FN_PAGE_TIMEOUT*1000); //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
+    fnPg++; setInputLast(FN_PAGE_TIMEOUT*1000); //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
     while(fnPg<fnDatePages && fnPg<200 && ( //skip inapplicable date pages. The 200 is an extra failsafe
         (!readEEPROM(10,true) && !readEEPROM(12,true) && //if no lat+long specified, skip weather/rise/set
           (fnPg==fnDateWeathernow || fnPg==fnDateWeathernext || fnPg==fnDateSunlast || fnPg==fnDateSunnext))
@@ -843,7 +840,7 @@ void checkRTC(bool force){
   //Temporary-display function timeout: if we're *not* in a permanent one (time, or running/signaling timer)
   // Stopped/non-signaling timer shouldn't be permanent, but have a much longer timeout, mostly in case someone is waiting to start the chrono in sync with some event, so we'll give that an hour.
   else if(fn!=FN_TOD && !(fn==FN_TIMER && (timerState&1 || signalRemain>0))){
-    if((unsigned long)(now-inputLast)>=(fn==FN_TIMER?3600:FN_TEMP_TIMEOUT)*1000) { fnSetPg = 0; fn = FN_TOD; force=true; }
+    if((unsigned long)(now-getInputLast())>=(fn==FN_TIMER?3600:FN_TEMP_TIMEOUT)*1000) { fnSetPg = 0; fn = FN_TOD; force=true; }
   }
   
   //Temporary value display queue
@@ -1446,9 +1443,9 @@ void updateDisplay(){
           blankDisplay(4,5,true);
         }
         //The sun and weather displays are based on a snapshot of the time of day when the function display was triggered, just in case it's triggered a few seconds before a sun event (sunrise/sunset) and the "prev/now" and "next" displays fall on either side of that event, they'll both display data from before it. If triggered just before midnight, the date could change as well – not such an issue for sun, but might be for weather - TODO create date snapshot also
-        else if(fnPg==fnDateSunlast) displaySun(0,rtcGetDate(),inputLastTODMins);
+        else if(fnPg==fnDateSunlast) displaySun(0,rtcGetDate(),getInputLastTODMins());
         else if(fnPg==fnDateWeathernow) displayWeather(0);
-        else if(fnPg==fnDateSunnext) displaySun(1,rtcGetDate(),inputLastTODMins);
+        else if(fnPg==fnDateSunnext) displaySun(1,rtcGetDate(),getInputLastTODMins());
         else if(fnPg==fnDateWeathernext) displayWeather(1);
         break; //end FN_CAL
       //fnIsDayCount removed in favor of paginated calendar
@@ -1901,5 +1898,13 @@ void cycleBacklight() {
       backlightNow = backlightTarget = (backlightTarget<255? 0: 255);
       digitalWrite(BACKLIGHT_PIN,(backlightNow?LOW:HIGH)); //LOW = device on
     }
+  }
+}
+byte getVersionPart(byte part){
+  switch(part){
+    case 0: return vMajor; break;
+    case 1: return vMinor; break;
+    case 2: return vPatch; break;
+    case 3: return vDev; break;
   }
 }

@@ -1,8 +1,9 @@
 #include <arduino.h>
 #include "arduino-nixie.h"
 
-#ifdef RTC_DS3231 //see arduino-nixie.ino
+#ifdef RTC_DS3231 //see arduino-nixie.ino Includes section
 
+#include "rtcDS3231.h"
 #include <Wire.h> //Arduino - GNU LPGL - for I2C access to DS3231
 #include <DS3231.h> //NorthernWidget - The Unlicense - install in your Arduino IDE
 
@@ -47,4 +48,4 @@ byte rtcGetSecond(){ return tod.second(); }
 
 byte rtcGetTemp(){ return ds3231.getTemperature()*100; }
 
-#endif
+#endif //RTC_DS3231

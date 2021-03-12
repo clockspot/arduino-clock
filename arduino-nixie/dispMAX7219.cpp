@@ -1,8 +1,9 @@
-#ifdef DISP_MAX7219 //only compile when requested (when included in main file)
-#ifndef DISP_MAX7219_SRC //include once only
-#define DISP_MAX7219_SRC
+#include <arduino.h>
+#include "arduino-nixie.h"
 
-//#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
+#ifdef DISP_MAX7219 //see arduino-nixie.ino Includes section
+
+#include "dispMAX7219.h"
 #include <SPI.h> //Arduino - for SPI access to MAX7219
 #include <LedControl.h> //Eberhard Farle's LedControl library - http://wayoda.github.io/LedControl
 
@@ -134,5 +135,4 @@ void displayBlink(){
 
 //void checkEffects(bool force){}
 
-#endif
-#endif
+#endif //DISP_MAX7219

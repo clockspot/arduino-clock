@@ -1,6 +1,11 @@
-#ifdef INPUT //only compile when requested (when included in main file)
-#ifndef INPUT_SRC //include once only
-#define INPUT_SRC
+#include <arduino.h>
+#include "arduino-nixie.h"
+
+#include "input.h"
+
+//Needs access to RTC timestamps
+#include "rtcDS3231.h"
+#include "rtcMillis.h"
 
 #define HOLDSET_SLOW_RATE 125
 #define HOLDSET_FAST_RATE 20
@@ -65,7 +70,7 @@ byte inputCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=lo
 unsigned long inputLast = 0; //When an input last took place, millis()
 int inputLastTODMins = 0; //When an input last took place, time of day. Used in paginated functions so they all reflect the time of day when the input happened.
 
-void initInputs(){
+bool initInputs(){
   //TODO are there no "loose" pins left floating after this? per https://electronics.stackexchange.com/q/37696/151805
   #ifdef INPUT_BUTTONS
     pinMode(CTRL_SEL, INPUT_PULLUP);
@@ -85,6 +90,10 @@ void initInputs(){
     IMU.begin();
     //Serial.println(F("IMU initialized"));
   #endif
+  //Check to see if CTRL_SEL is held at init - facilitates version number display and EEPROM hard init
+  delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
+  if(readBtn(CTRL_SEL)){ inputCur = CTRL_SEL; return true; }
+  else return false;
 }
 
 bool readBtn(byte btn){
@@ -190,8 +199,8 @@ void checkRot(){
       if((unsigned long)(now-rotLastStep)<=ROT_VEL_START) rotVel = 1; //kick into high velocity setting (x10)
       else if((unsigned long)(now-rotLastStep)>=ROT_VEL_STOP) rotVel = 0; //fall into low velocity setting (x1)
       rotLastStep = now;
-      while(rotCurVal>=4) { rotCurVal-=4; ctrlEvt(CTRL_UP,1,inputCurHeld); }
-      while(rotCurVal<=-4) { rotCurVal+=4; ctrlEvt(CTRL_DN,1,inputCurHeld); }
+      while(rotCurVal>=4) { rotCurVal-=4; ctrlEvt(CTRL_UP,1,inputCurHeld,rotVel); }
+      while(rotCurVal<=-4) { rotCurVal+=4; ctrlEvt(CTRL_DN,1,inputCurHeld,rotVel); }
       rot.write(rotCurVal);
     }
   }
@@ -220,5 +229,18 @@ void checkInputs(){
   #endif
 }
 
-#endif
-#endif
+void setInputLast(unsigned long increment){
+  //Called when other code changes the displayed fn, as though the human user had done it
+  //(which in many cases they did, but indirectly, such as via settings page - but also automatic date display)
+  //If increment is specified, we just want to move inputLast up a bit
+  if(increment) inputLast+=increment;
+  //else we want to set both inputLast and the TODMins snapshot to now
+  inputLast = millis(); inputLastTODMins = rtcGetTOD();
+}
+unsigned long getInputLast(){
+  return inputLast;
+}
+int getInputLastTODMins(){
+  //Used to ensure paged displays (e.g. calendar) use the same TOD for all pages
+  return inputLastTODMins;
+}

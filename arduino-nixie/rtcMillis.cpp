@@ -1,7 +1,9 @@
 #include <arduino.h>
 #include "arduino-nixie.h"
 
-#ifdef RTC_MILLIS //needed because arduino IDE is a piece of crap https://forum.arduino.cc/index.php?topic=134226.0
+#ifdef RTC_MILLIS //see arduino-nixie.ino Includes section
+
+#include "rtcMillis.h"
 
 ////////// FAKE RTC using millis //////////
 
@@ -62,4 +64,4 @@ byte rtcGetSecond(){ return (todMils/1000)%60; }
 
 byte rtcGetTemp(){ return 1000; } //a fake response - ten degrees (1000 hundredths) forever
 
-#endif
+#endif //RTC_MILLIS
