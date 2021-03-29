@@ -13,7 +13,7 @@
 //#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
 #ifdef INPUT_UPDN_ROTARY
   #include <Encoder.h> //Paul Stoffregen - install in your Arduino IDE
-  Encoder rot(CTRL_R1,CTRL_R2);  //TODO may need to reverse
+  Encoder rot(CTRL_UP,CTRL_DN);  //TODO may need to reverse
 #endif
 #ifdef INPUT_IMU
   #include <Arduino_LSM6DS3.h>

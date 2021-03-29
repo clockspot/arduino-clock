@@ -13,6 +13,8 @@
 	* When setting page is used to set day counter and date, and the month changes, set date max. For 2/29 it should just do 3/1 probably.
   * Weather support
   * Stop using strings? There is plenty of RAM available on SAMD I think
+* When entering web mode, exit setting mode
+* Disable time setting if sync is enabled? Or disable sync if time is set?
 * Input: support other IMU orientations
 * When day counter is set to count up from 12/31, override to display 365/366 on that date
 * Bitmask to enable/disable features?
