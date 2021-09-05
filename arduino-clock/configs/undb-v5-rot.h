@@ -61,15 +61,6 @@
 #define ROT_VEL_START 80 //If step rate falls below this, kick into high velocity set (x10)
 #define ROT_VEL_STOP 500 //If step rate rises above this, drop into low velocity set (x1)
 
-//If using IMU motion sensor on Nano 33 IoT:
-//To use, tilt clock: backward=Sel, forward=Alt, left=Down, right=Up
-//This is mutually exclusive with the button/rotary controls. TODO make it possible to use both together by renaming the functions or abstracting basic input functionality
-// #define INPUT_IMU
-// //Which side of the IMU/Arduino faces clock front/side? 0=bottom, 1=top, 2=left side, 3=right side, 4=USB end, 5=butt end
-// #define IMU_FRONT 0 //(UNDB: 0)
-// #define IMU_TOP 4 //(UNDB: 4)
-// #define IMU_DEBOUNCING 150 //ms
-
 //For all input types:
 //How long (in ms) are the hold durations?
 #define CTRL_HOLD_SHORT_DUR 1000 //for entering setting mode, or hold-setting at low velocity (x1)
