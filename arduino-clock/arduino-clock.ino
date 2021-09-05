@@ -24,6 +24,7 @@ const bool vDev = 0;
 #include "storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash
 #include "dispNixie.h" //if DISP_NIXIE is defined in config - for a SN74141-multiplexed nixie array
 #include "dispMAX7219.h" //if DISP_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
+#include "dispHT16K33.h" //if DISP_HT16K33 is defined in config - for an I2C 7-segment LED display
 #include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
 #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
 #include "input.h" //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU

@@ -55,7 +55,7 @@ void sendToMAX7219(byte posStart, byte posEnd){ //"private"
   byte val = 0; //byte to send to the LED column
   byte ci = 0;
   for(byte i=posStart; i<=posEnd; i++){
-    if(i>3 && NUM_MAX<=3) return; //if 3 or fewer matrices, don't render digits 4 and 5
+    if(i>3 && (NUM_MAX<=3 || DISPLAY_SIZE<6)) return; //if 3 or fewer matrices, don't render digits 4 and 5
     col = //h tens at far left
           (i>0? bignumWidth+1: 0)+ //h ones
           (i>1? bignumWidth+2: 0)+ //m tens
