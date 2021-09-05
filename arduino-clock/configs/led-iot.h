@@ -34,10 +34,20 @@
 //To use, tilt clock: backward=Sel, forward=Alt, left=Down, right=Up
 //This is mutually exclusive with the button/rotary controls.
 #define INPUT_IMU
-//Which side of the IMU/Arduino faces clock front/side? 0=bottom, 1=top, 2=left side, 3=right side, 4=USB end, 5=butt end
-#define IMU_FRONT 0 //(UNDB: 0)
-#define IMU_TOP 4 //(UNDB: 4)
 #define IMU_DEBOUNCING 150 //ms
+//How is the Arduino oriented inside the clock? Include one each of USB_DIR and IC_DIR to indicate which way the USB port and IC (front side) are oriented, respectively. For UNDB clocks, it's USB_DIR_UP and IC_DIR_BACK.
+#define USB_DIR_UP
+// #define USB_DIR_DOWN
+// #define USB_DIR_LEFT
+// #define USB_DIR_RIGHT
+// #define USB_DIR_FRONT
+// #define USB_DIR_BACK
+// #define IC_DIR_UP
+// #define IC_DIR_DOWN
+// #define IC_DIR_LEFT
+// #define IC_DIR_RIGHT
+// #define IC_DIR_FRONT
+#define IC_DIR_BACK
 
 //For all input types:
 //How long (in ms) are the hold durations?

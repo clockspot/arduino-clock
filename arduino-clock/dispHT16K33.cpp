@@ -75,11 +75,11 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fad
   sendToHT16K33(posStart,posEnd);
   //cycleDisplay(); //fixes brightness - can we skip this?
   
-  for(int i=0; i<DISPLAY_SIZE; i++) {
-    if(displayNext[i]>9) Serial.print(F("-"));
-    else Serial.print(displayNext[i],DEC);
-  }
-  Serial.println();  
+  // for(int i=0; i<DISPLAY_SIZE; i++) {
+  //   if(displayNext[i]>9) Serial.print(F("-"));
+  //   else Serial.print(displayNext[i],DEC);
+  // }
+  // Serial.println();
 }
 void blankDisplay(byte posStart, byte posEnd, byte fade){
   for(byte i=posStart; i<=posEnd; i++) { displayNext[i]=15; }
