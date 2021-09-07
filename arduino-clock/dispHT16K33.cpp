@@ -7,6 +7,8 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_LEDBackpack.h>
 
+#include "storage.h" //needs to be able to read from persistent storage
+
 Adafruit_7segment matrix = Adafruit_7segment();
 
 //these can be overridden in your config .h
@@ -17,10 +19,9 @@ Adafruit_7segment matrix = Adafruit_7segment();
 #define BRIGHTNESS_DIM 0
 #endif
 
-//Hold current states of brightness
-byte curBrightness = 2; //compare to displayBrightness
+byte curBrightness = 2; //represents current display normal/dim/off state – compare to displayBrightness as passed to cycleDisplay
 #ifdef LIGHTSENSOR
-word curVariableBrightness = 0; //compare to displayVariableBrightness
+word curVariableBrightness = 0; //represents current display variable brightness level (in effect when curBrightness is normal)
 #endif
 
 unsigned long displayBlinkStart = 0; //when nonzero, display should briefly blank
@@ -43,7 +44,7 @@ void sendToHT16K33(byte posStart, byte posEnd){ //"private"
 }
 
 unsigned long setStartLast = 0; //to control flashing during start
-void cycleDisplay(byte displayBrightness, byte fnSetPg){
+void cycleDisplay(byte displayBrightness, bool useAmbient, word displayVariableBrightness, byte fnSetPg){
   unsigned long now = millis();
   //HT16K33 handles its own cycling - just needs display data updates.
   //But we do need to check if the blink should be over, and whether brightness has changed (or should change, per setting).
@@ -52,7 +53,7 @@ void cycleDisplay(byte displayBrightness, byte fnSetPg){
   }
   if(fnSetPg>0) { //setting - dim for every other 500ms - variable brightness is ignored here TODO consider it for bright blink state?
     if(setStartLast==0) setStartLast = now;
-    setBlinkState = (1-(((unsigned long)(now-setStartLast)/500)%2))+1; //2=bright, 1=dim
+    char setBlinkState = (1-(((unsigned long)(now-setStartLast)/500)%2))+1; //2=bright, 1=dim
     if(curBrightness != setBlinkState) {
       curBrightness = setBlinkState;
       matrix.setBrightness(setBlinkState==2? BRIGHTNESS_FULL: BRIGHTNESS_DIM);
@@ -66,7 +67,7 @@ void cycleDisplay(byte displayBrightness, byte fnSetPg){
       if(curBrightness==2) { //normal brightness
 #ifdef LIGHTSENSOR
         //if using ambient, set to previously seen value (which may be updated below)
-        if(readEEPROM(27,false)==1) matrix.setBrightness(displayVariableBrightness);
+        if(useAmbient) matrix.setBrightness(curVariableBrightness);
         else matrix.setBrightness(BRIGHTNESS_FULL); //otherwise, set to full brightness (per config)
 #else //no light sensor
         matrix.setBrightness(BRIGHTNESS_FULL); //set to full brightness (per config)
@@ -74,11 +75,11 @@ void cycleDisplay(byte displayBrightness, byte fnSetPg){
       }
     } //end if displayBrightness has changed
 #ifdef LIGHTSENSOR
-    //if normal brightness, using ambient lighting, and it has changed
-    if(curBrightness==2 && readEEPROM(27,false)==1 && curVariableBrightness != displayVariableBrightness) {
-      //TODO tween like LEDs?
-      curVariableBrightness = displayVariableBrightness;
-      matrix.setBrightness(displayVariableBrightness);
+    //if using ambient lighting, and it has changed
+    if(useAmbient && curVariableBrightness != displayVariableBrightness) {
+      curVariableBrightness = displayVariableBrightness; //TODO tween like LEDs?
+      //if currently normal brightness, update the display
+      if(curBrightness==2) matrix.setBrightness(displayVariableBrightness);
     }
 #endif
   } //end if not setting
@@ -102,8 +103,7 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fad
     }
     displayNext[posEnd-i] = (i==0&&n==0 ? 0 : (n>=place ? (n/place)%10 : (leadingZeros?0:15)));
   }
-  sendToHT16K33(posStart,posEnd);
-  //cycleDisplay(); //fixes brightness - can we skip this?
+  sendToHT16K33(posStart,posEnd); //TODO consider moving this to cycleDisplay if the value has changed - better sync with brightness change?
   
   // for(int i=0; i<DISPLAY_SIZE; i++) {
   //   if(displayNext[i]>9) Serial.print(F("-"));

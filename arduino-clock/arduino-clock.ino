@@ -240,7 +240,17 @@ void loop(){
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
   if(networkSupported()) cycleNetwork();
   cycleTimer();
-  cycleDisplay(displayBrightness,fnSetPg); //keeps the display hardware multiplexing cycle going
+  cycleDisplay( //keeps the display hardware multiplexing cycle going
+    displayBrightness, //the display normal/dim/off state
+#ifdef LIGHTSENSOR
+    readEEPROM(27,false)==1, //whether to use...
+    displayVariableBrightness, //...variable brightness per light sensor
+#else
+    false,
+    0,
+#endif
+    fnSetPg //if we are setting
+  );
   cycleBacklight();
   cycleSignal();
 }
@@ -891,6 +901,8 @@ void checkRTC(bool force){
     } //end natural second
   
     //Things to do at specific times
+    word todmins = rtcGetHour()*60+rtcGetMinute();
+    
     //Timer drift correction: per the millisCorrectionInterval
     if(rtcGetSecond()%millisCorrectionInterval==0){ //if time:
       if(!(rtcDid&1)) millisCheckDrift(); bitWrite(rtcDid,0,1); //do if not done, set as done
@@ -961,7 +973,6 @@ void checkRTC(bool force){
     }
     
     //Strikes - only if fn=clock, normal brightness, not in off-hours (given ambient lighting is part of normal brightness), not setting, not signaling/snoozing. Setting 21 will be off if signal type is no good
-    word todmins = rtcGetHour()*60+rtcGetMinute();
     //The six pips
     if(rtcGetMinute()==59 && rtcGetSecond()==55 && readEEPROM(21,false)==2 && signalRemain==0 && snoozeRemain==0 && fn==FN_TOD && fnSetPg==0 && displayBrightness==2 && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins)) {
       signalStart(FN_TOD,6); //the signal code knows to use pip durations as applicable
@@ -1418,7 +1429,7 @@ void updateDisplay(){
     //normal
     else displayBrightness = 2;
 #ifdef LIGHTSENSOR
-    if(displayBrightness==2 && readEEPROM(27,false)==1) { //if we have a light sensor, and brightness is normal, and we are set to use ambient light, convert relative ambient light level to the brightness settings of the display
+    if(readEEPROM(27,false)==1) { //if we have a light sensor,  and we are set to use ambient light, convert relative ambient light level to the brightness settings of the display, to be passed to cycleDisplay
       displayVariableBrightness = BRIGHTNESS_DIM + ((long)getRelativeAmbientLightLevel() * (BRIGHTNESS_FULL - BRIGHTNESS_DIM) /255);
     }
 #endif
