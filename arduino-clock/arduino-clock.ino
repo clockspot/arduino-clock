@@ -994,6 +994,12 @@ void checkRTC(bool force){
     //Finally, update the display, whether natural tick or not, as long as we're not setting or on a scrolled display (unless forced eg. fn change)
     //This also determines off-hours, which is why strikes will happen if we go into off at top of hour, and not when we come into on at the top of the hour TODO find a way to fix this
     //Also skip updating the display if this is date and not being forced, since its pages take some calculating that cause it to flicker
+    //Also sample the ambient lighting here
+#ifdef LIGHTSENSOR
+    if(readEEPROM(27,false)==1) { //if we have a light sensor,  and we are set to use ambient light, convert relative ambient light level to the brightness settings of the display, to be passed to cycleDisplay
+      displayVariableBrightness = BRIGHTNESS_DIM + ((long)getRelativeAmbientLightLevel() * (BRIGHTNESS_FULL - BRIGHTNESS_DIM) /255);
+    }
+#endif
     if(fnSetPg==0 && (true || force) && !(fn==FN_CAL && !force)) updateDisplay(); /*scrollRemain==0 ||*/
     
     rtcSecLast = rtcGetSecond();
@@ -1428,11 +1434,7 @@ void updateDisplay(){
     else if( readEEPROM(27,false)>1 && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins) ) displayBrightness = (readEEPROM(27,false)==2?1:(unoffRemain>0?2:0)); //dim or (unoff? bright: off)
     //normal
     else displayBrightness = 2;
-#ifdef LIGHTSENSOR
-    if(readEEPROM(27,false)==1) { //if we have a light sensor,  and we are set to use ambient light, convert relative ambient light level to the brightness settings of the display, to be passed to cycleDisplay
-      displayVariableBrightness = BRIGHTNESS_DIM + ((long)getRelativeAmbientLightLevel() * (BRIGHTNESS_FULL - BRIGHTNESS_DIM) /255);
-    }
-#endif
+    //variable brightness will be sampled once per second in checkRTC
     updateBacklight();
     
     switch(fn){
