@@ -52,9 +52,9 @@ void initLightSensor() {
 
 } //end initLightSensor
 
-int lastRelAmb = 0; //we won't report a change unless relative ambient light changes sufficiently
+byte lastRelAmb = 0; //we won't report a change unless relative ambient light changes sufficiently
 #define REL_AMB_THRESHOLD 3 //sufficiently = 3/255 of max-min
-int getRelativeAmbientLightLevel() {
+byte getRelativeAmbientLightLevel() {
   int lux = (int)veml.readLux();
   if(lux <= LUX_DIM) lux = 0;
   else if(lux >= LUX_FULL) lux = 255;

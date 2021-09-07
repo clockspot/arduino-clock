@@ -21,7 +21,7 @@ Adafruit_7segment matrix = Adafruit_7segment();
 
 byte curBrightness = 2; //represents current display normal/dim/off state – compare to displayBrightness as passed to cycleDisplay
 #ifdef LIGHTSENSOR
-word curVariableBrightness = 0; //represents current display variable brightness level (in effect when curBrightness is normal)
+word curAmbientLightLevel = 0; //represents current ambient light level reading (as tweened by main code)
 #endif
 
 unsigned long displayBlinkStart = 0; //when nonzero, display should briefly blank
@@ -44,7 +44,7 @@ void sendToHT16K33(byte posStart, byte posEnd){ //"private"
 }
 
 unsigned long setStartLast = 0; //to control flashing during start
-void cycleDisplay(byte displayBrightness, bool useAmbient, word displayVariableBrightness, byte fnSetPg){
+void cycleDisplay(byte displayBrightness, bool useAmbient, word ambientLightLevel, byte fnSetPg){
   unsigned long now = millis();
   //HT16K33 handles its own cycling - just needs display data updates.
   //But we do need to check if the blink should be over, and whether brightness has changed (or should change, per setting).
@@ -58,7 +58,7 @@ void cycleDisplay(byte displayBrightness, bool useAmbient, word displayVariableB
       curBrightness = setBlinkState;
       matrix.setBrightness(setBlinkState==2? BRIGHTNESS_FULL: BRIGHTNESS_DIM);
     }
-  } else { //not setting - defer to what other code have set displayBrightness to (and displayVariableBrightness if applicable)
+  } else { //not setting - defer to what other code have set displayBrightness to (and ambientLightLevel if applicable)
     if(setStartLast>0) setStartLast=0;
     if(curBrightness != displayBrightness) {
       curBrightness = displayBrightness;
@@ -66,8 +66,8 @@ void cycleDisplay(byte displayBrightness, bool useAmbient, word displayVariableB
       if(curBrightness==1) matrix.setBrightness(BRIGHTNESS_DIM);
       if(curBrightness==2) { //normal brightness
 #ifdef LIGHTSENSOR
-        //if using ambient, set to previously seen value (which may be updated below)
-        if(useAmbient) matrix.setBrightness(curVariableBrightness);
+        //if using ambient, set per previously seen ambient light level, same as below
+        if(useAmbient) matrix.setBrightness(BRIGHTNESS_DIM + ((long)curAmbientLightLevel * (BRIGHTNESS_FULL - BRIGHTNESS_DIM) /255));
         else matrix.setBrightness(BRIGHTNESS_FULL); //otherwise, set to full brightness (per config)
 #else //no light sensor
         matrix.setBrightness(BRIGHTNESS_FULL); //set to full brightness (per config)
@@ -76,10 +76,12 @@ void cycleDisplay(byte displayBrightness, bool useAmbient, word displayVariableB
     } //end if displayBrightness has changed
 #ifdef LIGHTSENSOR
     //if using ambient lighting, and it has changed
-    if(useAmbient && curVariableBrightness != displayVariableBrightness) {
-      curVariableBrightness = displayVariableBrightness; //TODO tween like LEDs?
-      //if currently normal brightness, update the display
-      if(curBrightness==2) matrix.setBrightness(displayVariableBrightness);
+    if(useAmbient && curAmbientLightLevel != ambientLightLevel) {
+      curAmbientLightLevel = ambientLightLevel;
+      if(curBrightness==2) { //If currently normal brightness (so we should display per ambient light level)
+        //Convert the ambient light level (0-255, per LUX_DIM-LUX_FULL) to the corresponding brightness value for the actual display hardware, within the desired range (BRIGHTNESS_DIM-BRIGHTNESS_FULL)
+        matrix.setBrightness(BRIGHTNESS_DIM + ((long)curAmbientLightLevel * (BRIGHTNESS_FULL - BRIGHTNESS_DIM) /255));
+      }
     }
 #endif
   } //end if not setting

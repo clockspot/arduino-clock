@@ -76,7 +76,7 @@ void sendToMAX7219(byte posStart, byte posEnd){ //"private"
 }
 
 unsigned long setStartLast = 0; //to control flashing during start
-void cycleDisplay(byte displayBrightness, bool useAmbient, word displayVariableBrightness, byte fnSetPg){
+void cycleDisplay(byte displayBrightness, bool useAmbient, word ambientLightLevel, byte fnSetPg){
   unsigned long now = millis();
   //MAX7219 handles its own cycling - just needs display data updates.
   //But we do need to check if the blink should be over, and whether dim has changed.

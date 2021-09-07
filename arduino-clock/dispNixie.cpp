@@ -58,7 +58,7 @@ void initDisplay(){
   for(byte i=0; i<3; i++) { pinMode(anodes[i],OUTPUT); }
 }
 
-void cycleDisplay(byte displayBrightness, bool useAmbient, word displayVariableBrightness, byte fnSetPg){
+void cycleDisplay(byte displayBrightness, bool useAmbient, word ambientLightLevel, byte fnSetPg){
   unsigned long now = millis();
   
   if(displayBlinkStart){

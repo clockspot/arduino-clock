@@ -118,9 +118,7 @@
 
 //Backlighting control
 #define BACKLIGHT_PIN 9 // -1 to disable feature; 9 if equipped (UNDB v9)
-#define BACKLIGHT_FADE 0
-// 0 = no fading; simply switches on and off.
-// >0 = backlight fades on and off via PWM (must use PWM pin and PWM-supportive lighting, such as LEDs). This value is the amount the PWM is increased/decreased per loop cycle. 10 is a good starting choice.
+#define BACKLIGHT_FADE 0 // 1 to fade via PWM (must use PWM pin and PWM-supportive lighting); 0 to simply switch on and off
 
 
 #endif

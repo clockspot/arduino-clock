@@ -2,6 +2,6 @@
 #define LIGHTSENSOR_VEML7700_H
 
 void initLightSensor();
-int getRelativeAmbientLightLevel();
+byte getRelativeAmbientLightLevel();
 
 #endif //LIGHTSENSOR_VEML7700_H

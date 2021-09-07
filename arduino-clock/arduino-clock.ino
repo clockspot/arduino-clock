@@ -146,7 +146,9 @@ unsigned long millisAtLastCheck = 0;
 word unoffRemain = 0; //un-off (briefly turn on display during off-hours/away shutoff) timeout counter, seconds
 byte displayBrightness = 2; //dim per display or function: 2=normal, 1=dim, 0=off
 #ifdef LIGHTSENSOR
-word displayVariableBrightness = 0; //if equipped with an ambient light sensor, and if configured to do so, while displayBrightness=2, the display will be set to this instead of its full brightness setting
+byte ambientLightLevelActual = 0; //if equipped with an ambient light sensor, and if configured to do so, checkRTC will check the ambient light and store it here
+byte ambientLightLevel = 0; //the tweening mechanism (below) will move this value to meet the actual, and cycleDisplay will change the brightness of the display accordingly
+//see also backlightNow / backlightTarget below
 #endif
 bool versionShowing = false; //display version if Select held at start - until it is released or long-held
 
@@ -159,6 +161,7 @@ unsigned int tempValDispLast = 0;
 #define SHOW_IRRELEVANT_OPTIONS 0 //whether to show everything in settings menu and page (network)
 
 #define SHOW_SERIAL 0 //for debugging
+
 
 ////////// Main code control //////////
 
@@ -240,18 +243,18 @@ void loop(){
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
   if(networkSupported()) cycleNetwork();
   cycleTimer();
+  cycleTweening();
   cycleDisplay( //keeps the display hardware multiplexing cycle going
     displayBrightness, //the display normal/dim/off state
 #ifdef LIGHTSENSOR
-    readEEPROM(27,false)==1, //whether to use...
-    displayVariableBrightness, //...variable brightness per light sensor
+    readEEPROM(27,false)==1, //whether dimming per ambient light is opted for
+    ambientLightLevel,
 #else
     false,
     0,
 #endif
     fnSetPg //if we are setting
   );
-  cycleBacklight();
   cycleSignal();
 }
 
@@ -996,8 +999,8 @@ void checkRTC(bool force){
     //Also skip updating the display if this is date and not being forced, since its pages take some calculating that cause it to flicker
     //Also sample the ambient lighting here
 #ifdef LIGHTSENSOR
-    if(readEEPROM(27,false)==1) { //if we have a light sensor,  and we are set to use ambient light, convert relative ambient light level to the brightness settings of the display, to be passed to cycleDisplay
-      displayVariableBrightness = BRIGHTNESS_DIM + ((long)getRelativeAmbientLightLevel() * (BRIGHTNESS_FULL - BRIGHTNESS_DIM) /255);
+    if(readEEPROM(27,false)==1) { //if we have a light sensor,  and we are set to use ambient light, sample it
+      ambientLightLevelActual = getRelativeAmbientLightLevel();
     }
 #endif
     if(fnSetPg==0 && (true || force) && !(fn==FN_CAL && !force)) updateDisplay(); /*scrollRemain==0 ||*/
@@ -1871,9 +1874,11 @@ void quickBeepPattern(int source, int pattern){
   signalStart(-1,1); //Play a sample using the above source and pattern
 }
 
-//BACKLIGHT_FADE is PWM fade speed – if >0, with every loop() we'll increment/decrement the PWM (between 0-255) by this amount. If 0, we'll just switch it on and off (no PWM).
 byte backlightNow = 0;
 byte backlightTarget = 0;
+#ifndef BACKLIGHT_FADE
+#define BACKLIGHT_FADE 0 //no PWM fading
+#endif
 void updateBacklight(){
   //Run whenever something is changed that might affect the backlight state: initial (initOutputs), signal start/stop, switch signal on/off, setting change
   if(BACKLIGHT_PIN>=0) {
@@ -1905,15 +1910,40 @@ void updateBacklight(){
     } //end switch
   } //if BACKLIGHT_PIN
 } //end updateBacklight
-void cycleBacklight() {
-  //Allows us to fade the backlight to backlightTarget by stepping via BACKLIGHT_FADE, if applicable
+
+/* The variable display brightness and LED backlighting are (if opted for) faded from one state to another, but unlike the nixie fading – which requires very precise timing to prevent flicker, and is therefore the only allowed use of delay() (TODO delayMicroseconds()) in this sketch – these fade steps can be iterated with interval timing with millis() like everything else, just with a much smaller delay. I'm calling this "tweening." If we're using the nixie display, its delay()s will slow down the loop, so the tweening steps can take place once per loop. If not, the loop will run much faster, so we will need to add a delay – here it is. */
+#ifndef TWEENING_DELAY
+  #ifdef DISP_NIXIE
+  #define TWEENING_DELAY 0
+  #else
+  #define TWEENING_DELAY 20
+  #endif
+#endif
+/* Tweening is currently linear, with steps of this size (the full range being 0-255). The display may change brightness in more discrete steps if it doesn't have 255 possible brightness levels (e.g. MAX7219 and HT16K33 having just 16 steps), but will change more slowly to compensate (since it is converted from a byte value). */
+#ifndef TWEENING_STEP
+#define TWEENING_STEP 10
+#endif
+
+void cycleTweening() {
+  //Allows us to fade the backlight and variable display brightness to their targets.
+  
+  //Ambient lighting reading
+  if(ambientLightLevel != ambientLightLevelActual) {
+    if(ambientLightLevel < ambientLightLevelActual) { //fade up
+      ambientLightLevel = (ambientLightLevelActual-ambientLightLevel <= TWEENING_STEP? ambientLightLevelActual: ambientLightLevel+TWEENING_STEP);
+    } else { //fade down
+      ambientLightLevel = (ambientLightLevel-ambientLightLevelActual <= TWEENING_STEP? ambientLightLevelActual: ambientLightLevel-TWEENING_STEP);
+    }
+  }
+  
+  //Backlight
   //TODO: it appears setting analogWrite(pin,0) does not completely turn the backlight off. Anything else we could do?
   if(backlightNow != backlightTarget) {
-    if(BACKLIGHT_FADE){ //PWM
+    if(BACKLIGHT_FADE){ //PWM enabled
       if(backlightNow < backlightTarget) { //fade up
-        backlightNow = (backlightTarget-backlightNow <= BACKLIGHT_FADE? backlightTarget: backlightNow+BACKLIGHT_FADE);
+        backlightNow = (backlightTarget-backlightNow <= TWEENING_STEP? backlightTarget: backlightNow+TWEENING_STEP);
       } else { //fade down
-        backlightNow = (backlightNow-backlightTarget <= BACKLIGHT_FADE? backlightTarget: backlightNow-BACKLIGHT_FADE);
+        backlightNow = (backlightNow-backlightTarget <= TWEENING_STEP? backlightTarget: backlightNow-TWEENING_STEP);
       }
       // Serial.print(backlightNow,DEC);
       // Serial.print(F(" => "));
@@ -1924,7 +1954,8 @@ void cycleBacklight() {
       digitalWrite(BACKLIGHT_PIN,(backlightNow?LOW:HIGH)); //LOW = device on
     }
   }
-}
+} //end cycleTweening
+
 byte getVersionPart(byte part){
   switch(part){
     case 0: return vMajor; break;

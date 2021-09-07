@@ -32,15 +32,15 @@
 ///// Inputs /////
 //If using buttons for Select and optionally Alt:
 #define INPUT_BUTTONS
-#define CTRL_SEL A1 //UNDB S4/PL7
-#define CTRL_ALT -1 //UNDB S7/PL14 - if not using Alt, set to -1
+#define CTRL_SEL A1
+#define CTRL_ALT -1
 
 //Up and Down can be buttons OR a rotary control:
 
 //If using buttons for Up and Down:
 #define INPUT_UPDN_BUTTONS
-#define CTRL_UP A6 //UNDB S3/PL6
-#define CTRL_DN A7 //UNDB S2/PL5
+#define CTRL_UP A2
+#define CTRL_DN A3
 
 //For all input types:
 //How long (in ms) are the hold durations?
@@ -108,9 +108,7 @@
 
 //Backlighting control
 #define BACKLIGHT_PIN -1 // -1 to disable feature; 9 if equipped (UNDB v9)
-#define BACKLIGHT_FADE 0
-// 0 = no fading; simply switches on and off.
-// >0 = backlight fades on and off via PWM (must use PWM pin and PWM-supportive lighting, such as LEDs). This value is the amount the PWM is increased/decreased per loop cycle. 10 is a good starting choice.
+#define BACKLIGHT_FADE 0 // 1 to fade via PWM (must use PWM pin and PWM-supportive lighting); 0 to simply switch on and off
 
 
 #endif
