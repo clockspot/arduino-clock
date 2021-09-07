@@ -18,8 +18,8 @@
 #define ENABLE_ALARM_FIBONACCI false
 #define ENABLE_TIMER_FN false
 #define ENABLE_TIME_CHIME true
-#define ENABLE_SHUTOFF_NIGHT true // If disabled, tubes will be full brightness all the time.
-#define ENABLE_SHUTOFF_AWAY false // Requires night shutoff.
+#define ENABLE_DIMMING true
+#define ENABLE_AWAYMODE false
 #define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
 #define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 

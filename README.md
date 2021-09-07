@@ -18,14 +18,17 @@ To see your clock’s software version, hold **Select** briefly while powering u
 * **Perpetual calendar** with day counter and local sunrise/sunset times.
 * **Alarm** with snooze and automatic weekday/weekend skipping.
 * **Chronograph and timer** with reset/interval options.
-* Runs on both classic Arduino Nano (AVR) and Nano 33 IoT (SAMD21).
-* Supports **web-based config and NTP sync** over Wi-Fi on Nano 33 IoT.
+* Display types supported:
+  * **Nixie displays** of four/six tubes, driven by two SN74141 chips, with anti-cathode poisoning.
+  * **LED matrices** of 8x24/8x32 LEDs, driven by three/four SPI MAX7219 chips ([example](https://www.amazon.com/HiLetgo-MAX7219-Arduino-Microcontroller-Display/dp/B07FFV537V/)).
+  * **LED 7-segment displays** of four/six digits, driven by an I2C HT16K33 ([example](https://learn.adafruit.com/adafruit-led-backpack/1-2-inch-7-segment-backpack)).
+* **Display dimming/shutoff** on nightly/weekly schedule or per ambient lighting via [I2C VEML7700 sensor](https://learn.adafruit.com/adafruit-veml7700).
+* **Switchable backlighting** (single-channel) with optional PWM fade.
 * **Simple control** via three/four buttons, a rotary encoder, and/or Nano 33 IoT’s [IMU](https://en.wikipedia.org/wiki/Inertial_measurement_unit) (tilt control).
 * **Signals** via piezo beeper, switch (e.g. appliance timer), and/or pulse (e.g. bell ringer).
-* Supports **Nixie displays** of two SN74141 chips driving four/six tubes, with anti-cathode poisoning.
-* Supports **LED displays** of three/four MAX7219 chips (via SPI) driving 8x8 LED matrices ([example](https://www.amazon.com/HiLetgo-MAX7219-Arduino-Microcontroller-Display/dp/B07FFV537V/)).
-* Scheduled nightly/weekly **display dim/shutoff** and switchable backlighting with optional PWM fade.
-* Timekeeping can be internal, or based on a DS3231 RTC (via I2C) for reliability/accuracy.
+* Tested on both classic Arduino Nano (AVR) and Nano 33 IoT (SAMD21).
+* Supports **web-based config and NTP sync** over Wi-Fi on Nano 33 IoT.
+* **Timekeeping** can be internal, or based on an I2C DS3231 RTC for reliability/accuracy.
 * Settings stored persistently in case of power loss, and mirrored in RAM in case of EEPROM/flash failure.
 
 Written to support [RLB Designs’](http://rlb-designs.com/) Universal Nixie Driver Board (UNDB):
@@ -45,7 +48,9 @@ You may also wish to adjust the defaults for the clock’s user-configurable val
 I use the Arduino IDE to compile and upload, due to the use of various Arduino and Arduino-oriented libraries. Make sure the relevant libraries are installed in the Library Manager, per the config in use.
 
 * EEPROM (Arduino) for AVR Arduinos (e.g. classic Nano)
-* SPI (Arduino) and [LedControl](http://wayoda.github.io/LedControl) for MAX7219-based displays
+* SPI (Ardunio) and [LedControl](http://wayoda.github.io/LedControl) for MAX7219-based matrix displays
+* GFX and LEDBackpack (Adafruit) for HT16K33-based 7-segment displays
+* VEML7700 (Adafruit) for VEML7700 ambient light sensor
 * [Encoder](https://github.com/PaulStoffregen/Encoder) if rotary encoder is used for Up/Down inputs
 * Arduino_LSM6DS3 (Arduino) if using Nano 33 IoT’s IMU for inputs
 * WiFiNINA and WiFiUdp (Arduino) for Wi-Fi and NTP sync support on Nano 33 IoT

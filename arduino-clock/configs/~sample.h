@@ -18,8 +18,8 @@
 #define ENABLE_ALARM_FIBONACCI true
 #define ENABLE_TIMER_FN true
 #define ENABLE_TIME_CHIME true
-#define ENABLE_SHUTOFF_NIGHT true // If disabled, tubes will be full brightness all the time.
-#define ENABLE_SHUTOFF_AWAY true // Requires night shutoff.
+#define ENABLE_DIMMING true
+#define ENABLE_AWAYMODE true
 #define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
 #define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 
@@ -134,10 +134,33 @@
 #define CS_PIN 3 //D3, pin 21
 #define DIN_PIN 4 //D4, pin 22
 
+///// Display /////
+//If using 4/6-digit 7-segment LED display with HT16K33 (I2C on SDA/SCL pins)
+//Requires Adafruit libraries LED Backpack, GFX, and BusIO
+//If 6 digits, edit Adafruit_LEDBackpack.cpp to replace "if (d > 4)" with "if (d > 6)"
+//and, if desired, in numbertable[], replace 0x7D with 0x7C and 0x6F with 0x67 to remove
+//the serifs from 6 and 9 for legibility (see http://www.harold.thimbleby.net/cv/files/seven-segment.pdf)
+#define DISP_HT16K33
+//#define NUM_MAX 4 //How many digits?
+#define BRIGHTNESS_FULL 15 //out of 0-15
+#define BRIGHTNESS_DIM 0
+#define DISP_ADDR 0x70 //0x70 is the default
+
 //For all display types:
 #define DISPLAY_SIZE 6 //number of digits in display module: 6 or 4
 #define UNOFF_DUR 10 //sec - when display is off, an input will illuminate for how long?
 #define SCROLL_SPEED 100 //ms - "frame rate" of digit scrolling, e.g. date at :30 option
+
+
+///// Ambient Light Sensor /////
+//If using VEML 7700 Lux sensor (I2C on SDA/SCL pins)
+//Requires Adafruit library VEML7700
+#define LIGHTSENSOR_VEML7700
+#define LUX_FULL 400 //lux at/above which display should be at its brightest (per config)
+#define LUX_DIM 30 //lux at/below which display should be at its dimmest (per config)
+
+//If any type of light sensor is in use:
+#define LIGHTSENSOR
 
 
 ///// Other Outputs /////

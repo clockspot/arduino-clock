@@ -19,7 +19,7 @@
 * When day counter is set to count up from 12/31, override to display 365/366 on that date
 * Bitmask to enable/disable features?
 * Option to display weekdays as Sun=0 or Sun=1 (per Portuguese!)
-* Is it possible to trip the chime *after* determining if we're in night shutoff or not
+* Is it possible to trip the chime *after* determining if we're in off-hours or not
 * In display code, consider using `delayMicroseconds()` which, with its tighter resolution, may give better control over fades and dim levels
 * in `ctrlEvt()`, could we do release/shorthold on mainSel so we can exit without making changes?
 * I2C multicolor LED to indicate which function we're in? - possibly as part of display

@@ -1,4 +1,4 @@
-# Operating instructions, v2.0+
+# Operating instructions, v2.1+
 
 > [Instructions for earlier versions are here.](https://github.com/clockspot/arduino-clock/releases) To see your clock’s software version, hold **Select** briefly while powering up the clock.
 
@@ -36,7 +36,7 @@ The calendar cycles through several displays, before returning to the time of da
 The alarm is always shown in 24h format so you can tell AM from PM. In place of seconds, it displays `1`/`01`/`0` to indicate **on, skip, and off,** and the display dims when the alarm is off.
 
 * Use **Up/Down** to switch the alarm between **on, skip, and off,** indicated by high/medium/low beeps.
-	* **Skip** silences the next alarm in advance (hence the `01` meaning “off then on”) – useful if you’re taking a day off, or you wake up before your alarm. In the [settings menu](#settings-menu), you can set the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back to **on.**
+  * **Skip** silences the next alarm in advance (hence the `01` meaning “off then on”) – useful if you’re taking a day off, or you wake up before your alarm. In the [settings menu](#settings-menu), you can set the alarm to skip automatically during the work week or on weekends – and when this is active, you can also _unskip_ the next alarm by simply switching it back to **on.**
 * When the alarm [signals](#signals), press any button – once to snooze, and again to cancel the snooze / silence the alarm for the day (it will give a short low beep, and/or the display will blink once).
   * If the alarm is set to use a [switch signal](#signal), **Alt** will switch it off without snooze.
 * **Fibonacci mode** wakes you gradually by starting the alarm about 27 minutes early, by beeping at increasingly shorter intervals per the [Fibonacci sequence](https://en.wikipedia.org/wiki/Fibonacci_number) (610 seconds, then 337, then 233...). This mode is enabled in the [settings menu](#settings-menu), and applies only to [beeper and pulse signals](#signals).
@@ -99,9 +99,8 @@ If your clock supports _neither_ [switch signal](#signals) nor [Wi-Fi](#wi-fi-su
 | 3 | Display date during time? | 0 = never<br/>1 = date instead of seconds<br/>2 = full date each minute at :30 seconds<br/>3 = same as 2, but scrolls in and out |
 | 4 | Leading zeros | 0 = no<br/>1 = yes |
 | 5 | Digit fade | 0–20, in hundredths of a second<br/>(Clocks with nixie display only) |
-| 6 | Auto DST | Add 1h for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ)<br/>If the clock is not powered at the time, it will correct itself when powered up.<br/>If you observe DST but your locale’s rules are not represented here, leave this set to 0 and set the clock manually (and the [DST offset](#settingsgeography) if applicable). |
-| 7 | Backlight | 0 = always off<br/>1 = always on<br/>2 = on until night/away shutoff (if enabled)<br/>3 = on when alarm/timer signals</br>4 = on with [switch signal](#signals) (if equipped)<br/>(Clocks with backlighting only) |
-| 8 | Anti-cathode poisoning | Briefly cycles all nixie tubes to prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)<br/>0 = once a day, either at midnight or when night shutoff starts (if enabled)<br/>1 = at the top of every hour<br/>2 = at the top of every minute<br/>(Will not trigger during night/away shutoff. Clocks with nixie display only) |
+| 7 | Backlight | 0 = always off<br/>1 = always on<br/>2 = follow [display brightness](#settingsbrightness)<br/>3 = on when alarm/timer signals</br>4 = on with [switch signal](#signals) (if equipped)<br/>(Clocks with backlighting only) |
+| 8 | Anti-cathode poisoning | Briefly cycles all nixie tubes to prevent [cathode poisoning](http://www.tube-tester.com/sites/nixie/different/cathode%20poisoning/cathode-poisoning.htm)<br/>0 = once a day, either at midnight or when off-hours start (if enabled)<br/>1 = at the top of every hour<br/>2 = at the top of every minute<br/>(Will not trigger during off-hours or away mode. Clocks with nixie display only) |
 |  | <a name="settingsalarm"></a>**Alarm** | (Clocks with signals only) |
 | 10 | Alarm auto-skip | 0 = alarm triggers every day<br/>1 = work week only, skipping weekends (per settings below)<br/>2 = weekend only, skipping work week |
 | 11 | Alarm signal | 0 = beeper (uses pitch and pattern below)<br/>1 = switch (will stay on for 2 hours)<br/>2 = pulse<br/>(Clocks with multiple signal types only) |
@@ -114,23 +113,24 @@ If your clock supports _neither_ [switch signal](#signals) nor [Wi-Fi](#wi-fi-su
 | 22 | Timer beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>(Clocks with beeper only) |
 | 23 | Timer beeper pattern | Same options as alarm beeper pattern.<br/>(Clocks with beeper only) |
 |  | <a name="settingschime"></a>**Chime** |  |
-| 30 | Chime | Make noise on the hour:<br/>0 = off<br/>1 = single pulse<br/>2 = [six pips](https://en.wikipedia.org/wiki/Greenwich_Time_Signal) (overrides pitch and pattern settings)<br/>3 = pulse the hour (1 to 12)<br/>4 = ship’s bell (hour and half hour)<br/>Will not sound during night/away shutoff (except when off starts at top of hour)<br/>(Clocks with [beeper or pulse signals](#signals) only) |
+| 30 | Chime | Make noise on the hour:<br/>0 = off<br/>1 = single pulse<br/>2 = [six pips](https://en.wikipedia.org/wiki/Greenwich_Time_Signal) (overrides pitch and pattern settings)<br/>3 = pulse the hour (1 to 12)<br/>4 = ship’s bell (hour and half hour)<br/>Will not sound during off-hours or away mode (below). If you would like the chime to sound at all hours, disable away mode and set the off-hours to start and end at the same time of day. (Note: if off-hours start at the top of the hour, the chime will sound then. To prevent this, start off-hours a minute early.)<br/>(Clocks with [beeper or pulse signals](#signals) only) |
 | 31 | Chime signal | 0 = beeper (uses pitch and pattern below)<br/>2 = pulse<br/>(Clocks with [beeper and pulse signals](#signals) only) |
 | 32 | Chime beeper pitch | [Note number](https://en.wikipedia.org/wiki/Piano_key_frequencies), from 49 (A4) to 88 (C8).<br/>(Clocks with beeper only) |
 | 33 | Chime beeper pattern | Same options as alarm beeper pattern. Cuckoo recommended!<br/>(Clocks with beeper only) |
-|  | <a name="settingsshutoff"></a>**Night/away shutoff** |  |
-| 40 | Night shutoff | To save display life and/or preserve your sleep, dim or shut off the display nightly when you’re not around or sleeping.<br/>0 = none (fully on)<br/>1 = dim<br/>2 = shut off<br/>When off, you can press **Select** to illuminate the display briefly. |
-| 41 | Night starts at | Time of day. |
-| 42 | Night ends at | Time of day. Set to 0:00 to use the alarm time. |
-| 43 | Away shutoff | To further save display life, shut off the display during daytime hours when you’re not around. This feature is designed to accommodate your work schedule.<br/>0 = none (on all day every day, except for night shutoff)<br/>1 = clock at work (shut off all day on weekends)<br/>2 = clock at home (shut off during work hours only)<br/>When off, you can press **Select** to illuminate the display briefly. |
+|  | <a name="settingsbrightness"></a>**Display brightness** |  |
+| 40 | Dimming | Automatically adjust the brightness to match the ambient lighting (if equipped), or dim or shut off the display during off-hours when you’re sleeping or not likely to be around. (This feature, together with away mode (below), may also help prolong the life of nixie tubes and other displays prone to wear.)<br/>0 = no dimming<br/>1 = follow ambient lighting (if equipped)<br/>1 = dim during off-hours (below)<br/>2 = shut off during off-hours (below)<br/>When off, you can press **Select** to illuminate the display briefly. |
+| 41 | Off-hours start at | Time of day. |
+| 42 | Off-hours end at | Time of day. Set to 0:00 to use the alarm time. |
+| 43 | Away mode | Automatically shut off the display during daytime hours when you’re not likely to be around. This feature is designed to accommodate your work schedule.<br/>0 = no away mode (on all day every day, unless dimming)<br/>1 = clock at work (shut off all day on weekends – if desired, use dimming to shut it off in the evenings too)<br/>2 = clock at home (shut off during work hours only)<br/>When off, you can press **Select** to illuminate the display briefly. |
 | 44 | First day of work week | 0–6 (Sunday–Saturday) |
 | 45 | Last day of work week | 0–6 (Sunday–Saturday) |
 | 46 | Work starts at | Time of day. |
 | 47 | Work ends at | Time of day. |
 |  | <a name="settingsgeography"></a>**Geography** |  |
 | 50 | Latitude | Your latitude, in tenths of a degree; negative (south) values are indicated with leading zeroes. (Example: Dallas is at 32.8°N, set as `328`.) |
-| 51 | Longitude | Your longitude, in tenths of a degree; negative (west) values are indicated with leading zeroes. (Example: Dallas is at 96.7°W, set as `00967`.) |
-| 52 | UTC offset | Your time zone’s offset from UTC (non-DST), in hours and minutes; negative (west) values are indicated with leading zeroes. (Example: Dallas is UTC–6, set as `0600`.)<br/>If you observe DST but set the clock manually rather than using the [auto DST feature](#settingsgeneral), you must add an hour to the UTC offset during DST, or the sunrise/sunset times will be an hour early. |
+| 51 | Longitude | Your longitude, in tenths of a degree; negative (west) values are indicated with leading zeroes. (Example: Dallas is at 96.7°W, set as `00967`.)<br/>These two settings are used to calculate sunrise/sunset times. |
+| 52 | UTC offset | Your time zone’s offset from UTC (non-DST), in hours and minutes; negative (west) values are indicated with leading zeroes. (Example: Dallas is UTC–6, set as `0600`.)<br/>This is used to calculate sunrise/sunset times and set clock from NTP (if equipped). If you observe DST but set the clock manually rather than using Auto DST (below), you must add an hour to this UTC offset during DST, or the sunrise/sunset times will be an hour early. |
+| 53 | Auto DST | Automatically “spring forward” and “fall back” an hour for daylight saving time between these dates (at 2am):<br/>0 = off<br/>1 = second Sunday in March to first Sunday in November (US/CA)<br/>2 = last Sunday in March to last Sunday in October (UK/EU)<br/>3 = first Sunday in April to last Sunday in October (MX)<br/>4 = last Sunday in September to first Sunday in April (NZ)<br/>5 = first Sunday in October to first Sunday in April (AU)<br/>6 = third Sunday in October to third Sunday in February (BZ)<br/>If the clock is not powered at the time, it will correct itself when powered up.<br/>If you observe DST but your locale’s rules are not represented here, leave this set to 0, and manually set the clock and the UTC offset (above). |
 
 To reset the clock to “factory” settings, hold **Select** for 10 seconds while powering up the clock. You will see the time reset to 0:00.
 
@@ -141,7 +141,7 @@ If your clock is Wi-Fi-enabled, it offers a settings webpage that duplicates the
 **To activate the settings page,** grab a device with a web browser, and briefly hold **Alt**.
 
 * If the clock **is not** connected to Wi-Fi, it will display `7777`.
-	* This indicates it is broadcasting a Wi-Fi network called “Clock.” Connect your device to “Clock” and browse to [7.7.7.7](http://7.7.7.7).
+  * This indicates it is broadcasting a Wi-Fi network called “Clock.” Connect your device to “Clock” and browse to [7.7.7.7](http://7.7.7.7).
 	
 * If the clock **is** connected to Wi-Fi, it will flash its IP address (as a series of four numbers).
 	* Connect your device to the same Wi-Fi network as the clock, and browse to that IP address.

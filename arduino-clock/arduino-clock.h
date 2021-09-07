@@ -4,7 +4,7 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/led-iot-7seg.h"
+#include "configs/led-avr-7seg.h"
 
 ////////////////////////////////////////////
 

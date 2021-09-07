@@ -76,7 +76,7 @@ void sendToMAX7219(byte posStart, byte posEnd){ //"private"
 }
 
 unsigned long setStartLast = 0; //to control flashing during start
-void cycleDisplay(byte displayDim, byte fnSetPg){
+void cycleDisplay(byte displayBrightness, byte fnSetPg){
   unsigned long now = millis();
   //MAX7219 handles its own cycling - just needs display data updates.
   //But we do need to check if the blink should be over, and whether dim has changed.
@@ -84,7 +84,7 @@ void cycleDisplay(byte displayDim, byte fnSetPg){
     if((unsigned long)(now-displayBlinkStart)>=500){ displayBlinkStart = 0; sendToMAX7219(0,5); }
   }
   //Other display code decides whether we should dim per function or time of day
-  char dim = displayDim; //2=normal, 1=dim, 0=off
+  char dim = displayBrightness; //2=normal, 1=dim, 0=off
   //But if we're setting, decide here to dim for every other 500ms since we started setting
   if(fnSetPg>0) {
     if(setStartLast==0) setStartLast = now;

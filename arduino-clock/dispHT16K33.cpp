@@ -9,7 +9,19 @@
 
 Adafruit_7segment matrix = Adafruit_7segment();
 
-int curBrightness = BRIGHTNESS_FULL;
+//these can be overridden in your config .h
+#ifndef BRIGHTNESS_FULL
+#define BRIGHTNESS_FULL 15 //out of 0-15
+#endif
+#ifndef BRIGHTNESS_DIM
+#define BRIGHTNESS_DIM 0
+#endif
+
+//Hold current states of brightness
+byte curBrightness = 2; //compare to displayBrightness
+#ifdef LIGHTSENSOR
+word curVariableBrightness = 0; //compare to displayVariableBrightness
+#endif
 
 unsigned long displayBlinkStart = 0; //when nonzero, display should briefly blank
 
@@ -31,28 +43,46 @@ void sendToHT16K33(byte posStart, byte posEnd){ //"private"
 }
 
 unsigned long setStartLast = 0; //to control flashing during start
-void cycleDisplay(byte displayDim, byte fnSetPg){
+void cycleDisplay(byte displayBrightness, byte fnSetPg){
   unsigned long now = millis();
   //HT16K33 handles its own cycling - just needs display data updates.
-  //But we do need to check if the blink should be over, and whether dim has changed.
+  //But we do need to check if the blink should be over, and whether brightness has changed (or should change, per setting).
   if(displayBlinkStart){
     if((unsigned long)(now-displayBlinkStart)>=500){ displayBlinkStart = 0; sendToHT16K33(0,5); }
   }
-  //Other display code decides whether we should dim per function or time of day
-  char dim = displayDim; //2=normal, 1=dim, 0=off
-  //But if we're setting, decide here to dim for every other 500ms since we started setting
-  if(fnSetPg>0) {
+  if(fnSetPg>0) { //setting - dim for every other 500ms - variable brightness is ignored here TODO consider it for bright blink state?
     if(setStartLast==0) setStartLast = now;
-    dim = (1-(((unsigned long)(now-setStartLast)/500)%2))+1;
-  } else {
+    setBlinkState = (1-(((unsigned long)(now-setStartLast)/500)%2))+1; //2=bright, 1=dim
+    if(curBrightness != setBlinkState) {
+      curBrightness = setBlinkState;
+      matrix.setBrightness(setBlinkState==2? BRIGHTNESS_FULL: BRIGHTNESS_DIM);
+    }
+  } else { //not setting - defer to what other code have set displayBrightness to (and displayVariableBrightness if applicable)
     if(setStartLast>0) setStartLast=0;
-  }
-  if(curBrightness!=(dim==2? BRIGHTNESS_FULL: (dim==1? BRIGHTNESS_DIM: -1))){
-    curBrightness = (dim==2? BRIGHTNESS_FULL: (dim==1? BRIGHTNESS_DIM: -1));
-    if(curBrightness==-1) for(int i=0; i<DISPLAY_SIZE; i++) { matrix.writeDigitRaw((i>=2?i+1:i),0); } //force dark
-    else matrix.setBrightness(curBrightness);
-  }
-}
+    if(curBrightness != displayBrightness) {
+      curBrightness = displayBrightness;
+      if(curBrightness==0) for(int i=0; i<DISPLAY_SIZE; i++) { matrix.writeDigitRaw((i>=2?i+1:i),0); } //force dark
+      if(curBrightness==1) matrix.setBrightness(BRIGHTNESS_DIM);
+      if(curBrightness==2) { //normal brightness
+#ifdef LIGHTSENSOR
+        //if using ambient, set to previously seen value (which may be updated below)
+        if(readEEPROM(27,false)==1) matrix.setBrightness(displayVariableBrightness);
+        else matrix.setBrightness(BRIGHTNESS_FULL); //otherwise, set to full brightness (per config)
+#else //no light sensor
+        matrix.setBrightness(BRIGHTNESS_FULL); //set to full brightness (per config)
+#endif //end no light sensor
+      }
+    } //end if displayBrightness has changed
+#ifdef LIGHTSENSOR
+    //if normal brightness, using ambient lighting, and it has changed
+    if(curBrightness==2 && readEEPROM(27,false)==1 && curVariableBrightness != displayVariableBrightness) {
+      //TODO tween like LEDs?
+      curVariableBrightness = displayVariableBrightness;
+      matrix.setBrightness(displayVariableBrightness);
+    }
+#endif
+  } //end if not setting
+} //end cycleDisplay
 
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
   if(curBrightness==-1) return;

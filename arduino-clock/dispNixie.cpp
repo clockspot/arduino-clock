@@ -58,7 +58,7 @@ void initDisplay(){
   for(byte i=0; i<3; i++) { pinMode(anodes[i],OUTPUT); }
 }
 
-void cycleDisplay(byte displayDim, byte fnSetPg){
+void cycleDisplay(byte displayBrightness, byte fnSetPg){
   unsigned long now = millis();
   
   if(displayBlinkStart){
@@ -68,7 +68,7 @@ void cycleDisplay(byte displayDim, byte fnSetPg){
   }
   
   //Other display code decides whether we should dim per function or time of day
-  bool dim = (displayDim==1?1:0);
+  bool dim = (displayBrightness==1?1:0);
   //But if we're setting, decide here to dim for every other 500ms since we started setting
   if(fnSetPg>0) {
     if(setStartLast==0) setStartLast = now;
@@ -111,7 +111,7 @@ void cycleDisplay(byte displayDim, byte fnSetPg){
   } //end fading enabled
   
   //TODO consider using delayMicroseconds() which, with its tighter resolution, may give better control over fades and dim levels
-  if(displayDim>0) { //if other display code says to shut off entirely, skip this part
+  if(displayBrightness>0) { //if other display code says to shut off entirely, skip this part
     //Anode channel 0: tubes #2 (min x10) and #5 (sec x1)
     setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
     digitalWrite(anodes[0], HIGH); //Turn on tubes
@@ -141,7 +141,7 @@ void cycleDisplay(byte displayDim, byte fnSetPg){
     digitalWrite(anodes[2], LOW);
   
     if(dim) delay(dimDur);
-  } //end if displayDim>0
+  } //end if displayBrightness>0
   //TODO why does it sometimes flicker while in the setting mode
 }
 
