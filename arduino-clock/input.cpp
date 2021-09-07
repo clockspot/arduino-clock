@@ -212,7 +212,7 @@ bool initInputs(){
 bool readBtn(byte btn){
   //Reads momentary button and/or IMU position, as equipped
   #ifdef INPUT_BUTTONS
-    if(btn!=0){ //skip disabled alt
+    if(btn>0){ //skip disabled alt
       if(btn==A6 || btn==A7) return analogRead(btn)<100; //analog-only pins
       else return !(digitalRead(btn)); //false (low) when pressed
     }

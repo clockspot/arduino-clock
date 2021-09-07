@@ -28,7 +28,7 @@ unsigned long displayBlinkStart = 0; //when nonzero, display should briefly blan
 
 void initDisplay(){
   matrix.begin(DISP_ADDR);
-  matrix.setBrightness(curBrightness);
+  matrix.setBrightness(BRIGHTNESS_FULL);
 }
 
 byte displayNext[6] = {15,15,15,15,15,15}; //Internal representation of display. Blank to start.
