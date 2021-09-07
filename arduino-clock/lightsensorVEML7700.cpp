@@ -23,7 +23,7 @@ void initLightSensor() {
   //Gain and integration time put a limit on the max lux we can detect
   //see: https://forums.adafruit.com/viewtopic.php?f=19&t=165473&p=840089#p829281
   veml.setGain(VEML7700_GAIN_1_4);
-  veml.setIntegrationTime(VEML7700_IT_400MS);
+  veml.setIntegrationTime(VEML7700_IT_200MS);
 
   // Serial.print(F("Gain: "));
   // switch (veml.getGain()) {

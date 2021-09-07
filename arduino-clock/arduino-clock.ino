@@ -163,12 +163,12 @@ unsigned int tempValDispLast = 0;
 ////////// Main code control //////////
 
 void setup(){
-#ifdef SHOW_SERIAL
-  Serial.begin(9600);
-  #ifndef __AVR__ //SAMD only
-  while(!Serial);
-  #endif
-#endif
+  if(SHOW_SERIAL) {
+    Serial.begin(9600);
+    #ifndef __AVR__ //SAMD only
+    while(!Serial);
+    #endif
+  }
   rtcInit();
   initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
   byte changed = initEEPROM(false); //do a soft init to make sure vals in range
