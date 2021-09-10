@@ -1916,7 +1916,7 @@ void updateBacklight(){
   #ifdef DISP_NIXIE
   #define TWEENING_DELAY 0
   #else
-  #define TWEENING_DELAY 20
+  #define TWEENING_DELAY 50
   #endif
 #endif
 /* Tweening is currently linear, with steps of this size (the full range being 0-255). The display may change brightness in more discrete steps if it doesn't have 255 possible brightness levels (e.g. MAX7219 and HT16K33 having just 16 steps), but will change more slowly to compensate (since it is converted from a byte value). */
@@ -1924,34 +1924,39 @@ void updateBacklight(){
 #define TWEENING_STEP 10
 #endif
 
+unsigned long tweenLast = 0;
 void cycleTweening() {
   //Allows us to fade the backlight and variable display brightness to their targets.
-  
-  //Ambient lighting reading
-  if(ambientLightLevel != ambientLightLevelActual) {
-    if(ambientLightLevel < ambientLightLevelActual) { //fade up
-      ambientLightLevel = (ambientLightLevelActual-ambientLightLevel <= TWEENING_STEP? ambientLightLevelActual: ambientLightLevel+TWEENING_STEP);
-    } else { //fade down
-      ambientLightLevel = (ambientLightLevel-ambientLightLevelActual <= TWEENING_STEP? ambientLightLevelActual: ambientLightLevel-TWEENING_STEP);
-    }
-  }
-  
-  //Backlight
-  //TODO: it appears setting analogWrite(pin,0) does not completely turn the backlight off. Anything else we could do?
-  if(backlightNow != backlightTarget) {
-    if(BACKLIGHT_FADE){ //PWM enabled
-      if(backlightNow < backlightTarget) { //fade up
-        backlightNow = (backlightTarget-backlightNow <= TWEENING_STEP? backlightTarget: backlightNow+TWEENING_STEP);
+  if((unsigned long)(millis()-tweenLast)>=TWEENING_DELAY){
+    tweenLast = millis();
+    //Ambient lighting reading
+    if(ambientLightLevel != ambientLightLevelActual) {
+      //Serial.print(F("cycleTweening: ambientLightLevel from ")); Serial.print(ambientLightLevel,DEC);
+      if(ambientLightLevel < ambientLightLevelActual) { //fade up
+        ambientLightLevel = (ambientLightLevelActual-ambientLightLevel <= TWEENING_STEP? ambientLightLevelActual: ambientLightLevel+TWEENING_STEP);
       } else { //fade down
-        backlightNow = (backlightNow-backlightTarget <= TWEENING_STEP? backlightTarget: backlightNow-TWEENING_STEP);
+        ambientLightLevel = (ambientLightLevel-ambientLightLevelActual <= TWEENING_STEP? ambientLightLevelActual: ambientLightLevel-TWEENING_STEP);
       }
-      // Serial.print(backlightNow,DEC);
-      // Serial.print(F(" => "));
-      // Serial.println(backlightTarget,DEC);
-      analogWrite(BACKLIGHT_PIN,backlightNow);
-    } else { //just switch
-      backlightNow = backlightTarget = (backlightTarget<255? 0: 255);
-      digitalWrite(BACKLIGHT_PIN,(backlightNow?LOW:HIGH)); //LOW = device on
+      //Serial.print(F(" to ")); Serial.print(ambientLightLevel,DEC); Serial.print(F(" on the way to ")); Serial.print(ambientLightLevelActual,DEC);
+    }
+  
+    //Backlight
+    //TODO: it appears setting analogWrite(pin,0) does not completely turn the backlight off. Anything else we could do?
+    if(backlightNow != backlightTarget) {
+      if(BACKLIGHT_FADE){ //PWM enabled
+        if(backlightNow < backlightTarget) { //fade up
+          backlightNow = (backlightTarget-backlightNow <= TWEENING_STEP? backlightTarget: backlightNow+TWEENING_STEP);
+        } else { //fade down
+          backlightNow = (backlightNow-backlightTarget <= TWEENING_STEP? backlightTarget: backlightNow-TWEENING_STEP);
+        }
+        // Serial.print(backlightNow,DEC);
+        // Serial.print(F(" => "));
+        // Serial.println(backlightTarget,DEC);
+        analogWrite(BACKLIGHT_PIN,backlightNow);
+      } else { //just switch
+        backlightNow = backlightTarget = (backlightTarget<255? 0: 255);
+        digitalWrite(BACKLIGHT_PIN,(backlightNow?LOW:HIGH)); //LOW = device on
+      }
     }
   }
 } //end cycleTweening

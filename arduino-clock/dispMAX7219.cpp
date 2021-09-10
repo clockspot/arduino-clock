@@ -9,12 +9,26 @@
 
 LedControl lc=LedControl(DIN_PIN,CLK_PIN,CS_PIN,NUM_MAX);
 
-int curBrightness = BRIGHTNESS_FULL;
+//these can be overridden in your config .h
+#ifndef BRIGHTNESS_FULL
+#define BRIGHTNESS_FULL 15 //out of 0-15
+#endif
+#ifndef BRIGHTNESS_DIM
+#define BRIGHTNESS_DIM 0
+#endif
+
+byte curBrightness = 255; //represents current display normal/dim/off state – compare to displayBrightness as passed to cycleDisplay. Start at 255 to force an adjustment at startup
+#ifdef LIGHTSENSOR
+word curAmbientLightLevel = 0; //represents current ambient light level reading (as tweened by main code)
+#endif
 
 unsigned long displayBlinkStart = 0; //when nonzero, display should briefly blank
 
 void initDisplay(){
-  for(int i=0; i<NUM_MAX; i++) { lc.shutdown(i,false); lc.setIntensity(i,curBrightness); }
+  for(int i=0; i<NUM_MAX; i++) {
+    lc.shutdown(i,false);
+    //lc.setIntensity(i,curBrightness);
+  }
 }
 
 //TODO can we move this into flash with e.g. PROGMEM? or does that happen already?
@@ -76,28 +90,65 @@ void sendToMAX7219(byte posStart, byte posEnd){ //"private"
 }
 
 unsigned long setStartLast = 0; //to control flashing during start
+bool setBlinkState = 0;
 void cycleDisplay(byte displayBrightness, bool useAmbient, word ambientLightLevel, byte fnSetPg){
   unsigned long now = millis();
   //MAX7219 handles its own cycling - just needs display data updates.
-  //But we do need to check if the blink should be over, and whether dim has changed.
+  //But we do need to check if the blink should be over, and whether brightness has changed (or should change, per setting).
+  
+  //If we're in the middle of a blink, see if it's time to end it
   if(displayBlinkStart){
-    if((unsigned long)(now-displayBlinkStart)>=500){ displayBlinkStart = 0; sendToMAX7219(0,5); }
+    if((unsigned long)(now-displayBlinkStart)>=500){ displayBlinkStart = 0; sendToHT16K33(0,5); }
   }
-  //Other display code decides whether we should dim per function or time of day
-  char dim = displayBrightness; //2=normal, 1=dim, 0=off
-  //But if we're setting, decide here to dim for every other 500ms since we started setting
-  if(fnSetPg>0) {
-    if(setStartLast==0) setStartLast = now;
-    dim = (1-(((unsigned long)(now-setStartLast)/500)%2))+1;
-  } else {
-    if(setStartLast>0) setStartLast=0;
+  
+  //Check if it's time to change brightness - either due to setting flashing or change in displayBrightness/ambientLightLevel inputs
+  if(fnSetPg>0) { //setting - dim for every other 500ms - using the brightest and dimmest states of the display (TODO too crude?)
+    if(setStartLast==0) {
+      setStartLast = now;
+      setBlinkState = 1;
+      //When starting, if we're using ambient at less than 2/3 brightness, set curBrightness to dim, so we'll start bright
+      if(useAmbient && ambientLightLevel<170) curBrightness = 1;
+    }
+    bool blinkModulus = ((unsigned long)(now-setStartLast)/500)%2;
+    if(setBlinkState!=blinkModulus) { //will occur every 500ms
+      setBlinkState = blinkModulus;
+      //If we were dim at start (curBrightness), invert setBlinkState to "start" at 1
+      for(int i=0; i<NUM_MAX; i++) {
+        lc.setIntensity(i,((curBrightness==1?1:0)-setBlinkState)? BRIGHTNESS_FULL: BRIGHTNESS_DIM);
+      }
+    }
   }
-  if(curBrightness!=(dim==2? BRIGHTNESS_FULL: (dim==1? BRIGHTNESS_DIM: -1))){
-    curBrightness = (dim==2? BRIGHTNESS_FULL: (dim==1? BRIGHTNESS_DIM: -1));
-    if(curBrightness==-1) for(int i=0; i<NUM_MAX; i++) { lc.clearDisplay(i); }
-    else for(int i=0; i<NUM_MAX; i++) { lc.setIntensity(i,curBrightness); }
-  }
-}
+  
+  else { //not setting - defer to what other code has set displayBrightness to (and ambientLightLevel if applicable)
+#ifdef LIGHTSENSOR
+    //if using ambient lighting and: it has changed, or if returning from setting, or if brightness normality has changed
+    if(useAmbient && (curAmbientLightLevel != ambientLightLevel || setStartLast>0 || curBrightness != displayBrightness)) {
+      curAmbientLightLevel = ambientLightLevel;
+      if(displayBrightness==2) { //If currently normal brightness (so we should display per ambient light level) - otherwise see below code
+        //Convert the ambient light level (0-255, per LUX_DIM-LUX_FULL) to the corresponding brightness value for the actual display hardware, within the desired range (BRIGHTNESS_DIM-BRIGHTNESS_FULL)
+        for(int i=0; i<NUM_MAX; i++) {
+          lc.setIntensity(i,BRIGHTNESS_DIM + ((long)curAmbientLightLevel * (BRIGHTNESS_FULL - BRIGHTNESS_DIM) /255));
+        }
+      }
+    }
+#endif
+    //if brightness normality has changed
+    if(curBrightness != displayBrightness) {
+      curBrightness = displayBrightness;
+      if(curBrightness==0) for(int i=0; i<NUM_MAX; i++) { lc.clearDisplay(i); } //force dark
+      if(curBrightness==1) for(int i=0; i<NUM_MAX; i++) { lc.setIntensity(i,BRIGHTNESS_DIM); }
+      if(curBrightness==2) { //normal brightness - only set if no light sensor, or not using light sensor
+#ifdef LIGHTSENSOR
+        if(!useAmbient) for(int i=0; i<NUM_MAX; i++) { lc.setIntensity(i,BRIGHTNESS_FULL); }
+#else
+        for(int i=0; i<NUM_MAX; i++) { lc.setIntensity(i,BRIGHTNESS_FULL); }
+#endif
+      }
+    }
+    if(setStartLast>0) setStartLast=0; //remove setting flag if needed
+  } //end if not setting
+  
+} //end cycleDisplay
 
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
   if(curBrightness==-1) return;

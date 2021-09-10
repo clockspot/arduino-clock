@@ -65,11 +65,25 @@
 //If 6 digits, edit Adafruit_LEDBackpack.cpp to replace "if (d > 4)" with "if (d > 6)"
 //and, if desired, in numbertable[], replace 0x7D with 0x7C and 0x6F with 0x67 to remove
 //the serifs from 6 and 9 for legibility (see http://www.harold.thimbleby.net/cv/files/seven-segment.pdf)
-#define DISP_HT16K33
-//#define NUM_MAX 4 //How many digits?
-#define BRIGHTNESS_FULL 15 //out of 0-15
+// #define DISP_HT16K33
+// //#define NUM_MAX 4 //How many digits?
+// #define BRIGHTNESS_FULL 15 //out of 0-15
+// #define BRIGHTNESS_DIM 0
+// #define DISP_ADDR 0x70 //0x70 is the default
+
+//If using 8x32 LED matrix:
+//Requires LedControl library by Eberhard Farle to be installed in IDE. (http://wayoda.github.io/LedControl)
+#define DISP_MAX7219
+#define NUM_MAX 4 //How many modules? 3 for 8x24 (4 digit, untested) or 4 for 8x32 (6 digit)
+#define ROTATE 90
+#define BRIGHTNESS_FULL 7 //out of 0-15
 #define BRIGHTNESS_DIM 0
-#define DISP_ADDR 0x70 //0x70 is the default
+//I've found that 7 (or 15?) and 0 make the least noise
+//Which output pins?
+#define CLK_PIN 2 //D2, pin 20
+#define CS_PIN 3 //D3, pin 21
+#define DIN_PIN 4 //D4, pin 22
+//and GND and VCC 5V
 
 //For all display types:
 #define DISPLAY_SIZE 6 //number of digits in display module: 6 or 4
