@@ -4,7 +4,7 @@
 ////////// Hardware configuration //////////
 //Include the config file that matches your hardware setup. If needed, duplicate an existing one.
 
-#include "configs/led-avr-undb-7seg.h"
+#include "configs/undb-v8-amb.h"
 
 ////////////////////////////////////////////
 

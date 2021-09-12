@@ -160,7 +160,7 @@ unsigned int tempValDispLast = 0;
 
 #define SHOW_IRRELEVANT_OPTIONS 0 //whether to show everything in settings menu and page (network)
 
-#define SHOW_SERIAL 0 //for debugging
+#define SHOW_SERIAL 1 //for debugging
 
 
 ////////// Main code control //////////
@@ -1929,6 +1929,8 @@ void cycleTweening() {
   //Allows us to fade the backlight and variable display brightness to their targets.
   if((unsigned long)(millis()-tweenLast)>=TWEENING_DELAY){
     tweenLast = millis();
+    
+#ifdef LIGHTSENSOR
     //Ambient lighting reading
     if(ambientLightLevel != ambientLightLevelActual) {
       //Serial.print(F("cycleTweening: ambientLightLevel from ")); Serial.print(ambientLightLevel,DEC);
@@ -1939,6 +1941,7 @@ void cycleTweening() {
       }
       //Serial.print(F(" to ")); Serial.print(ambientLightLevel,DEC); Serial.print(F(" on the way to ")); Serial.print(ambientLightLevelActual,DEC);
     }
+#endif
   
     //Backlight
     //TODO: it appears setting analogWrite(pin,0) does not completely turn the backlight off. Anything else we could do?
