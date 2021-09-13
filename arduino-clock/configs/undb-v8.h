@@ -66,7 +66,7 @@
 //These are mutually exclusive
 
 //If using nixie array:
-#define DISP_NIXIE
+#define DISPLAY_NIXIE
 #define CLEAN_SPEED 200 //ms - "frame rate" of tube cleaning
 //Which output pins?
 //This clock is 2x3 multiplexed: two tubes powered at a time.

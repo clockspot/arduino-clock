@@ -65,7 +65,7 @@ byte getRelativeAmbientLightLevel() {
   if(((lux==0 || lux==255) && lastRelAmb!=0 && lastRelAmb!=255) //if we're minned/maxxed, and last wasn't that;
     || lux-lastRelAmb>=REL_AMB_THRESHOLD || lux-lastRelAmb<=-REL_AMB_THRESHOLD) { //TODO is this sufficient wrt rollovers?
     lastRelAmb = lux;
-    Serial.print("New RelAmb: "); Serial.println(lastRelAmb,DEC);
+    //Serial.print("New RelAmb: "); Serial.println(lastRelAmb,DEC);
   }
   return lastRelAmb;
 }

@@ -22,9 +22,9 @@ const bool vDev = 1;
   #include <Dusk2Dawn.h> //DM Kishi - unlicensed - install in your Arduino IDE if needed - test without
 #endif
 #include "storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash
-#include "dispNixie.h" //if DISP_NIXIE is defined in config - for a SN74141-multiplexed nixie array
-#include "dispMAX7219.h" //if DISP_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
-#include "dispHT16K33.h" //if DISP_HT16K33 is defined in config - for an I2C 7-segment LED display
+#include "dispNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
+#include "dispMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
+#include "dispHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
 #include "lightsensorVEML7700.h" //if LIGHTSENSOR_VEML7700 is defined in config - for I2C VEML7700 lux sensor
 #include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
 #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
@@ -167,7 +167,7 @@ unsigned int tempValDispLast = 0;
 
 void setup(){
   if(SHOW_SERIAL) {
-    Serial.begin(9600);
+    Serial.begin(115200);
     #ifndef __AVR__ //SAMD only
     while(!Serial);
     #endif
@@ -1913,8 +1913,8 @@ void updateBacklight(){
 
 /* The variable display brightness and LED backlighting are (if opted for) faded from one state to another, but unlike the nixie fading – which requires very precise timing to prevent flicker, and is therefore the only allowed use of delay() (TODO delayMicroseconds()) in this sketch – these fade steps can be iterated with interval timing with millis() like everything else, just with a much smaller delay. I'm calling this "tweening." If we're using the nixie display, its delay()s will slow down the loop, so the tweening steps can take place once per loop. If not, the loop will run much faster, so we will need to add a delay – here it is. */
 #ifndef TWEENING_DELAY
-  #ifdef DISP_NIXIE
-  #define TWEENING_DELAY 0
+  #ifdef DISPLAY_NIXIE
+  #define TWEENING_DELAY 50
   #else
   #define TWEENING_DELAY 50
   #endif

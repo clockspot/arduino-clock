@@ -65,11 +65,11 @@
 //If 6 digits, edit Adafruit_LEDBackpack.cpp to replace "if (d > 4)" with "if (d > 6)"
 //and, if desired, in numbertable[], replace 0x7D with 0x7C and 0x6F with 0x67 to remove
 //the serifs from 6 and 9 for legibility (see http://www.harold.thimbleby.net/cv/files/seven-segment.pdf)
-#define DISP_HT16K33
+#define DISPLAY_HT16K33
 //#define NUM_MAX 4 //How many digits?
 #define BRIGHTNESS_FULL 15 //out of 0-15
 #define BRIGHTNESS_DIM 0
-#define DISP_ADDR 0x70 //0x70 is the default
+#define DISPLAY_ADDR 0x70 //0x70 is the default
 
 //For all display types:
 #define DISPLAY_SIZE 6 //number of digits in display module: 6 or 4

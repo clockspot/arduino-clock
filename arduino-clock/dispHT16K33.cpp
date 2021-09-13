@@ -1,7 +1,7 @@
 #include <arduino.h>
 #include "arduino-clock.h"
 
-#ifdef DISP_HT16K33 //see arduino-clock.ino Includes section
+#ifdef DISPLAY_HT16K33 //see arduino-clock.ino Includes section
 
 #include "dispHT16K33.h"
 #include <Adafruit_GFX.h>
@@ -25,7 +25,7 @@ word curAmbientLightLevel = 0; //represents current ambient light level reading 
 unsigned long displayBlinkStart = 0; //when nonzero, display should briefly blank
 
 void initDisplay(){
-  matrix.begin(DISP_ADDR);
+  matrix.begin(DISPLAY_ADDR);
   //initial brightness will be set at first cycleDisplay
 }
 
@@ -141,4 +141,4 @@ void displayBlink(){
 
 //void checkEffects(bool force){}
 
-#endif //DISP_HT16K33
+#endif //DISPLAY_HT16K33

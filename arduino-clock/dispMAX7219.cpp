@@ -1,7 +1,7 @@
 #include <arduino.h>
 #include "arduino-clock.h"
 
-#ifdef DISP_MAX7219 //see arduino-clock.ino Includes section
+#ifdef DISPLAY_MAX7219 //see arduino-clock.ino Includes section
 
 #include "dispMAX7219.h"
 #include <SPI.h> //Arduino - for SPI access to MAX7219
@@ -186,4 +186,4 @@ void displayBlink(){
 
 //void checkEffects(bool force){}
 
-#endif //DISP_MAX7219
+#endif //DISPLAY_MAX7219

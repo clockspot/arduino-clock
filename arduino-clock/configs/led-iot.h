@@ -63,7 +63,7 @@
 ///// Display /////
 //If using 8x32 LED matrix:
 //Requires LedControl library by Eberhard Farle to be installed in IDE. (http://wayoda.github.io/LedControl)
-#define DISP_MAX7219
+#define DISPLAY_MAX7219
 #define NUM_MAX 4 //How many modules? 3 for 8x24 (4 digit, untested) or 4 for 8x32 (6 digit)
 #define ROTATE 90
 #define BRIGHTNESS_FULL 7 //out of 0-15

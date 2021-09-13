@@ -1,5 +1,5 @@
-#ifndef DISP_NIXIE_H
-#define DISP_NIXIE_H
+#ifndef DISPLAY_NIXIE_H
+#define DISPLAY_NIXIE_H
 
 //Mutually exclusive with other disp options
 
@@ -13,4 +13,4 @@ void blankDisplay(byte posStart, byte posEnd, byte fade);
 void displayBlink();
 // void checkEffects(bool force);
 
-#endif //DISP_NIXIE_H
+#endif //DISPLAY_NIXIE_H

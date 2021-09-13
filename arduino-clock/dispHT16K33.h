@@ -1,5 +1,5 @@
-#ifndef DISP_HT16K33_H
-#define DISP_HT16K33_H
+#ifndef DISPLAY_HT16K33_H
+#define DISPLAY_HT16K33_H
 
 //Mutually exclusive with other disp options
 
@@ -10,4 +10,4 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fad
 void blankDisplay(byte posStart, byte posEnd, byte fade);
 void displayBlink();
 
-#endif //DISP_HT16K33
+#endif //DISPLAY_HT16K33
