@@ -17,16 +17,16 @@
   #endif
 #endif
 
-//#ifdef INPUT_IMU
-void readIMU();
-//#endif
+#ifdef INPUT_IMU
+void readIMU(unsigned long now);
+#endif
 bool initInputs();
 bool readBtn(byte btn);
-void checkBtn(byte btn);
+void checkBtn(byte btn, unsigned long now);
 void inputStop();
-//#ifdef INPUT_UPDN_ROTARY
-void checkRot();
-//#endif
+#ifdef INPUT_UPDN_ROTARY
+void checkRot(unsigned long now);
+#endif
 void checkInputs();
 void setInputLast(unsigned long increment=0);
 unsigned long getInputLast();

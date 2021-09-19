@@ -22,7 +22,7 @@
 // #define IC_DIR_FRONT
 // #define IC_DIR_BACK
 
-#define IMU_DEBOUNCING 150 //ms
+#define DEBOUNCE_DUR 150 //ms
 
 // int imuRoll = 0; //the state we're reporting (-1, 0, 1)
 // unsigned long imuRollLast = 0; //when we saw it change
@@ -178,7 +178,7 @@ void readIMU(){
   // //Assumes Arduino is oriented with components facing back of clock, and USB port facing up. TODO add support for other orientations
   //
   // //Roll
-  // if((unsigned long)(millis()-imuRollLast)>=IMU_DEBOUNCING){ //don't check within a period from the last change
+  // if((unsigned long)(millis()-imuRollLast)>=DEBOUNCE_DUR){ //don't check within a period from the last change
   //        if(y<=-0.5) imuState = 1;
   //   else if(y>= 0.5) imuState = -1;
   //   else if(y>-0.3 && y<0.3) imuState = 0;
@@ -187,7 +187,7 @@ void readIMU(){
   // }
   //
   // //Pitch
-  // if((unsigned long)(millis()-imuPitchLast)>=IMU_DEBOUNCING){ //don't check within a period from the last change
+  // if((unsigned long)(millis()-imuPitchLast)>=DEBOUNCE_DUR){ //don't check within a period from the last change
   //        if(z<=-0.5) imuState = 1;
   //   else if(z>= 0.5) imuState = -1;
   //   else if(z>-0.3 && z<0.3) imuState = 0;

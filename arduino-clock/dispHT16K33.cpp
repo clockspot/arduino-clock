@@ -80,8 +80,8 @@ void cycleDisplay(byte displayBrightness, bool useAmbient, word ambientLightLeve
       }
     }
 #endif
-    //if brightness normality has changed
-    if(curBrightness != displayBrightness) {
+    //if returning from setting, or if brightness normality has changed
+    if(setStartLast>0 || curBrightness != displayBrightness) {
       curBrightness = displayBrightness;
       if(curBrightness==0) for(int i=0; i<DISPLAY_SIZE; i++) { matrix.writeDigitRaw((i>=2?i+1:i),0); } //force dark
       if(curBrightness==1) matrix.setBrightness(BRIGHTNESS_DIM);

@@ -1,4 +1,4 @@
-//Arduino IoT with nothing but the LED connected
+//Arduino IoT with the LED matrix and light sensor connected
 
 #ifndef CONFIG
 #define CONFIG
@@ -33,10 +33,9 @@
 //If using IMU motion sensor on Nano 33 IoT:
 //To use, tilt clock: backward=Sel, forward=Alt, left=Down, right=Up
 //This is mutually exclusive with the button/rotary controls.
-#define INPUT_IMU
-#define IMU_DEBOUNCING 150 //ms
+// #define INPUT_IMU
 //How is the Arduino oriented inside the clock? Include one each of USB_DIR and IC_DIR to indicate which way the USB port and IC (front side) are oriented, respectively. For UNDB clocks, it's USB_DIR_UP and IC_DIR_BACK.
-#define USB_DIR_UP
+// #define USB_DIR_UP
 // #define USB_DIR_DOWN
 // #define USB_DIR_LEFT
 // #define USB_DIR_RIGHT
@@ -47,7 +46,19 @@
 // #define IC_DIR_LEFT
 // #define IC_DIR_RIGHT
 // #define IC_DIR_FRONT
-#define IC_DIR_BACK
+// #define IC_DIR_BACK
+
+//If using buttons for Select and optionally Alt:
+#define INPUT_BUTTONS
+#define CTRL_SEL A1
+#define CTRL_ALT A0
+
+//Up and Down can be buttons OR a rotary control:
+
+//If using buttons for Up and Down:
+#define INPUT_UPDN_BUTTONS
+#define CTRL_UP A2
+#define CTRL_DN A3
 
 //For all input types:
 //How long (in ms) are the hold durations?
@@ -60,25 +71,34 @@
 #define FN_TEMP_TIMEOUT 5 //sec
 #define FN_PAGE_TIMEOUT 3 //sec
 
+
 ///// Display /////
-//If using 8x32 LED matrix:
-//Requires LedControl library by Eberhard Farle to be installed in IDE. (http://wayoda.github.io/LedControl)
-#define DISPLAY_MAX7219
-#define NUM_MAX 4 //How many modules? 3 for 8x24 (4 digit, untested) or 4 for 8x32 (6 digit)
-#define ROTATE 90
-#define BRIGHTNESS_FULL 7 //out of 0-15
+//If using 4/6-digit 7-segment LED display with HT16K33 (I2C on SDA/SCL pins)
+//Requires Adafruit libraries LED Backpack, GFX, and BusIO
+//If 6 digits, edit Adafruit_LEDBackpack.cpp to replace "if (d > 4)" with "if (d > 6)"
+//and, if desired, in numbertable[], replace 0x7D with 0x7C and 0x6F with 0x67 to remove
+//the serifs from 6 and 9 for legibility (see http://www.harold.thimbleby.net/cv/files/seven-segment.pdf)
+#define DISPLAY_HT16K33
+//#define NUM_MAX 4 //How many digits?
+#define BRIGHTNESS_FULL 15 //out of 0-15
 #define BRIGHTNESS_DIM 0
-//I've found that 7 (or 15?) and 0 make the least noise
-//Which output pins?
-#define CLK_PIN 2 //D2, pin 20
-#define CS_PIN 3 //D3, pin 21
-#define DIN_PIN 4 //D4, pin 22
-//and GND and VCC 5V
+#define DISPLAY_ADDR 0x70 //0x70 is the default
 
 //For all display types:
 #define DISPLAY_SIZE 6 //number of digits in display module: 6 or 4
 #define UNOFF_DUR 10 //sec - when display is off, an input will illuminate for how long?
 #define SCROLL_SPEED 100 //ms - "frame rate" of digit scrolling, e.g. date at :30 option
+
+
+///// Ambient Light Sensor /////
+//If using VEML 7700 Lux sensor (I2C on SDA/SCL pins)
+//Requires Adafruit library VEML7700
+#define LIGHTSENSOR_VEML7700
+#define LUX_FULL 400 //lux at/above which display should be at its brightest (per config)
+#define LUX_DIM 30 //lux at/below which display should be at its dimmest (per config)
+
+//If any type of light sensor is in use:
+#define LIGHTSENSOR
 
 
 ///// Other Outputs /////

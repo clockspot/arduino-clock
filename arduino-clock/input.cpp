@@ -7,8 +7,15 @@
 #include "rtcDS3231.h"
 #include "rtcMillis.h"
 
+#ifndef HOLDSET_SLOW_RATE
 #define HOLDSET_SLOW_RATE 125
+#endif
+#ifndef HOLDSET_FAST_RATE
 #define HOLDSET_FAST_RATE 20
+#endif
+#ifndef DEBOUNCE_DUR
+#define DEBOUNCE_DUR 150 //ms
+#endif
 
 //#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
 #ifdef INPUT_UPDN_ROTARY
@@ -18,160 +25,152 @@
 #ifdef INPUT_IMU
   #include <Arduino_LSM6DS3.h>
 
-  #ifndef IMU_DEBOUNCING
-  #define IMU_DEBOUNCING 150 //ms
-  #endif
-
   int8_t imuRoll, imuPitch;
   unsigned long imuLastChange;
 
-  void readIMU(){
-    //skip sampling for a debouncing period after the last change was detected
-    if((unsigned long)(millis()-imuLastChange)>IMU_DEBOUNCING) {
-      //IMU.readAcceleration will give us three values, but we only care about two,
-      //since we are only reading the clock being tilted left/right (roll) and back/front (pitch).
-      float roll, pitch, nah;
-      /*
-      Now we decide how to read the IMU into those values, per the orientation of the Nano:
-      USB   IC     Roll Pitch
-      Up    Front    y   -z
-            Back    -y    z
-            Left     z    y
-            Right   -z   -y
-      Down  Front   -y   -z
-            Back     y    z
-            Left     z   -y
-            Right   -z    y
-      Left  Front    x   -z
-            Back     x    z
-            Up       x   -y
-            Down     x    y
-      Right Front   -x   -z
-            Back    -x    z
-            Up      -x   -y
-            Down    -x    y
-      Front Left     z   -x
-            Right   -z   -x
-            Up      -y   -x
-            Down     y   -x
-      Back  Left     z    x
-            Right   -z    x
-            Up       y    x
-            Down    -y    x
-      Or, more succinctly:
-      USB Left:  Roll  = x
-      USB Right: Roll  = -x
-      IC  Left:  Roll  = z
-      IC  Right: Roll  = -z
-      USB Front: Pitch = -x
-      USB Back:  Pitch = x
-      IC  Front: Pitch = -z
-      IC  Back:  Pitch = z
-      ...and then a bunch of nonsense to capture y  >:(
-      There might be a clever way to encode this in future,
-      but for now let's hardcode it with preprocessor directives
-      TODO may also want to apply an offset in case the clock is naturally slightly tilted?
-      */
+  void readIMU(unsigned long now){
+    //IMU.readAcceleration will give us three values, but we only care about two,
+    //since we are only reading the clock being tilted left/right (roll) and back/front (pitch).
+    float roll, pitch, nah;
+    /*
+    Now we decide how to read the IMU into those values, per the orientation of the Nano:
+    USB   IC     Roll Pitch
+    Up    Front    y   -z
+          Back    -y    z
+          Left     z    y
+          Right   -z   -y
+    Down  Front   -y   -z
+          Back     y    z
+          Left     z   -y
+          Right   -z    y
+    Left  Front    x   -z
+          Back     x    z
+          Up       x   -y
+          Down     x    y
+    Right Front   -x   -z
+          Back    -x    z
+          Up      -x   -y
+          Down    -x    y
+    Front Left     z   -x
+          Right   -z   -x
+          Up      -y   -x
+          Down     y   -x
+    Back  Left     z    x
+          Right   -z    x
+          Up       y    x
+          Down    -y    x
+    Or, more succinctly:
+    USB Left:  Roll  = x
+    USB Right: Roll  = -x
+    IC  Left:  Roll  = z
+    IC  Right: Roll  = -z
+    USB Front: Pitch = -x
+    USB Back:  Pitch = x
+    IC  Front: Pitch = -z
+    IC  Back:  Pitch = z
+    ...and then a bunch of nonsense to capture y  >:(
+    There might be a clever way to encode this in future,
+    but for now let's hardcode it with preprocessor directives
+    TODO may also want to apply an offset in case the clock is naturally slightly tilted?
+    */
 
-      #ifdef USB_DIR_UP
-        #ifdef IC_DIR_FRONT //y, -z (roll, pitch)
-          IMU.readAcceleration(nah, roll, pitch); pitch = -pitch;
-        #endif
-        #ifdef IC_DIR_BACK //-y, z
-          IMU.readAcceleration(nah, roll, pitch); roll = -roll;
-        #endif
-        #ifdef IC_DIR_LEFT //z, y
-          IMU.readAcceleration(nah, pitch, roll);
-        #endif
-        #ifdef IC_DIR_RIGHT //-z, -y
-          IMU.readAcceleration(nah, pitch, roll); roll = -roll; pitch = -pitch;
-        #endif
-      #endif //USB_DIR_UP
+    #ifdef USB_DIR_UP
+      #ifdef IC_DIR_FRONT //y, -z (roll, pitch)
+        IMU.readAcceleration(nah, roll, pitch); pitch = -pitch;
+      #endif
+      #ifdef IC_DIR_BACK //-y, z
+        IMU.readAcceleration(nah, roll, pitch); roll = -roll;
+      #endif
+      #ifdef IC_DIR_LEFT //z, y
+        IMU.readAcceleration(nah, pitch, roll);
+      #endif
+      #ifdef IC_DIR_RIGHT //-z, -y
+        IMU.readAcceleration(nah, pitch, roll); roll = -roll; pitch = -pitch;
+      #endif
+    #endif //USB_DIR_UP
 
-      #ifdef USB_DIR_DOWN
-        #ifdef IC_DIR_FRONT //-y, -z
-          IMU.readAcceleration(nah, roll, pitch); roll = -roll; pitch = -pitch;
-        #endif
-        #ifdef IC_DIR_BACK //y, z
-          IMU.readAcceleration(nah, roll, pitch);
-        #endif
-        #ifdef IC_DIR_LEFT //z, -y
-          IMU.readAcceleration(nah, pitch, roll); pitch = -pitch;
-        #endif
-        #ifdef IC_DIR_RIGHT //-z, y
-          IMU.readAcceleration(nah, pitch, roll); roll = -roll;
-        #endif
-      #endif //USB_DIR_DOWN
+    #ifdef USB_DIR_DOWN
+      #ifdef IC_DIR_FRONT //-y, -z
+        IMU.readAcceleration(nah, roll, pitch); roll = -roll; pitch = -pitch;
+      #endif
+      #ifdef IC_DIR_BACK //y, z
+        IMU.readAcceleration(nah, roll, pitch);
+      #endif
+      #ifdef IC_DIR_LEFT //z, -y
+        IMU.readAcceleration(nah, pitch, roll); pitch = -pitch;
+      #endif
+      #ifdef IC_DIR_RIGHT //-z, y
+        IMU.readAcceleration(nah, pitch, roll); roll = -roll;
+      #endif
+    #endif //USB_DIR_DOWN
 
-      #ifdef USB_DIR_LEFT
-        #ifdef IC_DIR_FRONT //x, -z
-          IMU.readAcceleration(roll, nah, pitch); pitch = -pitch;
-        #endif
-        #ifdef IC_DIR_BACK //x, z
-          IMU.readAcceleration(roll, nah, pitch);
-        #endif
-        #ifdef IC_DIR_UP //x, -y
-          IMU.readAcceleration(roll, pitch, nah); pitch = -pitch;
-        #endif
-        #ifdef IC_DIR_DOWN //x, y
-          IMU.readAcceleration(roll, pitch, nah);
-        #endif
-      #endif //USB_DIR_LEFT
+    #ifdef USB_DIR_LEFT
+      #ifdef IC_DIR_FRONT //x, -z
+        IMU.readAcceleration(roll, nah, pitch); pitch = -pitch;
+      #endif
+      #ifdef IC_DIR_BACK //x, z
+        IMU.readAcceleration(roll, nah, pitch);
+      #endif
+      #ifdef IC_DIR_UP //x, -y
+        IMU.readAcceleration(roll, pitch, nah); pitch = -pitch;
+      #endif
+      #ifdef IC_DIR_DOWN //x, y
+        IMU.readAcceleration(roll, pitch, nah);
+      #endif
+    #endif //USB_DIR_LEFT
 
-      #ifdef USB_DIR_RIGHT
-        #ifdef IC_DIR_FRONT //-x, -z
-          IMU.readAcceleration(roll, nah, pitch); roll = -roll; pitch = -pitch;
-        #endif
-        #ifdef IC_DIR_BACK //-x, z
-          IMU.readAcceleration(roll, nah, pitch); roll = -roll;
-        #endif
-        #ifdef IC_DIR_UP //-x, -y
-          IMU.readAcceleration(roll, pitch, nah); roll = -roll; pitch = -pitch;
-        #endif
-        #ifdef IC_DIR_DOWN //-x, y
-          IMU.readAcceleration(roll, pitch, nah); roll = -roll;
-        #endif
-      #endif //USB_DIR_RIGHT
+    #ifdef USB_DIR_RIGHT
+      #ifdef IC_DIR_FRONT //-x, -z
+        IMU.readAcceleration(roll, nah, pitch); roll = -roll; pitch = -pitch;
+      #endif
+      #ifdef IC_DIR_BACK //-x, z
+        IMU.readAcceleration(roll, nah, pitch); roll = -roll;
+      #endif
+      #ifdef IC_DIR_UP //-x, -y
+        IMU.readAcceleration(roll, pitch, nah); roll = -roll; pitch = -pitch;
+      #endif
+      #ifdef IC_DIR_DOWN //-x, y
+        IMU.readAcceleration(roll, pitch, nah); roll = -roll;
+      #endif
+    #endif //USB_DIR_RIGHT
 
-      #ifdef USB_DIR_FRONT
-        #ifdef IC_DIR_LEFT //z, -x
-          IMU.readAcceleration(pitch, nah, roll); pitch = -pitch;
-        #endif
-        #ifdef IC_DIR_RIGHT //-z, -x
-          IMU.readAcceleration(pitch, nah, roll); roll = -roll; pitch = -pitch;
-        #endif
-        #ifdef IC_DIR_UP //-y, -x
-          IMU.readAcceleration(pitch, roll, nah); roll = -roll; pitch = -pitch;
-        #endif
-        #ifdef IC_DIR_DOWN //y, -x
-          IMU.readAcceleration(pitch, roll, nah); pitch = -pitch;
-        #endif
-      #endif //USB_DIR_FRONT
+    #ifdef USB_DIR_FRONT
+      #ifdef IC_DIR_LEFT //z, -x
+        IMU.readAcceleration(pitch, nah, roll); pitch = -pitch;
+      #endif
+      #ifdef IC_DIR_RIGHT //-z, -x
+        IMU.readAcceleration(pitch, nah, roll); roll = -roll; pitch = -pitch;
+      #endif
+      #ifdef IC_DIR_UP //-y, -x
+        IMU.readAcceleration(pitch, roll, nah); roll = -roll; pitch = -pitch;
+      #endif
+      #ifdef IC_DIR_DOWN //y, -x
+        IMU.readAcceleration(pitch, roll, nah); pitch = -pitch;
+      #endif
+    #endif //USB_DIR_FRONT
 
-      #ifdef USB_DIR_BACK
-        #ifdef IC_DIR_LEFT //z, x
-          IMU.readAcceleration(pitch, nah, roll);
-        #endif
-        #ifdef IC_DIR_RIGHT //-z, x
-          IMU.readAcceleration(pitch, nah, roll); roll = -roll;
-        #endif
-        #ifdef IC_DIR_UP //y, x
-          IMU.readAcceleration(pitch, roll, nah);
-        #endif
-        #ifdef IC_DIR_DOWN //-y, x
-          IMU.readAcceleration(pitch, roll, nah); roll = -roll;
-        #endif
-      #endif //USB_DIR_BACK
-        
-      //should activate (>=1) at 30 degrees (reading of >=1/3)
-      roll *= 3;
-      pitch *= 3;
+    #ifdef USB_DIR_BACK
+      #ifdef IC_DIR_LEFT //z, x
+        IMU.readAcceleration(pitch, nah, roll);
+      #endif
+      #ifdef IC_DIR_RIGHT //-z, x
+        IMU.readAcceleration(pitch, nah, roll); roll = -roll;
+      #endif
+      #ifdef IC_DIR_UP //y, x
+        IMU.readAcceleration(pitch, roll, nah);
+      #endif
+      #ifdef IC_DIR_DOWN //-y, x
+        IMU.readAcceleration(pitch, roll, nah); roll = -roll;
+      #endif
+    #endif //USB_DIR_BACK
       
-      //only update imuLastChange if the value has changed
-      if((int)roll !=imuRoll)  { imuRoll  = (int)roll;  imuLastChange = millis(); }
-      if((int)pitch!=imuPitch) { imuPitch = (int)pitch; imuLastChange = millis(); }
-
-    } //end if past debouncing period
+    //should activate (>=1) at 30 degrees (reading of >=1/3)
+    roll *= 3;
+    pitch *= 3;
+    
+    //only update imuLastChange if the value has changed
+    if((int)roll !=imuRoll)  { imuRoll  = (int)roll;  imuLastChange = now; }
+    if((int)pitch!=imuPitch) { imuPitch = (int)pitch; imuLastChange = now; }
     
   } //end readIMU  
   
@@ -231,12 +230,11 @@ bool readBtn(byte btn){
 }
 
 unsigned long holdLast;
-void checkBtn(byte btn){
+void checkBtn(byte btn, unsigned long now){
   //Polls for changes in momentary buttons (or IMU positioning), LOW = pressed.
   //When a button event has occurred, will call ctrlEvt in main code.
   //Only called by checkInputs() and only for inputs configured as button and/or IMU.
   bool bnow = readBtn(btn);
-  unsigned long now = millis();
   //If the button has just been pressed, and no other buttons are in use...
   if(inputCur==0 && bnow) {
     // Serial.print(F("Btn "));
@@ -293,17 +291,16 @@ void inputStop(){
   //Serial.println(F("ich now 10 per inputStop"));
 }
 
-bool rotVel = 0; //high velocity setting (x10 rather than x1)
 #ifdef INPUT_UPDN_ROTARY
+bool rotVel = 0; //high velocity setting (x10 rather than x1)
 unsigned long rotLastStep = 0; //timestamp of last completed step (detent)
 int rotLastVal = 0;
-void checkRot(){
+void checkRot(unsigned long now){
   //Changes in rotary encoder. When rotation(s) occur, will call ctrlEvt to simulate btn presses. During setting, ctrlEvt will take rotVel into account.
   int rotCurVal = rot.read();
   if(rotCurVal!=rotLastVal){ //we've sensed a state change
     rotLastVal = rotCurVal;
     if(rotCurVal>=4 || rotCurVal<=-4){ //we've completed a step of 4 states (this library doesn't seem to drop states much, so this is reasonably reliable)
-      unsigned long now = millis();
       inputLast = now; inputLastTODMins = rtcGetTOD();
       if((unsigned long)(now-rotLastStep)<=ROT_VEL_START) rotVel = 1; //kick into high velocity setting (x10)
       else if((unsigned long)(now-rotLastStep)>=ROT_VEL_STOP) rotVel = 0; //fall into low velocity setting (x1)
@@ -317,6 +314,10 @@ void checkRot(){
 #endif
 
 void checkInputs(){
+  unsigned long now = millis(); //this will be the recorded time of any input change
+  //Debounce
+  if((unsigned long)(now-inputLast)<DEBOUNCE_DUR) return;
+  
   //TODO potential issue: if user only means to rotate or push encoder but does both?
   #ifdef INPUT_IMU
     readIMU(); //captures IMU state for checkBtn/readBtn to look at
@@ -324,13 +325,13 @@ void checkInputs(){
   //checkBtn calls readBtn which will read button and/or IMU as equipped
   //We just need to only call checkBtn if one or the other is equipped
   #if defined(INPUT_BUTTONS) || defined(INPUT_IMU)
-    checkBtn(CTRL_SEL);
+    checkBtn(CTRL_SEL,now);
     if(CTRL_ALT>0){ //preprocessor directives don't seem to work for this when e.g. "A7"
-      checkBtn(CTRL_ALT);
+      checkBtn(CTRL_ALT,now);
     }
     #if defined(INPUT_UPDN_BUTTONS) || defined(INPUT_IMU)
-      checkBtn(CTRL_UP);
-      checkBtn(CTRL_DN);
+      checkBtn(CTRL_UP,now);
+      checkBtn(CTRL_DN,now);
     #endif
   #endif
   #ifdef INPUT_UPDN_ROTARY

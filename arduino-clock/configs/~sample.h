@@ -41,13 +41,14 @@
 
 
 ///// Inputs /////
+//Buttons and motion sensor are mutually exclusive
 
 //If using buttons for Select and optionally Alt:
 #define INPUT_BUTTONS
 #define CTRL_SEL A6 //UNDB S4/PL7
 #define CTRL_ALT A7 //UNDB S7/PL14 - if not using Alt, set to -1
 
-//Up and Down can be buttons OR a rotary control:
+//Up and Down can be buttons OR a rotary control (mutually exclusive)
 
 //If using buttons for Up and Down:
 #define INPUT_UPDN_BUTTONS
@@ -66,7 +67,6 @@
 //To use, tilt clock: backward=Sel, forward=Alt, left=Down, right=Up
 //This is mutually exclusive with the button/rotary controls.
 // #define INPUT_IMU
-// #define IMU_DEBOUNCING 150 //ms
 //How is the Arduino oriented inside the clock? Include one each of USB_DIR and IC_DIR to indicate which way the USB port and IC (front side) are oriented, respectively. For UNDB clocks, it's USB_DIR_UP and IC_DIR_BACK.
 // #define USB_DIR_UP
 // #define USB_DIR_DOWN
@@ -91,10 +91,6 @@
 #define SETTING_TIMEOUT 300 //sec
 #define FN_TEMP_TIMEOUT 5 //sec
 #define FN_PAGE_TIMEOUT 3 //sec
-
-//Unused inputs
-//A3 //UNDB S5/PL8
-//A2 //UNDB S6/PL9
 
 
 ///// Display /////
@@ -134,7 +130,6 @@
 #define CS_PIN 3 //D3, pin 21
 #define DIN_PIN 4 //D4, pin 22
 
-///// Display /////
 //If using 4/6-digit 7-segment LED display with HT16K33 (I2C on SDA/SCL pins)
 //Requires Adafruit libraries LED Backpack, GFX, and BusIO
 //If 6 digits, edit Adafruit_LEDBackpack.cpp to replace "if (d > 4)" with "if (d > 6)"

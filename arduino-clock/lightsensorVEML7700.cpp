@@ -19,6 +19,7 @@ Adafruit_VEML7700 veml = Adafruit_VEML7700();
 #endif
 
 void initLightSensor() {
+  Serial.println(F("Initiating light sensor"));
   veml.begin();
   //Gain and integration time put a limit on the max lux we can detect
   //see: https://forums.adafruit.com/viewtopic.php?f=19&t=165473&p=840089#p829281
@@ -54,8 +55,11 @@ void initLightSensor() {
 
 byte lastRelAmb = 0; //we won't report a change unless relative ambient light changes sufficiently
 #define REL_AMB_THRESHOLD 3 //sufficiently = 3/255 of max-min
+//unsigned long lastPrint = 0;
 byte getRelativeAmbientLightLevel() {
   int lux = (int)veml.readLux();
+  //if((unsigned long)(millis()-lastPrint)>500) { lastPrint = millis(); Serial.println(lastPrint,DEC); }
+  Serial.println(lux);
   if(lux <= LUX_DIM) lux = 0;
   else if(lux >= LUX_FULL) lux = 255;
   else lux = (long)(lux - LUX_DIM) * 255 / (LUX_FULL - LUX_DIM);
@@ -65,7 +69,7 @@ byte getRelativeAmbientLightLevel() {
   if(((lux==0 || lux==255) && lastRelAmb!=0 && lastRelAmb!=255) //if we're minned/maxxed, and last wasn't that;
     || lux-lastRelAmb>=REL_AMB_THRESHOLD || lux-lastRelAmb<=-REL_AMB_THRESHOLD) { //TODO is this sufficient wrt rollovers?
     lastRelAmb = lux;
-    //Serial.print("New RelAmb: "); Serial.println(lastRelAmb,DEC);
+    Serial.print("New RelAmb: "); Serial.println(lastRelAmb,DEC);
   }
   return lastRelAmb;
 }

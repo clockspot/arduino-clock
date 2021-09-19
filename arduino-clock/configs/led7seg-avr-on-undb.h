@@ -77,7 +77,7 @@
 #define SCROLL_SPEED 100 //ms - "frame rate" of digit scrolling, e.g. date at :30 option
 
 
-// ///// Ambient Light Sensor /////
+///// Ambient Light Sensor /////
 //If using VEML 7700 Lux sensor (I2C on SDA/SCL pins)
 //Requires Adafruit library VEML7700
 #define LIGHTSENSOR_VEML7700

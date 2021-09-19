@@ -170,7 +170,10 @@ void setup(){
     Serial.begin(115200);
     #ifndef __AVR__ //SAMD only
     while(!Serial);
+    #else
+    delay(1);
     #endif
+    Serial.println(F("Hello world"));
   }
   rtcInit();
   initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
