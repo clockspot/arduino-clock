@@ -16,14 +16,13 @@
 //Needs to be able to save to persistent storage
 #include "storage.h"
 
-//Volatile vars that back up the wifi creds in EEPROM
+//Volatile wifi credential vars to back up what's in EEPROM:
 // 55-86 Wi-Fi SSID (32 bytes)
 // 87-150 Wi-Fi WPA passphrase/key or WEP key (64 bytes)
 // 151 Wi-Fi WEP key index (1 byte)
-//If the EEPROM ssid/pass are a full 32/64 chars, there won't be room for the termination character '\0', we'll add that when reading
-//TODO consider making these char arrays - but the memory usage on SAMD isn't bad as-is
-String wssid = "";
-String wpass = ""; //wpa pass or wep key
+//Vars have extra byte for termination character (is this right?) - don't need to store that in EEPROM
+char wssid[33];
+char wpass[65]; //wpa pass or wep key
 byte wki = 0; //wep key index - 0 if using wpa
 
 unsigned int localPort = 2390; // local port to listen for UDP packets
@@ -45,14 +44,16 @@ void initNetwork(){
   //Check status of wifi module up front
   //if(WiFi.status()==WL_NO_MODULE){ Serial.println(F("Communication with WiFi module failed!")); while(true); }
   //else if(WiFi.firmwareVersion()<WIFI_FIRMWARE_LATEST_VERSION) Serial.println(F("Please upgrade the firmware"));
-  //Get wifi credentials out of EEPROM - see wssid/wpass definitions above
-  //Read until a termination character is reached
-  for(byte i=0; i<32; i++){ if(readEEPROM(55+i,false)=='\0') break; wssid.concat((char)(readEEPROM(55+i,false))); } //Read in the SSID
-  for(byte i=0; i<64; i++){ if(readEEPROM(87+i,false)=='\0') break; wpass.concat((char)(readEEPROM(87+i,false))); } //Read in the pass
+  //Get wifi credentials out of EEPROM
+  //TODO assuming a value of 0 is whitespace to be disregarded
+  for(byte i=0; i<32; i++) wssid[i] = (unsigned char)(readEEPROM(55+i,false)); //Read in the SSID
+  wssid[32] = '\0'; //in case data was a full 32 bytes (no terminator), make sure last character is a terminator
+  for(byte i=0; i<64; i++) wpass[i] = (unsigned char)(readEEPROM(87+i,false));
+  wpass[64] = '\0';
   wki = readEEPROM(151,false); //Read in the wki
-  //Serial.print(F("wssid=")); Serial.println(wssid);
-  //Serial.print(F("wpass=")); Serial.println(wpass);
-  //Serial.print(F("wki=")); Serial.println(wki);
+  Serial.print(F("wssid=")); Serial.println(String(wssid));
+  Serial.print(F("wpass=")); Serial.println(String(wpass));
+  Serial.print(F("wki=")); Serial.println(wki);
   networkStartWiFi();
 }
 void cycleNetwork(){
@@ -84,13 +85,13 @@ void checkForWiFiStatusChange(){
 
 void networkStartWiFi(){
   WiFi.end(); //if AP is going, stop it
-  if(wssid==F("")) return; //don't try to connect if there's no creds
+  if(String(wssid)==F("")){ Serial.println(F("no start wifi")); return; } //don't try to connect if there's no creds
   checkForWiFiStatusChange(); //just for serial logging
   //Serial.print(millis(),DEC); Serial.println(F("blank display per start wifi"));
   blankDisplay(0,5,false); //I'm guessing if it hangs, nixies won't be able to display anyway
   //Serial.println(); Serial.print(millis()); Serial.print(F(" Attempting to connect to SSID: ")); Serial.println(wssid);
-  if(wki) WiFi.begin(wssid.c_str(), wki, wpass.c_str()); //WEP - hangs while connecting
-  else WiFi.begin(wssid.c_str(), wpass.c_str()); //WPA - hangs while connecting
+  if(wki) WiFi.begin(wssid, wki, wpass); //WEP - hangs while connecting
+  else WiFi.begin(wssid, wpass); //WPA - hangs while connecting
   if(WiFi.status()==WL_CONNECTED){ //did it work?
     // Serial.print(millis()); Serial.println(F(" Connected!"));
     // Serial.print(F("SSID: ")); Serial.println(WiFi.SSID());
@@ -149,7 +150,7 @@ void cueNTP(){
 
 int startNTP(bool synchronous){ //Called at intervals to check for ntp time
   //synchronous is for forced call from admin page, so we can return an error code, or 0 on successful sync
-  if(wssid==F("")) return -1; //don't try to connect if there's no creds
+  if(String(wssid)==F("")) return -1; //don't try to connect if there's no creds
   if(WiFi.status()!=WL_CONNECTED && WiFi.status()!=WL_AP_CONNECTED && WiFi.status()!=WL_AP_LISTENING) networkStartWiFi(); //in case the wifi dropped. Don't try if currently offering an access point.
   if(WiFi.status()!=WL_CONNECTED) return -2;
   if(ntpGoing || ntpTime) return -3; //if request going, or waiting to set to apply TODO epoch issue
@@ -783,16 +784,23 @@ void checkClients(){
           //TODO since the values are not html-entitied (due to the difficulty of de-entiting here), this will fail if the ssid contains "&wpass=" or pass contains "&wki="
           int startPos = 6;
           int endPos = currentLine.indexOf(F("&wpass="),startPos);
-          wssid = currentLine.substring(startPos,endPos);
+          String wssidstr = currentLine.substring(startPos,endPos);
+          if(wssidstr.length()>32) wssidstr = wssidstr.substring(0,32); //truncate
+          strcpy(wssidstr.c_str(),wssid);
           startPos = endPos+7;
           endPos = currentLine.indexOf(F("&wki="),startPos);
-          wpass = currentLine.substring(startPos,endPos);
+          String wpassstr = currentLine.substring(startPos,endPos);
+          if(wssidstr.length()>64) wssidstr = wssidstr.substring(0,64); //truncate
+          strcpy(wpassstr.c_str(),wpass);
           startPos = endPos+5;
           wki = currentLine.substring(startPos).toInt();
-          //Persistent storage - see wssid/wpass definitions above
+          //Persistent storage
+          // 55-86 Wi-Fi SSID (32 bytes)
+          // 87-150 Wi-Fi WPA passphrase/key or WEP key (64 bytes)
+          // 151 Wi-Fi WEP key index (1 byte)
           for(byte i=0; i<97; i++) writeEEPROM(55+i,0,false,false); //Clear out the old values (32+64+1)
-          for(byte i=0; i<wssid.length(); i++) { if(i<55+32) writeEEPROM(55+i,wssid[i],false,false); } //Write in the SSID
-          for(byte i=0; i<wpass.length(); i++) { if(i<87+64) writeEEPROM(87+i,wpass[i],false,false); } //Write in the pass
+          for(byte i=0; i<32; i++) writeEEPROM(55+i,wssid[i],false,false); //Write in the SSID
+          for(byte i=0; i<64; i++) writeEEPROM(87+i,wpass[i],false,false); //Write in the pass
           writeEEPROM(151,wki,false,false); //Write in the wki
           commitEEPROM(); //commit all the above
           requestType = 3; //triggers an admin restart after the client is closed, below
@@ -813,13 +821,13 @@ void checkClients(){
           //TODO this doesn't seem to return properly if the wifi was changed after the clock was booted - it syncs, but just hangs
           int ntpCode = startNTP(true);
           switch(ntpCode){
-            case -1: client.print(F("Error: no Wi-Fi credentials.")); break;
-            case -2: client.print(F("Error: not connected to Wi-Fi.")); break;
-            case -3: client.print(F("Error: NTP response pending. Please try again shortly.")); break; //should never see this one on the web since it's synchronous and the client blocks
-            case -4: client.print(F("Error: too many sync requests in the last ")); client.print(NTP_MINFREQ/1000,DEC); client.print(F(" seconds. Please try again shortly.")); break;
-            case -5: client.print(F("Error: no NTP response received. Please confirm server.")); break;
-            case 0: client.print(F("synced")); break;
-            default: client.print(F("Error: unhandled NTP code")); break;
+            case -1: clientReturn = true; client.print(F("Error: no Wi-Fi credentials.")); break;
+            case -2: clientReturn = true; client.print(F("Error: not connected to Wi-Fi.")); break;
+            case -3: clientReturn = true; client.print(F("Error: NTP response pending. Please try again shortly.")); break; //should never see this one on the web since it's synchronous and the client blocks
+            case -4: clientReturn = true; client.print(F("Error: too many sync requests in the last ")); client.print(NTP_MINFREQ/1000,DEC); client.print(F(" seconds. Please try again shortly.")); break;
+            case -5: clientReturn = true; client.print(F("Error: no NTP response received. Please confirm server.")); break;
+            case 0: clientReturn = true; client.print(F("synced")); break;
+            default: clientReturn = true; client.print(F("Error: unhandled NTP code")); break;
           }
           clientReturn = true;
         } else if(currentLine.startsWith(F("curtod"))){
