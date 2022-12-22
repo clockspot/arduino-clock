@@ -693,11 +693,11 @@ void checkClients(){
           
         #endif //chime section
         
-        #if SHOW_IRRELEVANT_OPTIONS || ENABLE_SHUTOFF_NIGHT || ENABLE_SHUTOFF_AWAY
+        #if SHOW_IRRELEVANT_OPTIONS || ENABLE_DIMMING || ENABLE_AWAYMODE
         client.print(F("<li><h3>Shutoff</h3></li>"));
         #endif
         
-        #if SHOW_IRRELEVANT_OPTIONS || ENABLE_SHUTOFF_NIGHT
+        #if SHOW_IRRELEVANT_OPTIONS || ENABLE_DIMMING
         client.print(F("<li><label>Night shutoff</label><select id='b27' onchange='save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(27,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("None")); break;
           case 1: client.print(F("Dim")); break;
@@ -709,7 +709,7 @@ void checkClients(){
         client.print(F("<li><label>Night end</label><input type='number' id='morntodh' onchange='promptsave(\"morntod\")' onkeyup='promptsave(\"morntod\")' onblur='unpromptsave(\"morntod\"); savetod(\"morntod\")' min='0' max='23' step='1' value='")); client.print(readEEPROM(30,true)/60,DEC); client.print(F("' />&nbsp;:&nbsp;<input type='number' id='morntodm' onchange='promptsave(\"morntod\")' onkeyup='promptsave(\"morntod\")' onblur='unpromptsave(\"morntod\"); savetod(\"morntod\")' min='0' max='59' step='1' value='")); client.print(readEEPROM(30,true)%60,DEC); client.print(F("' /><input type='hidden' id='morntod' /> <a id='morntodsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>24-hour format. Set to 0:00 to use the alarm time.</span></li>"));
         #endif //night shutoff
         
-        #if SHOW_IRRELEVANT_OPTIONS || ENABLE_SHUTOFF_AWAY
+        #if SHOW_IRRELEVANT_OPTIONS || ENABLE_AWAYMODE
         client.print(F("<li><label>Away shutoff</label><select id='b32' onchange='save(this)'>")); for(char i=0; i<=2; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(32,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
           case 0: client.print(F("None")); break;
           case 1: client.print(F("Weekends (clock at work)")); break;
@@ -717,8 +717,8 @@ void checkClients(){
           default: break; } client.print(F("</option>")); } client.print(F("</select><br/><span class='explain'>To further save display life, shut off display during daytime hours when you're not around. This feature is designed to accommodate your weekly work schedule.</span></li>"));
         #endif
         
-        #if SHOW_IRRELEVANT_OPTIONS || ENABLE_SHUTOFF_AWAY || (ENABLE_ALARM_FN && ENABLE_ALARM_AUTOSKIP)
-          #if !SHOW_IRRELEVANT_OPTIONS && !ENABLE_SHUTOFF_AWAY //Alternative header if only workweek is needed
+        #if SHOW_IRRELEVANT_OPTIONS || ENABLE_AWAYMODE || (ENABLE_ALARM_FN && ENABLE_ALARM_AUTOSKIP)
+          #if !SHOW_IRRELEVANT_OPTIONS && !ENABLE_AWAYMODE //Alternative header if only workweek is needed
           client.print(F("<li><h3>Workweek</h3></li>"));
           #endif
         client.print(F("<li><label>First day of workweek</label><a name='workweek' href='#'></a><select id='b33' onchange='save(this)'>")); for(char i=0; i<=6; i++){ client.print(F("<option value='")); client.print(i,DEC); client.print(F("'")); if(readEEPROM(33,false)==i) client.print(F(" selected")); client.print(F(">")); switch(i){
@@ -742,7 +742,7 @@ void checkClients(){
           default: break; } client.print(F("</option>")); } client.print(F("</select></li>"));
         #endif
         
-        #if SHOW_IRRELEVANT_OPTIONS || ENABLE_SHUTOFF_AWAY
+        #if SHOW_IRRELEVANT_OPTIONS || ENABLE_AWAYMODE
         client.print(F("<li><label>Workday start</label><input type='number' id='worktodh' onchange='promptsave(\"worktod\")' onkeyup='promptsave(\"worktod\")' onblur='unpromptsave(\"worktod\"); savetod(\"worktod\")' min='0' max='23' step='1' value='")); client.print(readEEPROM(35,true)/60,DEC); client.print(F("' />&nbsp;:&nbsp;<input type='number' id='worktodm' onchange='promptsave(\"worktod\")' onkeyup='promptsave(\"worktod\")' onblur='unpromptsave(\"worktod\"); savetod(\"worktod\")' min='0' max='59' step='1' value='")); client.print(readEEPROM(35,true)%60,DEC); client.print(F("' /><input type='hidden' id='worktod' /> <a id='worktodsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>24-hour format.</span></li>"));
       
         client.print(F("<li><label>Workday end</label><input type='number' id='hometodh' onchange='promptsave(\"hometod\")' onkeyup='promptsave(\"hometod\")' onblur='unpromptsave(\"hometod\"); savetod(\"hometod\")' min='0' max='23' step='1' value='")); client.print(readEEPROM(37,true)/60,DEC); client.print(F("' />&nbsp;:&nbsp;<input type='number' id='hometodm' onchange='promptsave(\"hometod\")' onkeyup='promptsave(\"hometod\")' onblur='unpromptsave(\"hometod\"); savetod(\"hometod\")' min='0' max='59' step='1' value='")); client.print(readEEPROM(37,true)%60,DEC); client.print(F("' /><input type='hidden' id='hometod' /> <a id='hometodsave' href='#' onclick='return false' style='display: none;'>save</a><br/><span class='explain'>24-hour format. Set to 0:00 to use the alarm time.</span></li>"));  

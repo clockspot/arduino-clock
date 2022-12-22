@@ -19,12 +19,13 @@
 * When day counter is set to count up from 12/31, override to display 365/366 on that date
 * Bitmask to enable/disable features?
 * Option to display weekdays as Sun=0 or Sun=1 (per Portuguese!)
-* Is it possible to trip the chime *after* determining if we're in night shutoff or not
+* Is it possible to trip the chime *after* determining if we're in off-hours or not
 * In display code, consider using `delayMicroseconds()` which, with its tighter resolution, may give better control over fades and dim levels
 * in `ctrlEvt()`, could we do release/shorthold on mainSel so we can exit without making changes?
 * I2C multicolor LED to indicate which function we're in? - possibly as part of display
 * Metronome function?
 * Signalstart should create a situation where there's time on the counter, but doesn't make sound since the rtc can do that. Other beepable actions would probably cancel that counter anyway (is this still applicable?)
-* Why does the display flicker sometimes? are we doubling up on a display cycle call?
+* Why does the display flicker sometimes? are we doubling up on a display cycle call? - we may have fixed this, test
+* When using ambient lighting control, alarm on state doesn't appear at full brightness because display code doesn't know *that* bright=2 is deliberate
 
 See other TODOs throughout code.

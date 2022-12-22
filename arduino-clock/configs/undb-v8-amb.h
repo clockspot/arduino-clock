@@ -1,4 +1,4 @@
-//Arduino IoT with nothing but the LED connected
+//Unmodified UNDB v8 with LED and relay disabled, and buttons as labeled, with 6-digit display, with ambient light sensor
 
 #ifndef CONFIG
 #define CONFIG
@@ -10,34 +10,45 @@
 // Related settings will also be enabled in the settings menu.
 // The operating instructions assume all of these are enabled except temp and tubetest.
 #define ENABLE_DATE_FN true // Date function, optionally including pages below
-#define ENABLE_DATE_COUNTER true // Adds date page with an anniversary counter
-#define ENABLE_DATE_RISESET true // Adds date pages with sunrise/sunset times. Requires Dusk2Dawn library by DM Kichi to be installed in IDE.
-#define ENABLE_ALARM_FN true
-#define ENABLE_ALARM_AUTOSKIP true
-#define ENABLE_ALARM_FIBONACCI true
-#define ENABLE_TIMER_FN true
-#define ENABLE_TIME_CHIME true
-#define ENABLE_SHUTOFF_NIGHT true // If disabled, tubes will be full brightness all the time.
-#define ENABLE_SHUTOFF_AWAY true // Requires night shutoff.
+#define ENABLE_DATE_COUNTER false // Adds date page with an anniversary counter
+#define ENABLE_DATE_RISESET false // Adds date pages with sunrise/sunset times. Requires Dusk2Dawn library by DM Kichi to be installed in IDE.
+#define ENABLE_ALARM_FN false
+#define ENABLE_ALARM_AUTOSKIP false
+#define ENABLE_ALARM_FIBONACCI false
+#define ENABLE_TIMER_FN false
+#define ENABLE_TIME_CHIME false
+#define ENABLE_DIMMING true
+#define ENABLE_AWAYMODE true
 #define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
 #define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 
 
 ///// Real-Time Clock /////
+//These are mutually exclusive
+
+//If using DS3231 (via I2C):
+//Requires Wire library (standard Arduino)
+//Requires DS3231 library by NorthernWidget to be installed in your IDE.
+#define RTC_DS3231
+
 //If using no RTC (a fake RTC based on millis()):
-#define RTC_MILLIS
-#define ANTI_DRIFT 0 //msec to add/remove per second - or seconds to add/remove per day divided by 86.4 - to compensate for natural drift. If using wifinina, it really only needs to be good enough for a decent timekeeping display until the next ntp sync. TIP: setting to a superhigh value is helpful for testing! e.g. 9000 will make it run 10x speed
+// #define RTC_MILLIS
+// #define ANTI_DRIFT -700 //msec to add/remove per second - or seconds to add/remove per day divided by 86.4 - to compensate for natural drift. Ifusing wifinina, it really only needs to be good enough for a decent timekeeping display until the next ntp sync. TIP: setting to a superhigh value is helpful for testing! e.g. 9000 will make it run 10x speed
 
 
 ///// Inputs /////
-//If using IMU motion sensor on Nano 33 IoT:
-//To use, tilt clock: backward=Sel, forward=Alt, left=Down, right=Up
-//This is mutually exclusive with the button/rotary controls.
-#define INPUT_IMU
-//Which side of the IMU/Arduino faces clock front/side? 0=bottom, 1=top, 2=left side, 3=right side, 4=USB end, 5=butt end
-#define IMU_FRONT 0 //(UNDB: 0)
-#define IMU_TOP 4 //(UNDB: 4)
-#define IMU_DEBOUNCING 150 //ms
+
+//If using buttons for Select and optionally Alt:
+#define INPUT_BUTTONS
+#define CTRL_SEL A1 //UNDB S2/PL5
+#define CTRL_ALT A0 //UNDB S3/PL6 - if not using Alt, set to -1
+
+//Up and Down can be buttons OR a rotary control:
+
+//If using buttons for Up and Down:
+#define INPUT_UPDN_BUTTONS
+#define CTRL_UP A2 //UNDB S6/PL9
+#define CTRL_DN A3 //UNDB S5/PL8
 
 //For all input types:
 //How long (in ms) are the hold durations?
@@ -50,20 +61,34 @@
 #define FN_TEMP_TIMEOUT 5 //sec
 #define FN_PAGE_TIMEOUT 3 //sec
 
+//Unused inputs
+//A7 //UNDB S7/PL14
+//A6 //UNDB S4/PL7
+
+
 ///// Display /////
-//If using 8x32 LED matrix:
-//Requires LedControl library by Eberhard Farle to be installed in IDE. (http://wayoda.github.io/LedControl)
-#define DISP_MAX7219
-#define NUM_MAX 4 //How many modules? 3 for 8x24 (4 digit, untested) or 4 for 8x32 (6 digit)
-#define ROTATE 90
-#define BRIGHTNESS_FULL 7 //out of 0-15
-#define BRIGHTNESS_DIM 0
-//I've found that 7 (or 15?) and 0 make the least noise
+//These are mutually exclusive
+
+//If using nixie array:
+#define DISPLAY_NIXIE
+#define CLEAN_SPEED 200 //ms - "frame rate" of tube cleaning
 //Which output pins?
-#define CLK_PIN 2 //D2, pin 20
-#define CS_PIN 3 //D3, pin 21
-#define DIN_PIN 4 //D4, pin 22
-//and GND and VCC 5V
+//This clock is 2x3 multiplexed: two tubes powered at a time.
+//The anode channel determines which two tubes are powered,
+//and the two SN74141 cathode driver chips determine which digits are lit.
+//4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
+#define OUT_A1 2
+#define OUT_A2 3
+#define OUT_A3 4
+#define OUT_A4 5
+#define OUT_B1 6
+#define OUT_B2 7
+#define OUT_B3 8
+#define OUT_B4 9
+//3 pins out to anode channel switches
+#define ANODE_1 11
+#define ANODE_2 12
+#define ANODE_3 13
 
 //For all display types:
 #define DISPLAY_SIZE 6 //number of digits in display module: 6 or 4
@@ -71,10 +96,21 @@
 #define SCROLL_SPEED 100 //ms - "frame rate" of digit scrolling, e.g. date at :30 option
 
 
+///// Ambient Light Sensor /////
+// If using VEML 7700 Lux sensor (I2C on SDA/SCL pins)
+// Requires Adafruit library VEML7700
+#define LIGHTSENSOR_VEML7700
+#define LUX_FULL 400 //lux at/above which display should be at its brightest (per config)
+#define LUX_DIM 30 //lux at/below which display should be at its dimmest (per config)
+
+// If any type of light sensor is in use:
+#define LIGHTSENSOR
+
+
 ///// Other Outputs /////
 
 //What are the pins for each signal type? -1 to disable that signal type
-#define PIEZO_PIN -1 //Drives a piezo beeper
+#define PIEZO_PIN 10 //Drives a piezo beeper
 #define SWITCH_PIN -1 //Switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in SWITCH_DUR. (A3 for UNDB v9)
 #define PULSE_PIN -1 //Simple pulses to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in RELAY_PULSE. Pulse frequency behaves like the piezo signal.
 //Default signal type for each function:
@@ -96,9 +132,7 @@
 
 //Backlighting control
 #define BACKLIGHT_PIN -1 // -1 to disable feature; 9 if equipped (UNDB v9)
-#define BACKLIGHT_FADE 0
-// 0 = no fading; simply switches on and off.
-// >0 = backlight fades on and off via PWM (must use PWM pin and PWM-supportive lighting, such as LEDs). This value is the amount the PWM is increased/decreased per loop cycle. 10 is a good starting choice.
+#define BACKLIGHT_FADE 0 // 1 to fade via PWM (must use PWM pin and PWM-supportive lighting); 0 to simply switch on and off
 
 
 #endif

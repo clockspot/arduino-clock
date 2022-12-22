@@ -18,8 +18,8 @@
 #define ENABLE_ALARM_FIBONACCI true
 #define ENABLE_TIMER_FN true
 #define ENABLE_TIME_CHIME true
-#define ENABLE_SHUTOFF_NIGHT true // If disabled, tubes will be full brightness all the time.
-#define ENABLE_SHUTOFF_AWAY true // Requires night shutoff.
+#define ENABLE_DIMMING true
+#define ENABLE_AWAYMODE true
 #define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
 #define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 
@@ -41,18 +41,19 @@
 
 
 ///// Inputs /////
+//Buttons and motion sensor are mutually exclusive
 
 //If using buttons for Select and optionally Alt:
-// #define INPUT_BUTTONS
-// #define CTRL_SEL A6 //UNDB S4/PL7
-// #define CTRL_ALT A7 //UNDB S7/PL14 - if not using Alt, set to -1
+#define INPUT_BUTTONS
+#define CTRL_SEL A6 //UNDB S4/PL7
+#define CTRL_ALT A7 //UNDB S7/PL14 - if not using Alt, set to -1
 
-//Up and Down can be buttons OR a rotary control:
+//Up and Down can be buttons OR a rotary control (mutually exclusive)
 
 //If using buttons for Up and Down:
-// #define INPUT_UPDN_BUTTONS
-// #define CTRL_UP A0 //UNDB S3/PL6
-// #define CTRL_DN A1 //UNDB S2/PL5
+#define INPUT_UPDN_BUTTONS
+#define CTRL_UP A0 //UNDB S3/PL6
+#define CTRL_DN A1 //UNDB S2/PL5
 
 //If using rotary control for Up and Down:
 //Requires Encoder library by Paul Stoffregen to be installed in IDE.
@@ -64,12 +65,21 @@
 
 //If using IMU motion sensor on Nano 33 IoT:
 //To use, tilt clock: backward=Sel, forward=Alt, left=Down, right=Up
-//This is mutually exclusive with the button/rotary controls. TODO make it possible to use both together by renaming the functions or abstracting basic input functionality
-#define INPUT_IMU
-//Which side of the IMU/Arduino faces clock front/side? 0=bottom, 1=top, 2=left side, 3=right side, 4=USB end, 5=butt end
-#define IMU_FRONT 0 //(UNDB: 0)
-#define IMU_TOP 4 //(UNDB: 4)
-#define IMU_DEBOUNCING 150 //ms
+//This is mutually exclusive with the button/rotary controls.
+// #define INPUT_IMU
+//How is the Arduino oriented inside the clock? Include one each of USB_DIR and IC_DIR to indicate which way the USB port and IC (front side) are oriented, respectively. For UNDB clocks, it's USB_DIR_UP and IC_DIR_BACK.
+// #define USB_DIR_UP
+// #define USB_DIR_DOWN
+// #define USB_DIR_LEFT
+// #define USB_DIR_RIGHT
+// #define USB_DIR_FRONT
+// #define USB_DIR_BACK
+// #define IC_DIR_UP
+// #define IC_DIR_DOWN
+// #define IC_DIR_LEFT
+// #define IC_DIR_RIGHT
+// #define IC_DIR_FRONT
+// #define IC_DIR_BACK
 
 //For all input types:
 //How long (in ms) are the hold durations?
@@ -82,16 +92,12 @@
 #define FN_TEMP_TIMEOUT 5 //sec
 #define FN_PAGE_TIMEOUT 3 //sec
 
-//Unused inputs
-//A3 //UNDB S5/PL8
-//A2 //UNDB S6/PL9
-
 
 ///// Display /////
 //These are mutually exclusive
 
 //If using nixie array:
-// #define DISP_NIXIE
+// #define DISPLAY_NIXIE
 // #define CLEAN_SPEED 200 //ms - "frame rate" of tube cleaning
 // //Which output pins?
 // //This clock is 2x3 multiplexed: two tubes powered at a time.
@@ -113,7 +119,7 @@
 
 //If using 8x32 LED matrix:
 //Requires LedControl library by Eberhard Farle to be installed in IDE. (http://wayoda.github.io/LedControl)
-#define DISP_MAX7219
+#define DISPLAY_MAX7219
 #define NUM_MAX 4 //How many modules? 3 for 8x24 (4 digit, untested) or 4 for 8x32 (6 digit)
 #define ROTATE 90
 #define BRIGHTNESS_FULL 7 //out of 0-15
@@ -124,10 +130,32 @@
 #define CS_PIN 3 //D3, pin 21
 #define DIN_PIN 4 //D4, pin 22
 
+//If using 4/6-digit 7-segment LED display with HT16K33 (I2C on SDA/SCL pins)
+//Requires Adafruit libraries LED Backpack, GFX, and BusIO
+//If 6 digits, edit Adafruit_LEDBackpack.cpp to replace "if (d > 4)" with "if (d > 6)"
+//and, if desired, in numbertable[], replace 0x7D with 0x7C and 0x6F with 0x67 to remove
+//the serifs from 6 and 9 for legibility (see http://www.harold.thimbleby.net/cv/files/seven-segment.pdf)
+#define DISPLAY_HT16K33
+//#define NUM_MAX 4 //How many digits?
+#define BRIGHTNESS_FULL 15 //out of 0-15
+#define BRIGHTNESS_DIM 0
+#define DISPLAY_ADDR 0x70 //0x70 is the default
+
 //For all display types:
 #define DISPLAY_SIZE 6 //number of digits in display module: 6 or 4
 #define UNOFF_DUR 10 //sec - when display is off, an input will illuminate for how long?
 #define SCROLL_SPEED 100 //ms - "frame rate" of digit scrolling, e.g. date at :30 option
+
+
+///// Ambient Light Sensor /////
+//If using VEML 7700 Lux sensor (I2C on SDA/SCL pins)
+//Requires Adafruit library VEML7700
+#define LIGHTSENSOR_VEML7700
+#define LUX_FULL 400 //lux at/above which display should be at its brightest (per config)
+#define LUX_DIM 30 //lux at/below which display should be at its dimmest (per config)
+
+//If any type of light sensor is in use:
+#define LIGHTSENSOR
 
 
 ///// Other Outputs /////
@@ -155,9 +183,7 @@
 
 //Backlighting control
 #define BACKLIGHT_PIN -1 // -1 to disable feature; 9 if equipped (UNDB v9)
-#define BACKLIGHT_FADE 0
-// 0 = no fading; simply switches on and off.
-// >0 = backlight fades on and off via PWM (must use PWM pin and PWM-supportive lighting, such as LEDs). This value is the amount the PWM is increased/decreased per loop cycle. 10 is a good starting choice.
+#define BACKLIGHT_FADE 0 // 1 to fade via PWM (must use PWM pin and PWM-supportive lighting); 0 to simply switch on and off
 
 
 #endif

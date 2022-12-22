@@ -8,9 +8,9 @@
 
 ////////// Software version //////////
 const byte vMajor = 2;
-const byte vMinor = 0;
+const byte vMinor = 1;
 const byte vPatch = 0;
-const bool vDev = 0;
+const bool vDev = 1;
 
 ////////// Includes //////////
 
@@ -22,8 +22,10 @@ const bool vDev = 0;
   #include <Dusk2Dawn.h> //DM Kishi - unlicensed - install in your Arduino IDE if needed - test without
 #endif
 #include "storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash
-#include "dispNixie.h" //if DISP_NIXIE is defined in config - for a SN74141-multiplexed nixie array
-#include "dispMAX7219.h" //if DISP_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
+#include "dispNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
+#include "dispMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
+#include "dispHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
+#include "lightsensorVEML7700.h" //if LIGHTSENSOR_VEML7700 is defined in config - for I2C VEML7700 lux sensor
 #include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
 #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
 #include "input.h" //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU
@@ -74,10 +76,11 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
   24 Alarm snooze
   25 [free] - formerly Timer interval mode (now a volatile var)
   26 Backlight behavior - skipped when no backlight pin
-  27 Night shutoff
-  28-29 Night start, mins
-  30-31 Night end, mins
-  32 Away shutoff
+  27 Dimming (formerly night shutoff): 0=none (full on), 1=ambient, 2=dim per off-hours, 3=off per off-hours.
+     Note: 1 is default, in case sensor is equipped; but if not, will shift to 2. (If dimming not enabled per config, will shift to 0.)
+  28-29 Off-hours start, mins
+  30-31 Off-hours end, mins
+  32 Away mode: 0=none (full on aside from dim), 1=clock at work (shut off weekends), 2=clock at home (shut off work hours)
   33 First day of workweek
   34 Last day of workweek
   35-36 Work starts at, mins
@@ -99,12 +102,12 @@ Some are skipped when they wouldn't apply to a given clock's hardware config, se
 //Settings menu numbers (displayed in UI and readme), locs, and default/min/max/current values.
 //Setting numbers/order can be changed (though try to avoid for user convenience);
 //but locs should be maintained so AVR EEPROM doesn't need reset after an upgrade (SAMD does it anyway).
-//                       General                    Alarm              Timer     Strike       Night and away shutoff           Geo
-const byte optsNum[] = { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,12,13,14,15, 21,22,23, 30,31,32,33, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52};
-const byte optsLoc[] = {16,17,18,19,20,22,26,46,45, 23,42,39,47,24,50, 43,40,48, 21,44,41,49, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14};
-const  int optsDef[] = { 2, 1, 0, 0, 5, 0, 1, 0, 0,  0, 0,76, 4, 9, 0,  0,76, 2,  0, 0,68, 5,  0,1320, 360, 0, 1, 5, 480,1080,     0,    0,100};
-const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0, 0,  0, 0,49, 0, 0, 0,  0,49, 0,  0, 0,49, 0,  0,   0,   0, 0, 0, 0,   0,   0,  -900,-1800, 52};
-const  int optsMax[] = { 2, 5, 3, 1,20, 6, 4, 2, 1,  2, 2,88, 5,60, 1,  2,88, 5,  4, 2,88, 5,  2,1439,1439, 2, 6, 6,1439,1439,   900, 1800,156};
+//                       General                 Alarm              Timer     Strike       Brightness                        Geo
+const byte optsNum[] = { 1, 2, 3, 4, 5, 7, 8, 9, 10,11,12,13,14,15, 21,22,23, 30,31,32,33, 40,  41,  42,43,44,45,  46,  47,    50,   51, 52, 53};
+const byte optsLoc[] = {16,17,18,19,20,26,46,45, 23,42,39,47,24,50, 43,40,48, 21,44,41,49, 27,  28,  30,32,33,34,  35,  37,    10,   12, 14, 22};
+const  int optsDef[] = { 2, 1, 0, 0, 5, 1, 0, 0,  0, 0,76, 4, 9, 0,  0,76, 2,  0, 0,68, 5,  0,1320, 360, 0, 1, 5, 480,1080,     0,    0,100,  0};
+const  int optsMin[] = { 1, 1, 0, 0, 0, 0, 0, 0,  0, 0,49, 0, 0, 0,  0,49, 0,  0, 0,49, 0,  0,   0,   0, 0, 0, 0,   0,   0,  -900,-1800, 52,  0};
+const  int optsMax[] = { 2, 5, 3, 1,20, 4, 2, 1,  2, 2,88, 5,60, 1,  2,88, 5,  4, 2,88, 5,  3,1439,1439, 2, 6, 6,1439,1439,   900, 1800,156,  6};
 
 //The rest of these variables are not backed by persistent storage, so they are regular named vars.
 
@@ -140,8 +143,13 @@ unsigned long timerTime = 0; //timestamp of timer target / chrono origin (while 
 unsigned long timerLapTime = 0; 
 const byte millisCorrectionInterval = 30; //used to calibrate millis() to RTC for timer/chrono purposes
 unsigned long millisAtLastCheck = 0;
-word unoffRemain = 0; //un-off (briefly turn on display during full night/away shutoff) timeout counter, seconds
-byte displayDim = 2; //dim per display or function: 2=normal, 1=dim, 0=off
+word unoffRemain = 0; //un-off (briefly turn on display during off-hours/away shutoff) timeout counter, seconds
+byte displayBrightness = 2; //dim per display or function: 2=normal, 1=dim, 0=off
+#ifdef LIGHTSENSOR
+byte ambientLightLevelActual = 0; //if equipped with an ambient light sensor, and if configured to do so, checkRTC will check the ambient light and store it here
+byte ambientLightLevel = 0; //the tweening mechanism (below) will move this value to meet the actual, and cycleDisplay will change the brightness of the display accordingly
+//see also backlightNow / backlightTarget below
+#endif
 bool versionShowing = false; //display version if Select held at start - until it is released or long-held
 
 //If we need to temporarily display a value (or values in series), we can put them here. Can't be zero.
@@ -152,16 +160,27 @@ unsigned int tempValDispLast = 0;
 
 #define SHOW_IRRELEVANT_OPTIONS 0 //whether to show everything in settings menu and page (network)
 
+#define SHOW_SERIAL 1 //for debugging
+
+
 ////////// Main code control //////////
 
 void setup(){
-  // Serial.begin(9600);
-  // #ifndef __AVR__ //SAMD only
-  // while(!Serial);
-  // #endif
+  if(SHOW_SERIAL) {
+    Serial.begin(115200);
+    #ifndef __AVR__ //SAMD only
+    while(!Serial);
+    #else
+    delay(1);
+    #endif
+    Serial.println(F("Hello world"));
+  }
   rtcInit();
   initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
   byte changed = initEEPROM(false); //do a soft init to make sure vals in range
+  #ifdef LIGHTSENSOR
+    initLightSensor();
+  #endif
   initDisplay();
   initOutputs(); //depends on some EEPROM settings
   if(initInputs()){ //inits inputs and returns true if CTRL_SEL is held
@@ -205,8 +224,14 @@ void setup(){
     case FN_TUBETEST: if(!ENABLE_TUBETEST_FN) changed += writeEEPROM(7,(ENABLE_ALARM_FN?FN_ALARM:FN_TOD),false,false); break;
     default: changed += writeEEPROM(7,(ENABLE_ALARM_FN?FN_ALARM:FN_TOD),false,false); break;
   }
-  if(!ENABLE_SHUTOFF_NIGHT) changed += writeEEPROM(27,0,false,false); //night shutoff off
-  if(!ENABLE_SHUTOFF_AWAY) changed += writeEEPROM(32,0,false,false); //away shutoff off
+  if(!ENABLE_DIMMING) changed += writeEEPROM(27,0,false,false); //display always on
+#ifndef LIGHTSENSOR
+  //for dimming (formerly night shutoff), 1 used to be "dim per off-hours" but now means "ambient" and is the default, in case it's equipped.
+  //If there is no light sensor equipped, but it's set to 1 (per defaults or predating an upgrade), bump it to 2, the new "dim per off-hours."
+  //In this case we will also skip option 1 during setting.
+  else if(readEEPROM(27,false)==1) changed += writeEEPROM(27,2,false,false);
+#endif
+  if(!ENABLE_AWAYMODE) changed += writeEEPROM(32,0,false,false); //display always on
   //if backlight circuit is not switched (v5.0 board), the backlight menu setting (eeprom 26) doesn't matter
   if(changed) commitEEPROM(); //for SAMD
   
@@ -221,8 +246,18 @@ void loop(){
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
   if(networkSupported()) cycleNetwork();
   cycleTimer();
-  cycleDisplay(displayDim,fnSetPg); //keeps the display hardware multiplexing cycle going
-  cycleBacklight();
+  cycleTweening();
+  cycleDisplay( //keeps the display hardware multiplexing cycle going
+    displayBrightness, //the display normal/dim/off state
+#ifdef LIGHTSENSOR
+    readEEPROM(27,false)==1, //whether dimming per ambient light is opted for
+    ambientLightLevel,
+#else
+    false,
+    0,
+#endif
+    fnSetPg //if we are setting
+  );
   cycleSignal();
 }
 
@@ -296,7 +331,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   
   //Is it a press for an un-off?
   unoffRemain = UNOFF_DUR; //always do this so continued button presses during an unoff keep it alive
-  if(displayDim==0 && evt==1) {
+  if(displayBrightness==0 && evt==1) {
     updateDisplay();
     inputStop();
     return;
@@ -625,9 +660,9 @@ void fnOptScroll(byte dir){
       || (!ENABLE_ALARM_AUTOSKIP && (optLoc==23)) //alarm autoskip disabled in config: skip autoskip switch
       || (!ENABLE_ALARM_FIBONACCI && (optLoc==50)) //fibonacci mode disabled in config: skip fibonacci switch
       || (!ENABLE_TIME_CHIME && (optLoc==21||optLoc==44||optLoc==41||optLoc==49)) //chime disabled in config: skip chime
-      || (!ENABLE_SHUTOFF_NIGHT && (optLoc==27||optLoc==28||optLoc==30)) //night shutoff disabled in config: skip night
-      || ((!ENABLE_SHUTOFF_NIGHT || !ENABLE_SHUTOFF_AWAY) && (optLoc==32||optLoc==35||optLoc==37)) //night or away shutoff disabled in config: skip away (except workweek)
-      || ((!ENABLE_SHUTOFF_NIGHT || !ENABLE_SHUTOFF_AWAY) && (!ENABLE_ALARM_AUTOSKIP || !ENABLE_ALARM_FN) && (optLoc==33||optLoc==34)) //(night or away) and alarm autoskip disabled: skip workweek
+      || (!ENABLE_DIMMING && (optLoc==27||optLoc==28||optLoc==30)) //dimming options disabled in config: skip
+      || ((!ENABLE_DIMMING || !ENABLE_AWAYMODE) && (optLoc==32||optLoc==35||optLoc==37)) //dimming and away mode disabled in config: skip away (except workweek)
+      || ((!ENABLE_DIMMING || !ENABLE_AWAYMODE) && (!ENABLE_ALARM_AUTOSKIP || !ENABLE_ALARM_FN) && (optLoc==33||optLoc==34)) //(dimming or away) and alarm autoskip disabled: skip workweek
       //Nixie-specific
       #ifndef DISPLAY_NIXIE
       || (optLoc==20||optLoc==46) //digit fade and anti-poisoning
@@ -713,6 +748,12 @@ void doSet(int delta){
           if(fnSetVal<4 || (fnSetVal==4 && SWITCH_PIN>=0)) did = true;
           //else leave as false
           break;
+#ifndef LIGHTSENSOR
+        case 27: //dimming: skip ambient option 1 if not equipped with light sensor
+          if(fnSetVal!=1) did = true;
+          //else leave as false, to skip 1
+          break;
+#endif
         default: did = true; break;
       }
     } else did = true;
@@ -866,6 +907,8 @@ void checkRTC(bool force){
     } //end natural second
   
     //Things to do at specific times
+    word todmins = rtcGetHour()*60+rtcGetMinute();
+    
     //Timer drift correction: per the millisCorrectionInterval
     if(rtcGetSecond()%millisCorrectionInterval==0){ //if time:
       if(!(rtcDid&1)) millisCheckDrift(); bitWrite(rtcDid,0,1); //do if not done, set as done
@@ -901,19 +944,19 @@ void checkRTC(bool force){
       if(readEEPROM(18,false)>=2) { goToFn(FN_CAL,254); updateDisplay(); }
       //if(readEEPROM(18,false)==3) { startScroll(); }
     }
-    //Anti-poisoning routine triggering: start when applicable, and not at night, during setting, or after a button press (unoff)
-    if(rtcGetSecond()<2 && displayDim==2 && fnSetPg==0 && unoffRemain==0) {
+    //Anti-poisoning routine triggering: start when applicable, normal brightness, and not during off-hours, setting, or after a button press (unoff)
+    if(rtcGetSecond()<2 && fnSetPg==0 && unoffRemain==0 && displayBrightness==2 && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins)) {
       //temporarily we'll recalculate the sun stuff every day
-      if(readEEPROM(27,false)>0? //is night shutoff enabled?
-        rtcGetSecond()==0 && rtcGetHour()*60+rtcGetMinute()==readEEPROM(28,true): //if so, at start of night shutoff (at second :00 before dim is in effect)
+      if(readEEPROM(27,false)>1? //is dimming per schedule enabled?
+        rtcGetSecond()==0 && rtcGetHour()*60+rtcGetMinute()==readEEPROM(28,true): //if so, at start of dimming schedule (at second :00 before dim is in effect)
         rtcGetSecond()==1 && rtcGetHour()*60+rtcGetMinute()==0) //if not, at 00:00:01
           calcSun(); //take this opportunity to perform a calculation that blanks the display for a bit
       // TODO the below will need to change cleanRemain=x to displayClean(x)
       
       // switch(readEEPROM(46,false)) { //how often should the routine run?
       //   case 0: //every day
-      //     if(readEEPROM(27,false)>0? //is night shutoff enabled?
-      //       rtcGetSecond()==0 && rtcGetHour()*60+rtcGetMinute()==readEEPROM(28,true): //if so, at start of night shutoff (at second :00 before dim is in effect)
+      //     if(readEEPROM(27,false)>1? //is dimming per schedule enabled?
+      //       rtcGetSecond()==0 && rtcGetHour()*60+rtcGetMinute()==readEEPROM(28,true): //if so, at start of dimming schedule (at second :00 before dim is in effect)
       //       rtcGetSecond()==1 && rtcGetHour()*60+rtcGetMinute()==0) //if not, at 00:00:01
       //         cleanRemain = 151; //run routine for fifteen cycles
       //     break;
@@ -935,13 +978,13 @@ void checkRTC(bool force){
       if(rtcGetSecond()==30 && ntpSyncAgo()>=30000) cueNTP(); //if at first you don't succeed...
     }
     
-    //Strikes - only if fn=clock, not setting, not signaling/snoozing, not night/away. Setting 21 will be off if signal type is no good
+    //Strikes - only if fn=clock, normal brightness, not in off-hours (given ambient lighting is part of normal brightness), not setting, not signaling/snoozing. Setting 21 will be off if signal type is no good
     //The six pips
-    if(rtcGetMinute()==59 && rtcGetSecond()==55 && readEEPROM(21,false)==2 && signalRemain==0 && snoozeRemain==0 && fn==FN_TOD && fnSetPg==0 && displayDim==2) {
+    if(rtcGetMinute()==59 && rtcGetSecond()==55 && readEEPROM(21,false)==2 && signalRemain==0 && snoozeRemain==0 && fn==FN_TOD && fnSetPg==0 && displayBrightness==2 && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins)) {
       signalStart(FN_TOD,6); //the signal code knows to use pip durations as applicable
     }
     //Strikes on/after the hour
-    if(rtcGetSecond()==0 && (rtcGetMinute()==0 || rtcGetMinute()==30) && signalRemain==0 && snoozeRemain==0 && fn==FN_TOD && fnSetPg==0 && displayDim==2){
+    if(rtcGetSecond()==0 && (rtcGetMinute()==0 || rtcGetMinute()==30) && signalRemain==0 && snoozeRemain==0 && fn==FN_TOD && fnSetPg==0 && displayBrightness==2 && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins)){
       byte hr; hr = rtcGetHour(); hr = (hr==0?12:(hr>12?hr-12:hr));
       switch(readEEPROM(21,false)) {
         case 1: //single beep
@@ -955,8 +998,14 @@ void checkRTC(bool force){
     } //end strike
     
     //Finally, update the display, whether natural tick or not, as long as we're not setting or on a scrolled display (unless forced eg. fn change)
-    //This also determines night/away shutoff, which is why strikes will happen if we go into off at top of hour, and not when we come into on at the top of the hour TODO find a way to fix this
+    //This also determines off-hours, which is why strikes will happen if we go into off at top of hour, and not when we come into on at the top of the hour TODO find a way to fix this
     //Also skip updating the display if this is date and not being forced, since its pages take some calculating that cause it to flicker
+    //Also sample the ambient lighting here
+#ifdef LIGHTSENSOR
+    if(readEEPROM(27,false)==1) { //if we have a light sensor,  and we are set to use ambient light, sample it
+      ambientLightLevelActual = getRelativeAmbientLightLevel();
+    }
+#endif
     if(fnSetPg==0 && (true || force) && !(fn==FN_CAL && !force)) updateDisplay(); /*scrollRemain==0 ||*/
     
     rtcSecLast = rtcGetSecond();
@@ -1296,7 +1345,7 @@ void updateDisplay(){
   // }
   //
   // if(cleanRemain) { //cleaning tubes
-  //   displayDim = 2;
+  //   displayBrightness = 2;
   //   byte digit = 10-((cleanRemain-1)%10); //(11-cleanRemain)%10;
   //   editDisplay(digit,0,0,true,false);
   //   editDisplay(digit,1,1,true,false);
@@ -1342,7 +1391,7 @@ void updateDisplay(){
     blankDisplay(4, 5, true);
   }
   else if(fnSetPg) { //setting value, for either fn or settings menu
-    displayDim = 2;
+    // displayBrightness = 2; //taken over by display code? TODO confirm
     // blankDisplay(4, 5, false); //taken over by startSet
     byte fnOptCurLoc = (fn>=FN_OPTS? optsLoc[fn-FN_OPTS]: 0); //current setting index loc, to tell what's being set
     if(fnSetValMax==1439) { //Time of day (0-1439 mins, 0:00–23:59): show hrs/mins
@@ -1372,25 +1421,26 @@ void updateDisplay(){
     } else editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0, false); //some other type of value - leading zeros for negatives
   }
   else if(fn >= FN_OPTS){ //settings menu, but not setting a value
-    displayDim = 2;
+    // displayBrightness = 2; //taken over by display code? TODO confirm
     editDisplay(optsNum[fn-FN_OPTS],0,1,false,false); //display setting number on hour digits
     blankDisplay(2,5,false);
   }
   else { //fn running
     
-    //Set displayDim per night/away settings - FN_ALARM may override this
+    //Set displayBrightness per dimming/away schedule - FN_ALARM may override this
     //issue: moving from off alarm to next fn briefly shows alarm in full brightness. I think because of the display delays. TODO
     word todmins = rtcGetHour()*60+rtcGetMinute();
     //In order of precedence: //TODO can we fade between dim states? 
     //clock at work: away on weekends, all day
     if( readEEPROM(32,false)==1 && !isDayInRange(readEEPROM(33,false),readEEPROM(34,false),rtcGetWeekday()) )
-      displayDim = (unoffRemain>0? 2: 0); //unoff overrides this
+      displayBrightness = (unoffRemain>0? 2: 0); //unoff overrides this
     //clock at home: away on weekdays, during office hours only
-    else if( readEEPROM(32,false)==2 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),rtcGetWeekday()) && isTimeInRange(readEEPROM(35,true), readEEPROM(37,true), todmins) ) displayDim = (unoffRemain>0? 2: 0);
-    //night shutoff - if night end is 0:00, use alarm time instead
-    else if( readEEPROM(27,false) && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins) ) displayDim = (readEEPROM(27,false)==1?1:(unoffRemain>0?2:0)); //dim or (unoff? bright: off)
+    else if( readEEPROM(32,false)==2 && isDayInRange(readEEPROM(33,false),readEEPROM(34,false),rtcGetWeekday()) && isTimeInRange(readEEPROM(35,true), readEEPROM(37,true), todmins) ) displayBrightness = (unoffRemain>0? 2: 0);
+    //dimming per schedule - if night end is 0:00, use alarm time instead
+    else if( readEEPROM(27,false)>1 && isTimeInRange(readEEPROM(28,true), (readEEPROM(30,true)==0?readEEPROM(0,true):readEEPROM(30,true)), todmins) ) displayBrightness = (readEEPROM(27,false)==2?1:(unoffRemain>0?2:0)); //dim or (unoff? bright: off)
     //normal
-    else displayDim = 2;
+    else displayBrightness = 2;
+    //variable brightness will be sampled once per second in checkRTC
     updateBacklight();
     
     switch(fn){
@@ -1430,7 +1480,7 @@ void updateDisplay(){
         break; //end FN_CAL
       //fnIsDayCount removed in favor of paginated calendar
       case FN_ALARM: //alarm
-        displayDim = (readEEPROM(2,false)?2:1); //status bright/dim
+        displayBrightness = (readEEPROM(2,false)?2:1); //status normal/dim
         word almTime; almTime = readEEPROM(0,true);
         editDisplay(almTime/60, 0, 1, readEEPROM(19,false), true); //hours with leading zero
         editDisplay(almTime%60, 2, 3, true, true);
@@ -1827,9 +1877,11 @@ void quickBeepPattern(int source, int pattern){
   signalStart(-1,1); //Play a sample using the above source and pattern
 }
 
-//BACKLIGHT_FADE is PWM fade speed – if >0, with every loop() we'll increment/decrement the PWM (between 0-255) by this amount. If 0, we'll just switch it on and off (no PWM).
 byte backlightNow = 0;
 byte backlightTarget = 0;
+#ifndef BACKLIGHT_FADE
+#define BACKLIGHT_FADE 0 //no PWM fading
+#endif
 void updateBacklight(){
   //Run whenever something is changed that might affect the backlight state: initial (initOutputs), signal start/stop, switch signal on/off, setting change
   if(BACKLIGHT_PIN>=0) {
@@ -1842,9 +1894,10 @@ void updateBacklight(){
         backlightTarget = 255;
         //Serial.println(F("Backlight on always"));
         break;
-      case 2: //on, but follow night/away shutoff
-        backlightTarget = (displayDim==2? 255: (displayDim==1? 127: 0));
-        //Serial.print(displayDim==2? F("Backlight on"): (displayDim==1? F("Backlight dim"): F("Backlight off"))); Serial.println(F(" per dim state"));
+      case 2: //on, but follow display dimming/away
+        backlightTarget = (displayBrightness==2? 255: (displayBrightness==1? 127: 0));
+        //TODO accommodate ambient light stuff
+        //Serial.print(displayBrightness==2? F("Backlight on"): (displayBrightness==1? F("Backlight dim"): F("Backlight off"))); Serial.println(F(" per dim state"));
         break;
       case 3: //off, but on when alarm/timer sounds
         backlightTarget = (signalRemain && (signalSource==FN_ALARM || signalSource==FN_TIMER)? 255: 0);
@@ -1860,26 +1913,60 @@ void updateBacklight(){
     } //end switch
   } //if BACKLIGHT_PIN
 } //end updateBacklight
-void cycleBacklight() {
-  //Allows us to fade the backlight to backlightTarget by stepping via BACKLIGHT_FADE, if applicable
-  //TODO: it appears setting analogWrite(pin,0) does not completely turn the backlight off. Anything else we could do?
-  if(backlightNow != backlightTarget) {
-    if(BACKLIGHT_FADE){ //PWM
-      if(backlightNow < backlightTarget) { //fade up
-        backlightNow = (backlightTarget-backlightNow <= BACKLIGHT_FADE? backlightTarget: backlightNow+BACKLIGHT_FADE);
+
+/* The variable display brightness and LED backlighting are (if opted for) faded from one state to another, but unlike the nixie fading – which requires very precise timing to prevent flicker, and is therefore the only allowed use of delay() (TODO delayMicroseconds()) in this sketch – these fade steps can be iterated with interval timing with millis() like everything else, just with a much smaller delay. I'm calling this "tweening." If we're using the nixie display, its delay()s will slow down the loop, so the tweening steps can take place once per loop. If not, the loop will run much faster, so we will need to add a delay – here it is. */
+#ifndef TWEENING_DELAY
+  #ifdef DISPLAY_NIXIE
+  #define TWEENING_DELAY 50
+  #else
+  #define TWEENING_DELAY 50
+  #endif
+#endif
+/* Tweening is currently linear, with steps of this size (the full range being 0-255). The display may change brightness in more discrete steps if it doesn't have 255 possible brightness levels (e.g. MAX7219 and HT16K33 having just 16 steps), but will change more slowly to compensate (since it is converted from a byte value). */
+#ifndef TWEENING_STEP
+#define TWEENING_STEP 10
+#endif
+
+unsigned long tweenLast = 0;
+void cycleTweening() {
+  //Allows us to fade the backlight and variable display brightness to their targets.
+  if((unsigned long)(millis()-tweenLast)>=TWEENING_DELAY){
+    tweenLast = millis();
+    
+#ifdef LIGHTSENSOR
+    //Ambient lighting reading
+    if(ambientLightLevel != ambientLightLevelActual) {
+      //Serial.print(F("cycleTweening: ambientLightLevel from ")); Serial.print(ambientLightLevel,DEC);
+      if(ambientLightLevel < ambientLightLevelActual) { //fade up
+        ambientLightLevel = (ambientLightLevelActual-ambientLightLevel <= TWEENING_STEP? ambientLightLevelActual: ambientLightLevel+TWEENING_STEP);
       } else { //fade down
-        backlightNow = (backlightNow-backlightTarget <= BACKLIGHT_FADE? backlightTarget: backlightNow-BACKLIGHT_FADE);
+        ambientLightLevel = (ambientLightLevel-ambientLightLevelActual <= TWEENING_STEP? ambientLightLevelActual: ambientLightLevel-TWEENING_STEP);
       }
-      // Serial.print(backlightNow,DEC);
-      // Serial.print(F(" => "));
-      // Serial.println(backlightTarget,DEC);
-      analogWrite(BACKLIGHT_PIN,backlightNow);
-    } else { //just switch
-      backlightNow = backlightTarget = (backlightTarget<255? 0: 255);
-      digitalWrite(BACKLIGHT_PIN,(backlightNow?LOW:HIGH)); //LOW = device on
+      //Serial.print(F(" to ")); Serial.print(ambientLightLevel,DEC); Serial.print(F(" on the way to ")); Serial.print(ambientLightLevelActual,DEC);
+    }
+#endif
+  
+    //Backlight
+    //TODO: it appears setting analogWrite(pin,0) does not completely turn the backlight off. Anything else we could do?
+    if(backlightNow != backlightTarget) {
+      if(BACKLIGHT_FADE){ //PWM enabled
+        if(backlightNow < backlightTarget) { //fade up
+          backlightNow = (backlightTarget-backlightNow <= TWEENING_STEP? backlightTarget: backlightNow+TWEENING_STEP);
+        } else { //fade down
+          backlightNow = (backlightNow-backlightTarget <= TWEENING_STEP? backlightTarget: backlightNow-TWEENING_STEP);
+        }
+        // Serial.print(backlightNow,DEC);
+        // Serial.print(F(" => "));
+        // Serial.println(backlightTarget,DEC);
+        analogWrite(BACKLIGHT_PIN,backlightNow);
+      } else { //just switch
+        backlightNow = backlightTarget = (backlightTarget<255? 0: 255);
+        digitalWrite(BACKLIGHT_PIN,(backlightNow?LOW:HIGH)); //LOW = device on
+      }
     }
   }
-}
+} //end cycleTweening
+
 byte getVersionPart(byte part){
   switch(part){
     case 0: return vMajor; break;

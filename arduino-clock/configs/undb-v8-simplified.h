@@ -17,8 +17,8 @@
 #define ENABLE_ALARM_FIBONACCI false
 #define ENABLE_TIMER_FN false
 #define ENABLE_TIME_CHIME true
-#define ENABLE_SHUTOFF_NIGHT true // If disabled, tubes will be full brightness all the time.
-#define ENABLE_SHUTOFF_AWAY false // Requires night shutoff.
+#define ENABLE_DIMMING true
+#define ENABLE_AWAYMODE false
 #define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
 #define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 
@@ -66,7 +66,7 @@
 //These are mutually exclusive
 
 //If using nixie array:
-#define DISP_NIXIE
+#define DISPLAY_NIXIE
 #define CLEAN_SPEED 200 //ms - "frame rate" of tube cleaning
 //Which output pins?
 //This clock is 2x3 multiplexed: two tubes powered at a time.
@@ -117,9 +117,7 @@
 
 //Backlighting control
 #define BACKLIGHT_PIN -1 // -1 to disable feature; 9 if equipped (UNDB v9)
-#define BACKLIGHT_FADE 0
-// 0 = no fading; simply switches on and off.
-// >0 = backlight fades on and off via PWM (must use PWM pin and PWM-supportive lighting, such as LEDs). This value is the amount the PWM is increased/decreased per loop cycle. 10 is a good starting choice.
+#define BACKLIGHT_FADE 0 // 1 to fade via PWM (must use PWM pin and PWM-supportive lighting); 0 to simply switch on and off
 
 
 #endif

@@ -1,4 +1,4 @@
-//UNDB v5, 6-tube display
+//Arduino IoT with the LED matrix and light sensor connected
 
 #ifndef CONFIG
 #define CONFIG
@@ -24,23 +24,41 @@
 
 
 ///// Real-Time Clock /////
-//If using DS3231 (via I2C):
-//Requires Wire library (standard Arduino)
-//Requires DS3231 library by NorthernWidget to be installed in your IDE.
-#define RTC_DS3231
+//If using no RTC (a fake RTC based on millis()):
+#define RTC_MILLIS
+#define ANTI_DRIFT 0 //msec to add/remove per second - or seconds to add/remove per day divided by 86.4 - to compensate for natural drift. If using wifinina, it really only needs to be good enough for a decent timekeeping display until the next ntp sync. TIP: setting to a superhigh value is helpful for testing! e.g. 9000 will make it run 10x speed
 
 
 ///// Inputs /////
+//If using IMU motion sensor on Nano 33 IoT:
+//To use, tilt clock: backward=Sel, forward=Alt, left=Down, right=Up
+//This is mutually exclusive with the button/rotary controls.
+// #define INPUT_IMU
+//How is the Arduino oriented inside the clock? Include one each of USB_DIR and IC_DIR to indicate which way the USB port and IC (front side) are oriented, respectively. For UNDB clocks, it's USB_DIR_UP and IC_DIR_BACK.
+// #define USB_DIR_UP
+// #define USB_DIR_DOWN
+// #define USB_DIR_LEFT
+// #define USB_DIR_RIGHT
+// #define USB_DIR_FRONT
+// #define USB_DIR_BACK
+// #define IC_DIR_UP
+// #define IC_DIR_DOWN
+// #define IC_DIR_LEFT
+// #define IC_DIR_RIGHT
+// #define IC_DIR_FRONT
+// #define IC_DIR_BACK
 
 //If using buttons for Select and optionally Alt:
 #define INPUT_BUTTONS
-#define CTRL_SEL A2 //UNDB S6/PL9
-#define CTRL_ALT -1 //if not using Alt, set to -1
+#define CTRL_SEL A1
+#define CTRL_ALT A0
+
+//Up and Down can be buttons OR a rotary control:
 
 //If using buttons for Up and Down:
 #define INPUT_UPDN_BUTTONS
-#define CTRL_UP A1 //UNDB S2/PL5
-#define CTRL_DN A0 //UNDB S3/PL6
+#define CTRL_UP A2
+#define CTRL_DN A3
 
 //For all input types:
 //How long (in ms) are the hold durations?
@@ -55,28 +73,16 @@
 
 
 ///// Display /////
-//These are mutually exclusive
-
-//If using nixie array:
-#define DISPLAY_NIXIE
-#define CLEAN_SPEED 200 //ms - "frame rate" of tube cleaning
-//Which output pins?
-//This clock is 2x3 multiplexed: two tubes powered at a time.
-//The anode channel determines which two tubes are powered,
-//and the two SN74141 cathode driver chips determine which digits are lit.
-//4 pins out to each SN74141, representing a binary number with values [1,2,4,8]
-#define OUT_A1 2
-#define OUT_A2 3
-#define OUT_A3 4
-#define OUT_A4 5
-#define OUT_B1 6
-#define OUT_B2 7
-#define OUT_B3 8
-#define OUT_B4 9
-//3 pins out to anode channel switches
-#define ANODE_1 11
-#define ANODE_2 12
-#define ANODE_3 13
+//If using 4/6-digit 7-segment LED display with HT16K33 (I2C on SDA/SCL pins)
+//Requires Adafruit libraries LED Backpack, GFX, and BusIO
+//If 6 digits, edit Adafruit_LEDBackpack.cpp to replace "if (d > 4)" with "if (d > 6)"
+//and, if desired, in numbertable[], replace 0x7D with 0x7C and 0x6F with 0x67 to remove
+//the serifs from 6 and 9 for legibility (see http://www.harold.thimbleby.net/cv/files/seven-segment.pdf)
+#define DISPLAY_HT16K33
+//#define NUM_MAX 4 //How many digits?
+#define BRIGHTNESS_FULL 15 //out of 0-15
+#define BRIGHTNESS_DIM 0
+#define DISPLAY_ADDR 0x70 //0x70 is the default
 
 //For all display types:
 #define DISPLAY_SIZE 6 //number of digits in display module: 6 or 4
@@ -84,10 +90,21 @@
 #define SCROLL_SPEED 100 //ms - "frame rate" of digit scrolling, e.g. date at :30 option
 
 
+///// Ambient Light Sensor /////
+//If using VEML 7700 Lux sensor (I2C on SDA/SCL pins)
+//Requires Adafruit library VEML7700
+#define LIGHTSENSOR_VEML7700
+#define LUX_FULL 400 //lux at/above which display should be at its brightest (per config)
+#define LUX_DIM 30 //lux at/below which display should be at its dimmest (per config)
+
+//If any type of light sensor is in use:
+#define LIGHTSENSOR
+
+
 ///// Other Outputs /////
 
 //What are the pins for each signal type? -1 to disable that signal type
-#define PIEZO_PIN 10 //Drives a piezo beeper
+#define PIEZO_PIN -1 //Drives a piezo beeper
 #define SWITCH_PIN -1 //Switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in SWITCH_DUR. (A3 for UNDB v9)
 #define PULSE_PIN -1 //Simple pulses to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in RELAY_PULSE. Pulse frequency behaves like the piezo signal.
 //Default signal type for each function:

@@ -17,8 +17,8 @@
 #define ENABLE_ALARM_FIBONACCI true
 #define ENABLE_TIMER_FN true
 #define ENABLE_TIME_CHIME true
-#define ENABLE_SHUTOFF_NIGHT true // If disabled, tubes will be full brightness all the time.
-#define ENABLE_SHUTOFF_AWAY true // Requires night shutoff.
+#define ENABLE_DIMMING true
+#define ENABLE_AWAYMODE true
 #define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
 #define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
 
@@ -61,15 +61,6 @@
 #define ROT_VEL_START 80 //If step rate falls below this, kick into high velocity set (x10)
 #define ROT_VEL_STOP 500 //If step rate rises above this, drop into low velocity set (x1)
 
-//If using IMU motion sensor on Nano 33 IoT:
-//To use, tilt clock: backward=Sel, forward=Alt, left=Down, right=Up
-//This is mutually exclusive with the button/rotary controls. TODO make it possible to use both together by renaming the functions or abstracting basic input functionality
-// #define INPUT_IMU
-// //Which side of the IMU/Arduino faces clock front/side? 0=bottom, 1=top, 2=left side, 3=right side, 4=USB end, 5=butt end
-// #define IMU_FRONT 0 //(UNDB: 0)
-// #define IMU_TOP 4 //(UNDB: 4)
-// #define IMU_DEBOUNCING 150 //ms
-
 //For all input types:
 //How long (in ms) are the hold durations?
 #define CTRL_HOLD_SHORT_DUR 1000 //for entering setting mode, or hold-setting at low velocity (x1)
@@ -90,7 +81,7 @@
 //These are mutually exclusive
 
 //If using nixie array:
-#define DISP_NIXIE
+#define DISPLAY_NIXIE
 #define CLEAN_SPEED 200 //ms - "frame rate" of tube cleaning
 //Which output pins?
 //This clock is 2x3 multiplexed: two tubes powered at a time.
@@ -141,9 +132,7 @@
 
 //Backlighting control
 #define BACKLIGHT_PIN -1 // -1 to disable feature; 9 if equipped (UNDB v9)
-#define BACKLIGHT_FADE 0
-// 0 = no fading; simply switches on and off.
-// >0 = backlight fades on and off via PWM (must use PWM pin and PWM-supportive lighting, such as LEDs). This value is the amount the PWM is increased/decreased per loop cycle. 10 is a good starting choice.
+#define BACKLIGHT_FADE 0 // 1 to fade via PWM (must use PWM pin and PWM-supportive lighting); 0 to simply switch on and off
 
 
 #endif
