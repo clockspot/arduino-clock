@@ -31,5 +31,6 @@ void checkInputs();
 void setInputLast(unsigned long increment=0);
 unsigned long getInputLast();
 int getInputLastTODMins();
+void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity=0);
 
 #endif //INPUT_SIMPLE_H

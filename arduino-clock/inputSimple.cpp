@@ -358,4 +358,350 @@ int getInputLastTODMins(){
   return inputLastTODMins;
 }
 
+void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
+  //Handle control events from inputs, based on current fn and set state.
+  //Moved here from main code, since the functionality here reflects the available controls (cf. inputProton).
+  
+  //evt: 1=press, 2=short hold, 3=long hold, 4=verylong, 5=superlong, 0=release.
+  //We only handle press evts for up/down ctrls, as that's the only evt encoders generate,
+  //and input.cpp sends repeated presses if up/down buttons are held.
+  //But for sel/alt (always buttons), we can handle different hold states here.
+
+  //If the version display is showing, ignore all else until Sel is released (cancel) or long-held (cancel and eeprom reset)
+  if(versionShowing){
+    if(ctrl==CTRL_SEL && (evt==0 || evt==5)){ //SEL release or superlong hold
+      if(evt==5){ initEEPROM(true); commitEEPROM(); } //superlong hold: reset EEPROM
+      versionShowing = false; inputStop(); updateDisplay();
+      if(networkSupported()) initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
+      return;
+    } else {
+      return; //ignore other controls
+    }
+  } //end if versionShowing
+
+  //If the signal is going, any press should silence it
+  if(signalRemain>0 && evt==1){
+    signalStop();
+    if(signalSource==FN_ALARM) { //If this was the alarm
+      //If the alarm is using the switch signal and this is the Alt button; or if alarm is *not* using the switch signal and this is Fibonacci mode; don't set the snooze
+      if((readEEPROM(42,false)==1 && CTRL_ALT>0 && ctrl==CTRL_ALT) || (readEEPROM(42,false)!=1 && readEEPROM(50,false))) {
+        quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
+        displayBlink(); //to indicate this as well
+      } else { //start snooze
+        snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
+      }
+    }
+    inputStop();
+    return;
+  }
+  //If the snooze is going, any press should cancel it, with a signal
+  if(snoozeRemain>0 && evt==1){
+    snoozeRemain = 0;
+    quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
+    displayBlink(); //to indicate this as well
+    inputStop();
+    return;
+  }
+  // //TODO NIXIE
+  // //If the clean is going, any press should cancel it, with a display update
+  // if(cleanRemain>0 && evt==1){
+  //   cleanRemain = 0;
+  //   inputStop();
+  //   updateDisplay();
+  //   return;
+  // }
+  // //TODO NIXIE??
+  // //If a scroll is waiting to scroll out, cancel it, and let the button event do what it will
+  // if(scrollRemain==-128 && evt==1){
+  //   scrollRemain = 0;
+  // }
+  // //If a scroll is going, fast-forward to end of scroll in/out - see also checkRTC
+  // else if(scrollRemain!=0 && evt==1){
+  //   inputStop();
+  //   if(scrollRemain>0) scrollRemain = 1;
+  //   else scrollRemain = -1;
+  //   checkEffects(true);
+  //   return;
+  // }
+  
+  //Is it a press for an un-off?
+  unoffRemain = UNOFF_DUR; //always do this so continued button presses during an unoff keep it alive
+  if(displayBrightness==0 && evt==1) {
+    updateDisplay();
+    inputStop();
+    return;
+  }
+  
+  if(networkSupported()){
+    //Short hold, Alt; or very long hold, Sel if no Alt: start admin
+    if((evt==2 && ctrl==CTRL_ALT)||(evt==4 && ctrl==CTRL_SEL && CTRL_ALT<=0)) {
+      networkStartAdmin();
+      return;
+    }
+    //Super long hold, Alt, or Sel if no Alt: start AP (TODO would we rather it forget wifi?)
+    if(evt==5 && (ctrl==CTRL_ALT || (ctrl==CTRL_SEL && CTRL_ALT<=0))) {
+      networkStartAP();
+      return;
+    }
+  }
+  
+  if(fn < FN_OPTS) { //normal fn running/setting (not in settings menu)
+
+    if(evt==3 && ctrl==CTRL_SEL) { //CTRL_SEL long hold: enter settings menu
+      //inputStop(); commented out to to enable evt==4 and evt==5 per above
+      fn = FN_OPTS;
+      clearSet(); //don't need updateDisplay() here because this calls updateRTC with force=true
+      return;
+    }
+    
+    if(!fnSetPg) { //fn running
+      if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL hold: enter setting mode
+        switch(fn){
+          case FN_TOD: //set mins
+            startSet(rtcGetTOD(),0,1439,1); break;
+          case FN_CAL: //depends what page we're on
+            if(fnPg==0){ //regular date display: set year
+              fnSetValDate[1]=rtcGetMonth(), fnSetValDate[2]=rtcGetDate(); startSet(rtcGetYear(),2000,9999,1);
+            } else if(fnPg==fnDateCounter){ //month, date, direction
+              startSet(readEEPROM(5,false),1,12,1);
+            } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
+              //TODO
+            } else if(fnPg==fnDateWeathernow || fnDateWeathernext){ //temperature units??
+              //TODO
+            } break;
+          case FN_ALARM: //set mins
+            startSet(readEEPROM(0,true),0,1439,1); break;
+          case FN_TIMER: //set mins
+            if(timerTime!=0 || timerState&1) { timerClear(); } // updateDisplay(); break; } //If the timer is nonzero or running, zero it. But rather than stop there, just go straight into setting – since adjDn (or cycling fns) can reset to zero
+            startSet(timerInitialMins,0,5999,1); break; //minutes
+          //fnIsDayCount removed in favor of paginated calendar
+          case FN_THERM: //could do calibration here if so inclined
+          case FN_TUBETEST:
+          default: break;
+        }
+        return;
+      }
+      else if((ctrl==CTRL_SEL && evt==0) || ((ctrl==CTRL_UP || ctrl==CTRL_DN) && evt==1)) { //sel release or adj press
+        //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
+        if(ctrl==CTRL_SEL){ //sel release
+          //Serial.println(F("sel release"));
+          if(fn==FN_TIMER && !(timerState&1)) timerClear(); //if timer is stopped, clear it
+          fnScroll(1); //Go to next fn in the cycle
+          fnPg = 0; //reset page counter in case we were in a paged display
+          checkRTC(true); //updates display
+        }
+        else if(ctrl==CTRL_UP || ctrl==CTRL_DN) {
+          if(fn==FN_ALARM) switchAlarmState(ctrl==CTRL_UP?1:0); //switch alarm
+          if(fn==FN_TIMER){
+            if(ctrl==CTRL_UP){
+              if(!(timerState&1)){ //stopped
+                timerStart();
+              } else { //running
+                #ifdef INPUT_UPDN_ROTARY
+                  if((timerState>>1)&1) timerLap(); //chrono: lap
+                  else timerRunoutToggle(); //timer: runout option
+                #else //button
+                  timerStop();
+                #endif
+              }
+            } else { //CTRL_DN
+              if(!(timerState&1)){ //stopped
+                #ifdef INPUT_UPDN_BUTTONS
+                  timerClear();
+                  //if we wanted to reset to the previous time, we could use this; but sel hold is easy enough to get there
+                  // //same as //save timer secs
+                  // timerTime = (timerInitialMins*60000)+(timerInitialSecs*1000); //set timer duration
+                  // if(timerTime!=0){
+                  //   bitWrite(timerState,1,0); //set timer direction (bit 1) to down (0)
+                  //   //timerStart(); //we won't automatically start, we'll let the user do that
+                  // }
+                  updateDisplay();
+                #endif
+              } else { //running
+                #ifdef INPUT_UPDN_ROTARY
+                  timerStop();
+                #else
+                  if((timerState>>1)&1) timerLap(); //chrono: lap
+                  else timerRunoutToggle(); //timer: runout option
+                #endif
+              }
+            }
+          } //end if FN_TIMER
+          //if(fn==FN_TOD) TODO volume in I2C radio
+        }
+        //else do nothing
+      } //end sel release or adj press
+      else if(CTRL_ALT>0 && ctrl==CTRL_ALT) {
+        //if soft power switch, we'll switch on release - but only if not held past activating settings page/AP
+        if(ENABLE_SOFT_POWER_SWITCH && SWITCH_PIN>=0) {
+          //If holds are used to activate network stuff, and we've passed those thresholds, do not switch.
+          //Otherwise, switch no matter how long held.
+          if(evt==0 && !(networkSupported() && evtLast<2)) switchPower(2);
+        }
+        //If neither soft power switch nor network support, this becomes our function preset
+        else if(!networkSupported()) {
+          //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
+          //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
+          if(evt==2) {
+            if(readEEPROM(7,false)!=fn) {
+              inputStop();
+              writeEEPROM(7,fn,false);
+              quickBeep(76);
+              displayBlink();
+            }
+          }
+          //On short release, jump to the preset fn.
+          else if(evt==0) {
+            inputStop();
+            if(fn!=readEEPROM(7,false)) fn=readEEPROM(7,false);
+            else {
+              //Special case: if this is the alarm, toggle the alarm switch
+              if(fn==FN_ALARM) switchAlarmState(2);
+            }
+            fnPg = 0; //reset page counter in case we were in a paged display
+            updateDisplay();
+          }
+        }
+      } //end alt
+    } //end fn running
+
+    else { //fn setting
+      if(evt==1) { //press
+        //TODO could we do release/shorthold on CTRL_SEL so we can exit without making changes?
+        //currently no, because we don't inputStop() when short hold goes into fn setting, in case long hold may go to settings menu
+        //so we can't handle a release because it would immediately save if releasing from the short hold.
+        //Consider recording the input start time when going into fn setting so we can distinguish its release from a future one
+        //TODO the above can be revisited now that we pass evtLast
+        if(ctrl==CTRL_SEL) { //CTRL_SEL push: go to next setting or save and exit setting mode
+          inputStop(); //not waiting for CTRL_SELHold, so can stop listening here
+          //We will set rtc time parts directly
+          //con: potential for very rare clock rollover while setting; pro: can set date separate from time
+          switch(fn){
+            case FN_TOD: //save in RTC
+              if(fnSetValDid){ //but only if the value was actually changed
+                rtcSetTime(fnSetVal/60,fnSetVal%60,0);
+                if(networkSupported()) clearNTPSyncLast();
+                millisAtLastCheck = 0; //see ms()
+                calcSun();
+                isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),fnSetVal/60,true);
+              }
+              clearSet(); break;
+            case FN_CAL: //depends what page we're on
+              if(fnPg==0){ //regular date display: save in RTC
+                switch(fnSetPg){
+                  case 1: //save year, set month
+                    displayBlink(); //to indicate save. Safe b/c we've inputStopped. See below for why
+                    fnSetValDate[0]=fnSetVal;
+                    startSet(fnSetValDate[1],1,12,2); break; 
+                  case 2: //save month, set date
+                    displayBlink(); //to indicate save. Needed if set month == date: without blink, nothing changes.
+                    fnSetValDate[1]=fnSetVal;
+                    startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
+                  case 3: //write year/month/date to RTC
+                    rtcSetDate(fnSetValDate[0],fnSetValDate[1],fnSetVal,
+                      dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal));
+                    if(networkSupported()) clearNTPSyncLast();
+                    calcSun();
+                    isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,rtcGetHour(),true);
+                    clearSet(); break;
+                  default: break;
+                }
+              } else if(fnPg==fnDateCounter){ //set like date, save in eeprom like finishOpt
+                switch(fnSetPg){
+                  case 1: //save month, set date
+                    displayBlink(); //to indicate save.
+                    //Needed if set month == date: without blink, nothing changes. Also just good feedback.
+                    writeEEPROM(5,fnSetVal,false);
+                    startSet(readEEPROM(6,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),2); break;
+                  case 2: //save date, set direction
+                    displayBlink(); //to indicate save.
+                    writeEEPROM(6,fnSetVal,false);
+                    startSet(readEEPROM(4,false),1,2,3); break;
+                  case 3: //save date
+                    displayBlink(); //to indicate save.
+                    writeEEPROM(4,fnSetVal,false);
+                    clearSet(); break;
+                  default: break;
+                }
+              } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
+                //TODO
+              } else if(fnPg==fnDateWeathernow || fnPg==fnDateWeathernext){ //temperature units??
+                //TODO
+              }
+              break;
+            case FN_ALARM:
+              writeEEPROM(0,fnSetVal,true);
+              clearSet(); break;
+            case FN_TIMER: //timer - depends what page we're on
+              switch(fnSetPg){
+                case 1: //save timer mins, set timer secs
+                  displayBlink(); //to indicate save.
+                  timerInitialMins = fnSetVal; //minutes, up to 5999 (99m 59s)
+                  startSet(timerInitialSecs,0,59,2); break;
+                case 2: //save timer secs
+                  displayBlink(); //to indicate save.
+                  timerInitialSecs = fnSetVal;
+                  timerTime = (timerInitialMins*60000)+(timerInitialSecs*1000); //set timer duration
+                  if(timerTime!=0){
+                    bitWrite(timerState,1,0); //set timer direction (bit 1) to down (0)
+                    //timerStart(); //we won't automatically start, we'll let the user do that
+                    //TODO: in timer radio mode, skip setting the seconds (display placeholder) and start when done. May even want to skip runout options even if the beeper is there. Or could make it an option in the config file.
+                  }
+                  clearSet(); break;
+                default: break;
+              }
+              break;
+            //fnIsDayCount removed in favor of paginated calendar
+            case FN_THERM:
+              break;
+            default: break;
+          } //end switch fn
+        } //end CTRL_SEL push
+        if(ctrl==CTRL_UP) doSet(velocity ? 10 : 1);
+        if(ctrl==CTRL_DN) doSet(velocity ? -10 : -1);
+      } //end if evt==1
+    } //end fn setting
+    
+  } //end normal fn running/setting
+  
+  else { //settings menu setting - to/from EEPROM
+    
+    byte opt = fn-FN_OPTS; //current setting index
+    
+    if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL short hold: exit settings menu
+      inputStop();
+      //if we were setting a value, writes setting val to EEPROM if needed
+      if(fnSetPg) writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
+      fn = FN_TOD;
+      //we may have changed lat/long/GMT/DST settings so recalc those
+      calcSun(); //TODO pull from clock
+      isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),true);
+      clearSet();
+      return;
+    }
+    
+    if(!fnSetPg){ //setting number
+      if(ctrl==CTRL_SEL && evt==0 && evtLast<3) { //CTRL_SEL release (but not after holding to get into the menu): enter setting value
+        startSet(readEEPROM(optsLoc[opt],optsMax[opt]>255?true:false),optsMin[opt],optsMax[opt],1);
+      }
+      if(ctrl==CTRL_UP && evt==1) fnOptScroll(1); //next one up or cycle to beginning
+      if(ctrl==CTRL_DN && evt==1) fnOptScroll(0); //next one down or cycle to end?
+      updateDisplay();
+    } //end setting number
+
+    else { //setting value
+      if(ctrl==CTRL_SEL && evt==0) { //CTRL_SEL release: save value and exit
+        writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
+        clearSet();
+      }
+      if(evt==1 && (ctrl==CTRL_UP || ctrl==CTRL_DN)){
+        if(ctrl==CTRL_UP) doSet(velocity ? 10 : 1);
+        if(ctrl==CTRL_DN) doSet(velocity ? -10 : -1);
+        updateDisplay(); //may also make sounds for sampling
+      }
+    }  //end setting value
+  } //end settings menu setting
+  
+} //end ctrlEvt
+
 #endif //INPUT_SIMPLE

@@ -20,7 +20,6 @@
 
 void setup();
 void loop();
-void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity=0);
 void fnScroll(byte dir);
 void fnOptScroll(byte dir);
 void goToFn(byte thefn, byte thefnPg=0);
