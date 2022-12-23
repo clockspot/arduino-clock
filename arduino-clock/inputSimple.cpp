@@ -3,6 +3,8 @@
 #include <arduino.h>
 #include "arduino-clock.h"
 
+#ifdef INPUT_SIMPLE //see arduino-clock.ino Includes section
+
 #include "input-simple.h"
 
 //Needs access to RTC timestamps
@@ -355,3 +357,5 @@ int getInputLastTODMins(){
   //Used to ensure paged displays (e.g. calendar) use the same TOD for all pages
   return inputLastTODMins;
 }
+
+#endif //INPUT_SIMPLE

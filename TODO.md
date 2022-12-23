@@ -34,6 +34,7 @@ See other TODOs throughout code.
 
 * Port to ESP32 - may make input/network/rtc/storage redundant
 * Break input into inputSimple and inputProton; move ctrlEvt into these (arduino-clock should become ctrl-agnostic)
+* Other TODOs in esp32-proton.h
 
 Prototype text:
 This project replaces the clock module, with its TI IC brain, in a Proton 320 clock radio. (The radio section is left alone.) It works much the same as the original, with these enhancements:

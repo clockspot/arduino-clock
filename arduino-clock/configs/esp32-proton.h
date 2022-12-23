@@ -39,28 +39,15 @@
 
 ///// Inputs /////
 
-// If using Simple controls
-// #define INPUT_SIMPLE   TODO do we do dependent includes like this?
-// #define INPUT_SIMPLE_BUTTONS   TODO
-      // #define INPUT_BUTTONS
-      // #define CTRL_SEL A1
-      // #define CTRL_ALT A0
+//TODO add this to the other files, and possibly rename INPUT_BUTTONS, INPUT_UPDN_BUTTONS, INPUT_UPDN_ROTARY, INPUT_IMU to INPUT_SIMPLE_...
+//If using Simple controls
+// #define INPUT_SIMPLE
 
-      // //Up and Down can be buttons OR a rotary control:
-
-      // //If using buttons for Up and Down:
-      // #define INPUT_UPDN_BUTTONS
-      // #define CTRL_UP A2
-      // #define CTRL_DN A3
-
-// #define INPUT_SIMPLE_ROTARY    TODO
-// #define INPUT_SIMPLE_IOT_IMU   TODO formerly INPUT_IMU
-
-// If using Proton 320 radio controls
-#define INPUT_PROTON_320
+//If using Proton 320 radio controls
+#define INPUT_PROTON
 //down left side of ESP32:
-// momentary except for AL1/AL2/AL1R/AL2R/SW1/SW2
-// 34, 36, 39 are input only
+//momentary except for AL1/AL2/AL1R/AL2R/SW1/SW2
+//34, 36, 39 are input only
 #define PIN_OFF 36
 #define PIN_ON 39
 #define PIN_AL1 34
@@ -72,36 +59,36 @@
 #define PIN_ADJ_UP 14
 #define PIN_ADJ_DN 12
 #define PIN_SW1 13
-#define PIN_SW2 15 // on bottom right. Combo of these two, I think, reflect rear switch position (lock/time/alarm/date)
+#define PIN_SW2 15 //on bottom right. Combo of these two, I think, reflect rear switch position (lock/time/alarm/date)
 
-
-      // //For simple input types: TODO
-      // //How long (in ms) are the hold durations?
-      // #define CTRL_HOLD_SHORT_DUR 1000 //for entering setting mode, or hold-setting at low velocity (x1)
-      // #define CTRL_HOLD_LONG_DUR 3000 //for entering settings menu, or hold-setting at high velocity (x10)
-      // #define CTRL_HOLD_VERYLONG_DUR 5000 //for wifi info / admin start (Nano IoT without Alt only)
-      // #define CTRL_HOLD_SUPERLONG_DUR 10000 //for wifi disconnect (Nano IoT) or EEPROM reset on startup
-      // //What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
-      // #define SETTING_TIMEOUT 300 //sec
-      // #define FN_TEMP_TIMEOUT 5 //sec
-      // #define FN_PAGE_TIMEOUT 3 //sec
+//TODO some of this may end up being specific to just Simple controls
+//For all input types:
+//How long (in ms) are the hold durations?
+#define CTRL_HOLD_SHORT_DUR 1000 //for entering setting mode, or hold-setting at low velocity (x1)
+#define CTRL_HOLD_LONG_DUR 3000 //for entering settings menu, or hold-setting at high velocity (x10)
+#define CTRL_HOLD_VERYLONG_DUR 5000 //for wifi info / admin start (Nano IoT without Alt only)
+#define CTRL_HOLD_SUPERLONG_DUR 10000 //for wifi disconnect (Nano IoT) or EEPROM reset on startup
+//What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
+#define SETTING_TIMEOUT 300 //sec
+#define FN_TEMP_TIMEOUT 5 //sec
+#define FN_PAGE_TIMEOUT 3 //sec
 
 
 ///// Outputs /////
 
 //down right side of ESP32:
-//#define PIN_SPI_MOSI 23
+// #define PIN_SPI_MOSI 23
 #define PIN_I2C_SCL 22
-//#define PIN_TX 1
-//#define PIN_RX 3
+// #define PIN_TX 1
+// #define PIN_RX 3
 #define PIN_I2C_SDA 21
-//#define PIN_SPI_MISO 19
-//#define PIN_SPI_SCK 18
+// #define PIN_SPI_MISO 19
+// #define PIN_SPI_SCK 18
 #define PIN_I2C_IO  5 //TODO is this ok?
-//#define PIN_SPI_SS 5 //TODO is this real?
+// #define PIN_SPI_SS 5 //TODO is this real?
 //4 is switch pin below
-//unused 0
-//unused 2
+//0 is unused
+//2 is unused
 
 ///// Display /////
 //If using 4/6-digit 7-segment LED display with HT16K33 (I2C on SDA/SCL pins)
@@ -134,7 +121,7 @@
 
 ///// Other Outputs /////
 
-//What are the pins for each signal type? -1 to disable that signal type
+//What are the pins for each signal type? -1 to disable that signal type //TODO this should simply be defined in main code if omitted
 #define PIEZO_PIN -1 //Drives a piezo beeper
 #define SWITCH_PIN 4 //Switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in SWITCH_DUR. (A3 for UNDB v9)
 #define PULSE_PIN -1 //Simple pulses to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in RELAY_PULSE. Pulse frequency behaves like the piezo signal.

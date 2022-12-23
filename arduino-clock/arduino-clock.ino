@@ -28,7 +28,8 @@ const bool vDev = 1;
 #include "lightsensorVEML7700.h" //if LIGHTSENSOR_VEML7700 is defined in config - for I2C VEML7700 lux sensor
 #include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
 #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
-#include "input.h" //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU
+#include "inputSimple.h" //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU
+#include "inputProton.h" //for a more diverse set of controls, namely the buttons and switches on a Proton 320 clock radio
 #include "network.h" //if not AVR – enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
 
 
