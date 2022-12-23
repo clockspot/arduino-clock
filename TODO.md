@@ -29,3 +29,23 @@
 * When using ambient lighting control, alarm on state doesn't appear at full brightness because display code doesn't know *that* bright=2 is deliberate
 
 See other TODOs throughout code.
+
+## Proton branch items
+
+* Port to ESP32 - may make input/network/rtc/storage redundant
+* Break input into inputSimple and inputProton; move ctrlEvt into these (arduino-clock should become ctrl-agnostic)
+
+Prototype text:
+This project replaces the clock module, with its TI IC brain, in a Proton 320 clock radio. (The radio section is left alone.) It works much the same as the original, with these enhancements:
+
+* **Larger, crisper display.** The eight-digit VFD is replaced with a six-digit LCD. Ambient lighting still controls its brightness.
+
+* **NTP sync via WiFi.** When this is enabled, a normal seconds display indicates the time was synced in the last hour; otherwise the seconds will blink to indicate low confidence in the displayed time.
+
+* **Perpetual calendar.** Even without NTP sync, the calendar now accounts for leap years. When setting, the year, month, and date are adjusted separately; Snooze cycles between them.
+
+* **Date/sun/weather display.** Pressing Snooze (except during alarm or setting) will display the date, followed by sunrise/sunset and weather information, if enabled in config (below).
+
+* **Easier alarm setting.** As there is no longer a dedicated display for the alarm time, it is displayed when the alarm is switched on, and can be adjusted at that time. There's no longer any need to set the rear switch to "Alarm", as this has been co-opted for —
+
+* **Web-based config menu.** This menu allows configuration of display formats, WiFi settings, automatic DST changes, alarm schedules, and more. It is accessed by setting the rear switch to "Alarm" and pressing On, which causes the radio to broadcast a WiFi network called "Proton 320"; then connecting any web device to this network and browsing to 7.7.7.7.

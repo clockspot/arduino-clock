@@ -1,0 +1,163 @@
+//ESP32 driving Proton 320 radio, with I2C for HT16K33, DS3231, VEML7700
+
+#ifndef CONFIG
+#define CONFIG
+
+
+///// Functionality /////
+
+// Which functionality is enabled in this clock?
+// Related settings will also be enabled in the settings menu.
+// The operating instructions assume all of these are enabled except temp and tubetest.
+#define ENABLE_DATE_FN true
+#define ENABLE_DATE_COUNTER false // TODO on ESP32, needs setting metaphor
+#define ENABLE_DATE_RISESET true
+#define ENABLE_ALARM_FN true
+#define ENABLE_ALARM_AUTOSKIP true
+#define ENABLE_ALARM_FIBONACCI false // irrelevant to ESP32
+#define ENABLE_TIMER_FN true // TODO on ESP32, should only count down (radio sleep mode)
+#define ENABLE_TIME_CHIME false // irrelevant to ESP32
+#define ENABLE_DIMMING true
+#define ENABLE_AWAYMODE true
+#define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
+#define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
+
+
+///// Real-Time Clock /////
+
+//If using no RTC (a fake RTC based on millis()):
+// #define RTC_MILLIS
+// #define ANTI_DRIFT 0 //msec to add/remove per second - or seconds to add/remove per day divided by 86.4 - to compensate for natural drift. If using wifinina, it really only needs to be good enough for a decent timekeeping display until the next ntp sync. TIP: setting to a superhigh value is helpful for testing! e.g. 9000 will make it run 10x speed
+
+//If using ESP32 RTC TODO
+
+//If using DS3231 (via I2C):
+//Requires Wire library (standard Arduino)
+//Requires DS3231 library by NorthernWidget to be installed in your IDE.
+#define RTC_DS3231
+
+
+///// Inputs /////
+
+// If using Simple controls
+// #define INPUT_SIMPLE   TODO do we do dependent includes like this?
+// #define INPUT_SIMPLE_BUTTONS   TODO
+      // #define INPUT_BUTTONS
+      // #define CTRL_SEL A1
+      // #define CTRL_ALT A0
+
+      // //Up and Down can be buttons OR a rotary control:
+
+      // //If using buttons for Up and Down:
+      // #define INPUT_UPDN_BUTTONS
+      // #define CTRL_UP A2
+      // #define CTRL_DN A3
+
+// #define INPUT_SIMPLE_ROTARY    TODO
+// #define INPUT_SIMPLE_IOT_IMU   TODO formerly INPUT_IMU
+
+// If using Proton 320 radio controls
+#define INPUT_PROTON_320
+//down left side of ESP32:
+// momentary except for AL1/AL2/AL1R/AL2R/SW1/SW2
+// 34, 36, 39 are input only
+#define PIN_OFF 36
+#define PIN_ON 39
+#define PIN_AL1 34
+#define PIN_AL2 32
+#define PIN_AL1R 33
+#define PIN_AL2R 25
+#define PIN_SNOOZE 26
+#define PIN_SLEEP 27
+#define PIN_ADJ_UP 14
+#define PIN_ADJ_DN 12
+#define PIN_SW1 13
+#define PIN_SW2 15 // on bottom right. Combo of these two, I think, reflect rear switch position (lock/time/alarm/date)
+
+
+      // //For simple input types: TODO
+      // //How long (in ms) are the hold durations?
+      // #define CTRL_HOLD_SHORT_DUR 1000 //for entering setting mode, or hold-setting at low velocity (x1)
+      // #define CTRL_HOLD_LONG_DUR 3000 //for entering settings menu, or hold-setting at high velocity (x10)
+      // #define CTRL_HOLD_VERYLONG_DUR 5000 //for wifi info / admin start (Nano IoT without Alt only)
+      // #define CTRL_HOLD_SUPERLONG_DUR 10000 //for wifi disconnect (Nano IoT) or EEPROM reset on startup
+      // //What are the timeouts for setting and temporarily-displayed functions? up to 65535 sec
+      // #define SETTING_TIMEOUT 300 //sec
+      // #define FN_TEMP_TIMEOUT 5 //sec
+      // #define FN_PAGE_TIMEOUT 3 //sec
+
+
+///// Outputs /////
+
+//down right side of ESP32:
+//#define PIN_SPI_MOSI 23
+#define PIN_I2C_SCL 22
+//#define PIN_TX 1
+//#define PIN_RX 3
+#define PIN_I2C_SDA 21
+//#define PIN_SPI_MISO 19
+//#define PIN_SPI_SCK 18
+#define PIN_I2C_IO  5 //TODO is this ok?
+//#define PIN_SPI_SS 5 //TODO is this real?
+//4 is switch pin below
+//unused 0
+//unused 2
+
+///// Display /////
+//If using 4/6-digit 7-segment LED display with HT16K33 (I2C on SDA/SCL pins)
+//Requires Adafruit libraries LED Backpack, GFX, and BusIO
+//If 6 digits, edit Adafruit_LEDBackpack.cpp to replace "if (d > 4)" with "if (d > 6)"
+//and, if desired, in numbertable[], replace 0x7D with 0x7C and 0x6F with 0x67 to remove
+//the serifs from 6 and 9 for legibility (see http://www.harold.thimbleby.net/cv/files/seven-segment.pdf)
+#define DISPLAY_HT16K33
+//#define NUM_MAX 4 //How many digits?
+#define BRIGHTNESS_FULL 15 //out of 0-15
+#define BRIGHTNESS_DIM 0
+#define DISPLAY_ADDR 0x70 //0x70 is the default
+
+//For all display types:
+#define DISPLAY_SIZE 6 //number of digits in display module: 6 or 4
+#define UNOFF_DUR 10 //sec - when display is off, an input will illuminate for how long?
+#define SCROLL_SPEED 100 //ms - "frame rate" of digit scrolling, e.g. date at :30 option
+
+
+///// Ambient Light Sensor /////
+//If using VEML 7700 Lux sensor (I2C on SDA/SCL pins)
+//Requires Adafruit library VEML7700
+#define LIGHTSENSOR_VEML7700
+#define LUX_FULL 400 //lux at/above which display should be at its brightest (per config)
+#define LUX_DIM 30 //lux at/below which display should be at its dimmest (per config)
+
+//If any type of light sensor is in use:
+#define LIGHTSENSOR
+
+
+///// Other Outputs /////
+
+//What are the pins for each signal type? -1 to disable that signal type
+#define PIEZO_PIN -1 //Drives a piezo beeper
+#define SWITCH_PIN 4 //Switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in SWITCH_DUR. (A3 for UNDB v9)
+#define PULSE_PIN -1 //Simple pulses to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in RELAY_PULSE. Pulse frequency behaves like the piezo signal.
+//Default signal type for each function:
+//0=piezo, 1=switch, 2=pulse
+#define ALARM_SIGNAL 1
+#define TIMER_SIGNAL 1
+#define CHIME_SIGNAL 1
+#define SIGNAL_DUR 180 //sec - when piezo/pulse signal is going, it's pulsed once/sec for this period (e.g. 180 = 3min)
+#define SWITCH_DUR 7200 //sec - when alarm triggers switch signal, it's switched on for this period (e.g. 7200 = 2hr)
+#define PULSE_LENGTH 200 //ms - length of pulse signal's individual pulses (e.g. to drive a solenoid to ring a bell)
+
+//Soft power switches
+#define ENABLE_SOFT_ALARM_SWITCH 1
+// 1 = yes. Alarm can be switched on and off when clock is displaying the alarm time (FN_ALARM).
+// 0 = no. Alarm will be permanently on. Use with switch signal if the appliance has its own switch on this circuit (and note that, if another signal type(s) is available and selected for the alarm, the user won't be able to switch it off). Also disables skip feature. Note that the instructions do not reflect this option.
+#define ENABLE_SOFT_POWER_SWITCH 1 //switch signal only
+// 1 = yes. Switch signal can be toggled on and off directly with Alt button at any time (except in settings menu). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
+// 0 = no. Use if the connected appliance has its own power switch (independent of this circuit, e.g. some Sony Digimatic clock radios) or does not need to be manually switched. In this case (and/or if there is no switch signal option, and if no Wi-Fi support) Alt will act as a function preset. Note that the instructions do not reflect this option.
+
+//Backlighting control
+#define BACKLIGHT_PIN -1 // -1 to disable feature; 9 if equipped (UNDB v9)
+#define BACKLIGHT_FADE 0 // 1 to fade via PWM (must use PWM pin and PWM-supportive lighting); 0 to simply switch on and off
+
+
+#endif

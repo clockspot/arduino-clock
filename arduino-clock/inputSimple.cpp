@@ -1,7 +1,9 @@
+//"Simple" inputs are a set of three (or four) controls: Select, Up, Down, and Alt. Up/Down could be a rotary control. All could be per IMU.
+
 #include <arduino.h>
 #include "arduino-clock.h"
 
-#include "input.h"
+#include "input-simple.h"
 
 //Needs access to RTC timestamps
 #include "rtcDS3231.h"
@@ -17,7 +19,6 @@
 #define DEBOUNCE_DUR 150 //ms
 #endif
 
-//#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
 #ifdef INPUT_UPDN_ROTARY
   #include <Encoder.h> //Paul Stoffregen - install in your Arduino IDE
   Encoder rot(CTRL_UP,CTRL_DN);  //TODO may need to reverse
