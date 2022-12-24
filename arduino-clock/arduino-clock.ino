@@ -171,8 +171,6 @@ byte ambientLightLevelActual = 0; //if equipped with an ambient light sensor, an
 byte ambientLightLevel = 0; //the tweening mechanism (below) will move this value to meet the actual, and cycleDisplay will change the brightness of the display accordingly
 //see also backlightNow / backlightTarget below
 #endif
-//bool versionShowing = false; //display version if Select held at start - until it is released or long-held
-//TODO replace versionShowing with fn = FN_VERSION
 
 //If we need to temporarily display a value (or values in series), we can put them here. Can't be zero.
 //This is used by network to display IP addresses, and various other bits.
@@ -206,8 +204,8 @@ void setup(){
   initDisplay();
   initOutputs(); //depends on some EEPROM settings
   if(initInputs()){ //inits inputs and returns true if CTRL_SEL is held
-    versionShowing = 1;
-    //skip network for now, since wifi connect hangs - we'll do it after version is done
+    fn = FN_VERSION;
+    //skip network for now, since wifi connect hangs - we'll do it after version display is done
   } else {
     if(networkSupported()) initNetwork();
   }
@@ -738,7 +736,7 @@ void checkRTC(bool force){
       } //end alarm trigger
     }
     //At bottom of minute, see if we should show the date
-    if(rtcGetSecond()==30 && fn==FN_TOD && fnSetPg==0 && unoffRemain==0 && versionShowing==false) { /*cleanRemain==0 && scrollRemain==0 && */ 
+    if(rtcGetSecond()==30 && fn==FN_TOD && fnSetPg==0 && unoffRemain==0) { /*cleanRemain==0 && scrollRemain==0 && */ 
       if(readEEPROM(18,false)>=2) { goToFn(FN_CAL,254); updateDisplay(); }
       //if(readEEPROM(18,false)==3) { startScroll(); }
     }
@@ -1188,7 +1186,7 @@ void updateDisplay(){
   //   }
   // } //todo move cleanRemain, scrollRemain to dispNixie
   // else
-  if(versionShowing) {
+  if(fn==FN_VERSION) {
     editDisplay(vMajor, 0, 1, false, false);
     editDisplay(vMinor, 2, 3, false, false);
     editDisplay(vPatch, 4, 5, false, false);
@@ -1770,7 +1768,7 @@ void cycleTweening() {
   }
 } //end cycleTweening
 
-byte getVersionPart(byte part){
+byte getVersionPart(byte part){ //used by network.cpp
   switch(part){
     case 0: return vMajor; break;
     case 1: return vMinor; break;
