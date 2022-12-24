@@ -118,10 +118,10 @@ byte getCurFn() { return fn; } //NEW
 void setCurFn(byte val) { fn = val; } //NEW
 byte fnPg = 0; //allows a function to have multiple pages
 byte getCurFnPg() { return fnPg; } //NEW
-// void setCurFnPg...?
 byte fnSetPg = 0; //whether this function is currently being set, and which page it's on
 byte getCurFnSetPg() { return fnSetPg; } //NEW
 // void setCurFnSetPg...?
+bool getFnIsSetting() { return fnSetPg>0; }
  int fnSetVal; //the value currently being set, if any
  int fnSetValMin; //min possible
  int fnSetValMax; //max possible
@@ -130,6 +130,7 @@ bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
 bool fnSetValDid; //false when starting a set; true when value is changed - to detect if value was not changed
 
 //the calendar function page numbers, depending on which ones are enabled. See findFnAndPageNumbers
+//TODO turn these into actual fns as well
 byte fnDatePages = 1;
 byte fnDateCounter = 255;
 byte fnDateSunlast = 255;
@@ -312,6 +313,7 @@ void fnScroll(byte dir){
       case FN_CAL: default: fn = FN_TOD; break;
     }
   }
+  fnPg = 0; //reset page counter in case we were in a paged display
 }
 void fnOptScroll(byte dir){
   //0=down, 1=up
@@ -448,10 +450,10 @@ void clearSet(){ //Exit set state
   checkRTC(true); //force an update to tod and updateDisplay()
 }
 
-void setDate(byte unit) {
+void setDate() { //NEW
   //TODO: for proton: cycle set at case 3? save after every move?
   //TODO: sevenseg should display y/m/d instead of blinking
-  switch(unit) {
+  switch(fnSetPg) {
     case 0: //start set year
       //prefill the month and date values with current rtc vals, in case it changes while we're in the middle of setting
       fnSetValDate[1]=rtcGetMonth(), fnSetValDate[2]=rtcGetDate();
@@ -474,6 +476,84 @@ void setDate(byte unit) {
       calcSun();
       isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,rtcGetHour(),true);
       clearSet();
+      break;
+    default: break;
+  }
+}
+
+void setDateCounter() { //NEW
+  switch(fnSetPg){
+    case 0: //start set month
+      startSet(readEEPROM(5,false),1,12,1);
+      break;
+    case 1: //save month, set date
+      displayBlink(); //to indicate save.
+      //Needed if set month == date: without blink, nothing changes. Also just good feedback.
+      writeEEPROM(5,fnSetVal,false);
+      startSet(readEEPROM(6,false),1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),2);
+      break;
+    case 2: //save date, set direction
+      displayBlink(); //to indicate save.
+      writeEEPROM(6,fnSetVal,false);
+      startSet(readEEPROM(4,false),1,2,3);
+      break;
+    case 3: //save date
+      displayBlink(); //to indicate save.
+      writeEEPROM(4,fnSetVal,false);
+      clearSet();
+      break;
+    default: break;
+  }
+}
+
+void setTime() { //NEW
+  if(fnSetValDid){ //but only if the value was actually changed
+    rtcSetTime(fnSetVal/60,fnSetVal%60,0);
+    if(networkSupported()) clearNTPSyncLast();
+    millisAtLastCheck = 0; //see ms()
+    calcSun();
+    isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),fnSetVal/60,true);
+  }
+  clearSet();
+}
+
+void setAlarm(byte whichAlarm) {
+  //TODO support second alarm - maybe kept in DS3231?
+  writeEEPROM(0,fnSetVal,true);
+  clearSet();
+}
+
+void setTimer() {
+  switch(fnSetPg){
+    case 1: //save timer mins, set timer secs
+      displayBlink(); //to indicate save.
+      timerInitialMins = fnSetVal; //minutes, up to 5999 (99m 59s)
+      startSet(timerInitialSecs,0,59,2);
+      break;
+    case 2: //save timer secs
+      displayBlink(); //to indicate save.
+      timerInitialSecs = fnSetVal;
+      timerTime = (timerInitialMins*60000)+(timerInitialSecs*1000); //set timer duration
+      if(timerTime!=0){
+        bitWrite(timerState,1,0); //set timer direction (bit 1) to down (0)
+        //timerStart(); //we won't automatically start, we'll let the user do that
+        //TODO: in timer radio mode, skip setting the seconds (display placeholder) and start when done. May even want to skip runout options even if the beeper is there. Or could make it an option in the config file.
+      }
+      clearSet();
+      break;
+    default: break;
+  }
+}
+
+void setOpt(byte opt) { //NEW
+  switch(fnSetPg) {
+    case 0: //not yet started
+      startSet(readEEPROM(optsLoc[opt],optsMax[opt]>255?true:false),optsMin[opt],optsMax[opt],1);
+      break;
+    case 1: //save value
+      displayBlink(); //to indicate save.
+      writeEEPROM(optsLoc[opt],fnSetVal,optsMax[opt]>255?true:false);
+      clearSet(); //TODO need this?
       break;
     default: break;
   }

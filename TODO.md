@@ -40,7 +40,9 @@ See other TODOs throughout code.
 Prototype text:
 This project replaces the clock module, with its TI IC brain, in a Proton 320 clock radio. (The radio section is left alone.) It works much the same as the original, with these enhancements:
 
-* **Larger, crisper display.** The eight-digit VFD is replaced with a six-digit LCD. Ambient lighting still controls its brightness.
+* **Larger, crisper display.** The eight-digit VFD is replaced with a six-digit LCD. Ambient lighting still controls its brightness. Alarm time is displayed when the alarm is switched on.
+
+* **Easier setting.** To set anything, simply hold Snooze for 1sec to enter setting mode; use the Up/Down buttons to adjust, and Snooze again to save. No need to toggle the set switch in back.
 
 * **NTP sync via WiFi.** When this is enabled, a normal seconds display indicates the time was synced in the last hour; otherwise the seconds will blink to indicate low confidence in the displayed time.
 
@@ -48,6 +50,4 @@ This project replaces the clock module, with its TI IC brain, in a Proton 320 cl
 
 * **Date/sun/weather display.** Pressing Snooze (except during alarm or setting) will display the date, followed by sunrise/sunset and weather information, if enabled in config (below).
 
-* **Easier alarm setting.** As there is no longer a dedicated display for the alarm time, it is displayed when the alarm is switched on, and can be adjusted at that time. There's no longer any need to set the rear switch to "Alarm", as this has been co-opted for —
-
-* **Web-based config menu.** This menu allows configuration of display formats, WiFi settings, automatic DST changes, alarm schedules, and more. It is accessed by setting the rear switch to "Alarm" and pressing On, which causes the radio to broadcast a WiFi network called "Proton 320"; then connecting any web device to this network and browsing to 7.7.7.7.
+* **Web-based config menu.** This menu allows configuration of display formats, WiFi settings, automatic DST changes, alarm schedules, and more. It is accessed by [TBD] which causes the radio to broadcast a WiFi network called "Proton 320"; then connecting any web device to this network and browsing to 7.7.7.7.

@@ -48,7 +48,12 @@ void switchPower(byte dir);
 void startSet(int n, int m, int x, byte p);
 void doSet(int delta);
 void clearSet();
-void setDate(byte unit); //NEW
+void setDate(); //NEW
+void setDateCounter(); //NEW
+void setTime(); //NEW
+void setAlarm(byte whichAlarm); //NEW
+void setTimer(); //NEW
+void setOpt(byte opt); //NEW
 void startSnooze(); //NEW
 void stopSnooze(); //NEW
 bool initEEPROM(bool hard);
