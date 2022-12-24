@@ -34,6 +34,7 @@ See other TODOs throughout code.
 
 * Port to ESP32 - may make input/network/rtc/storage redundant
 * Break input into inputSimple and inputProton; move ctrlEvt into these (arduino-clock should become ctrl-agnostic)
+	* Functionize raw variable access in ctrlEvt (in progress)
 * Other TODOs in esp32-proton.h
 
 Prototype text:

@@ -114,8 +114,14 @@ const  int optsMax[] = { 2, 5, 3, 1,20, 4, 2, 1,  2, 2,88, 5,60, 1,  2,88, 5,  4
 
 // Functions and pages
 byte fn = 0; //currently displayed fn per above
+byte getCurFn() { return fn; } //NEW
+void setCurFn(byte val) { fn = val; } //NEW
 byte fnPg = 0; //allows a function to have multiple pages
+byte getCurFnPg() { return fnPg; } //NEW
+// void setCurFnPg...?
 byte fnSetPg = 0; //whether this function is currently being set, and which page it's on
+byte getCurFnSetPg() { return fnSetPg; } //NEW
+// void setCurFnSetPg...?
  int fnSetVal; //the value currently being set, if any
  int fnSetValMin; //min possible
  int fnSetValMax; //max possible
@@ -134,24 +140,38 @@ byte fnDateWeathernext = 255;
 // Volatile running values used throughout the code. (Others are defined right above the method that uses them)
 bool alarmSkip = 0;
 byte signalSource = 0; //which function triggered the signal - FN_TOD (chime), FN_ALARM, or FN_TIMER
+byte getSignalSource() { return signalSource; } //NEW
+// void setSignalSource(byte val) { signalSource = val; } //TODO need this?
 byte signalPattern = 0; //the pattern for that source
 word signalRemain = 0; //alarm/timer signal timeout counter, seconds
+word getSignalRemain() { return signalRemain; } //NEW
+// void setSignalRemain... //TODO need this?
 word snoozeRemain = 0; //snooze timeout counter, seconds
+word getSnoozeRemain() { return snoozeRemain; } //NEW
+// void setSnoozeRemain... //TODO need this? prob not bc startSnooze()
 byte timerState = 0; //bit 0 is stop/run, bit 1 is down/up, bit 2 is runout repeat / short signal, bit 3 is runout chrono, bit 4 is lap display
+bool getTimerRun() { return timerState&1; } //NEW
+bool getTimerDir() { return (timerState>>1)&1; } //NEW
+bool getTimerRunoutRepeat() { return (timerState>>2)&1; } //NEW
+bool getTimerRunoutChrono() { return (timerState>>3)&1; } //NEW
+bool getTimerLapDisplay() { return (timerState>>4)&1; } //NEW
 word timerInitialMins = 0; //timer original duration setting, minutes - up to 99h 59m (5999m)
 word timerInitialSecs = 0; //timer original duration setting, seconds - up to 59s (could be a byte, but I had trouble casting to unsigned int when doing the math to set timerTime)
-unsigned long timerTime = 0; //timestamp of timer target / chrono origin (while running) or duration (while stopped)
-unsigned long timerLapTime = 0; 
+unsigned long timerTime = 0; //timestamp of timer/chrono origin (while running) or duration (while stopped)
+unsigned long timerLapTime = 0;
+unsigned long getTimerDuration() { return (getTimerRun()? convertTimerTime(false): timerTime); } //NEW
 const byte millisCorrectionInterval = 30; //used to calibrate millis() to RTC for timer/chrono purposes
 unsigned long millisAtLastCheck = 0;
 word unoffRemain = 0; //un-off (briefly turn on display during off-hours/away shutoff) timeout counter, seconds
 byte displayBrightness = 2; //dim per display or function: 2=normal, 1=dim, 0=off
+byte getDisplayBrightness() { return displayBrightness; } //NEW //TODO separate display vs function functionality
 #ifdef LIGHTSENSOR
 byte ambientLightLevelActual = 0; //if equipped with an ambient light sensor, and if configured to do so, checkRTC will check the ambient light and store it here
 byte ambientLightLevel = 0; //the tweening mechanism (below) will move this value to meet the actual, and cycleDisplay will change the brightness of the display accordingly
 //see also backlightNow / backlightTarget below
 #endif
-bool versionShowing = false; //display version if Select held at start - until it is released or long-held
+//bool versionShowing = false; //display version if Select held at start - until it is released or long-held
+//TODO replace versionShowing with fn = FN_VERSION
 
 //If we need to temporarily display a value (or values in series), we can put them here. Can't be zero.
 //This is used by network to display IP addresses, and various other bits.
@@ -364,7 +384,7 @@ void switchPower(byte dir){
   //0=down, 1=up, 2=toggle
   signalRemain = 0; snoozeRemain = 0; //in case alarm is going now - alternatively use signalStop()?
   //If the timer is running down and is using the switch signal, this instruction conflicts with it, so cancel it
-  if(timerState&1 && !((timerState>>1)&1) && readEEPROM(43,false)==1) {
+  if(getTimerRun() && !getTimerDir() && readEEPROM(43,false)==1) {
     timerClear();
     updateDisplay();
     return;
@@ -426,6 +446,45 @@ void clearSet(){ //Exit set state
   fnSetValDid=false;
   updateBacklight(); //in case backlight setting was changed
   checkRTC(true); //force an update to tod and updateDisplay()
+}
+
+void setDate(byte unit) {
+  //TODO: for proton: cycle set at case 3? save after every move?
+  //TODO: sevenseg should display y/m/d instead of blinking
+  switch(unit) {
+    case 0: //start set year
+      //prefill the month and date values with current rtc vals, in case it changes while we're in the middle of setting
+      fnSetValDate[1]=rtcGetMonth(), fnSetValDate[2]=rtcGetDate();
+      startSet(rtcGetYear(),2000,9999,1);
+      break;
+    case 1: //save year, start set month
+      displayBlink(); //to indicate save. Safe b/c we've inputStopped. See below for why
+      fnSetValDate[0]=fnSetVal;
+      startSet(fnSetValDate[1],1,12,2);
+      break;
+    case 2: //save month, start set date
+      displayBlink(); //to indicate save. Needed if set month == date: without blink, nothing changes.
+      fnSetValDate[1]=fnSetVal;
+      startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3);
+      break;
+    case 3: //save date, exit set //TODO: for proton, cycle set?
+      rtcSetDate(fnSetValDate[0],fnSetValDate[1],fnSetVal,
+        dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal));
+      if(networkSupported()) clearNTPSyncLast();
+      calcSun();
+      isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,rtcGetHour(),true);
+      clearSet();
+      break;
+    default: break;
+  }
+}
+
+void startSnooze() { //NEW
+  snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
+}
+
+void stopSnooze() { //NEW
+  snoozeRemain = 0;
 }
 
 //EEPROM values are bytes (0 to 255) or signed 16-bit ints (-32768 to 32767) where high byte is loc and low byte is loc+1.
@@ -523,7 +582,7 @@ void checkRTC(bool force){
   }
   //Temporary-display function timeout: if we're *not* in a permanent one (time, or running/signaling timer)
   // Stopped/non-signaling timer shouldn't be permanent, but have a much longer timeout, mostly in case someone is waiting to start the chrono in sync with some event, so we'll give that an hour.
-  else if(fn!=FN_TOD && !(fn==FN_TIMER && (timerState&1 || signalRemain>0))){
+  else if(fn!=FN_TOD && !(fn==FN_TIMER && (getTimerRun() || signalRemain>0))){
     if((unsigned long)(now-getInputLast())>=(fn==FN_TIMER?3600:FN_TEMP_TIMEOUT)*1000) { fnSetPg = 0; fn = FN_TOD; force=true; }
   }
   
@@ -880,25 +939,29 @@ unsigned long ms(){
 void timerStart(){
   bitWrite(timerState,0,1); //set timer running (bit 0) to on (1)
   if(timerTime==0) bitWrite(timerState,1,1); //set timer direction (bit 1) to up (1) if we were idle
-  //When the timer is stopped, timerTime holds a duration, independent of any start/stop time.
-  //Convert it to a timestamp:
-  //If chrono (count up), timestamp is an origin in the past: now minus duration.
-  //If timer (count down), timestamp is a destination in the future: now plus duration.
-  timerTime = ((timerState>>1)&1? ms() - timerTime: ms() + timerTime);
-  if(!((timerState>>1)&1)) timerSleepSwitch(1); //possibly toggle the switch signal, but only if counting down
+  timerTime = convertTimerTime(true); //convert from duration to origin
+  if(!(getTimerDir())) timerSleepSwitch(1); //possibly toggle the switch signal, but only if counting down
   quickBeep(69);
 } //end timerStart()
 void timerStop(){
   bitWrite(timerState,0,0); //set timer running (bit 0) to off (0)
-  //When the timer is running, timerTime holds a timestamp, which the current duration is continuously calculated from.
-  //Convert it to a duration:
-  //If chrono (count up), timestamp is an origin in the past: duration is now minus timestamp.
-  //If timer (count down), timestamp is a destination in the future: duration is timestamp minus now.
-  timerTime = ((timerState>>1)&1? ms() - timerTime: timerTime - ms());
-  if(!((timerState>>1)&1)) timerSleepSwitch(0); //possibly toggle the switch signal, but only if counting down
+  timerTime = convertTimerTime(false); //convert from origin to duration
+  if(!(getTimerDir())) timerSleepSwitch(0); //possibly toggle the switch signal, but only if counting down
   quickBeep(64);
   bitWrite(timerState,4,0); //set timer lap display (bit 4) to off (0)
   updateDisplay(); //since cycleTimer won't do it
+}
+void convertTimerTime(bool mode) {
+  //timerTime holds either a duration (when stopped) or an origin (when running).
+  if(mode) { //timer is starting: convert from duration to origin
+    //If chrono (count up), find origin in the past: now minus duration.
+    //If timer (count down), find origin in the future: now plus duration.
+    return (getTimerDir()? ms() - timerTime: ms() + timerTime);
+  } else { //timer is stopping, or we are "sampling" for display: convert from origin to duration
+    //If chrono (count up), timestamp is an origin in the past: duration is now minus timestamp.
+    //If timer (count down), timestamp is a target in the future: duration is timestamp minus now.
+    return (getTimerDir()? ms() - timerTime: timerTime - ms()); 
+  }
 }
 void timerClear(){
   bitWrite(timerState,0,0); //set timer running (bit 0) to off (0)
@@ -917,7 +980,7 @@ void timerRunoutToggle(){
   if(PIEZO_PIN>=0){ //if piezo equipped
     //cycle thru runout options: 00 stop, 01 repeat, 10 chrono, 11 chrono short signal
     timerState ^= (1<<2); //toggle runout repeat bit
-    if(!((timerState>>2)&1)) timerState ^= (1<<3); //if it's 0, toggle runout chrono bit
+    if(!(getTimerRunoutRepeat())) timerState ^= (1<<3); //if it's 0, toggle runout chrono bit
     //do a quick signal to indicate the selection
     signalPattern = ((timerState>>2)&3)+1; //convert 00/01/10/11 to 1/2/3/4
     signalSource = FN_TIMER;
@@ -925,18 +988,18 @@ void timerRunoutToggle(){
   }
 }
 void cycleTimer(){
-  if(timerState&1){ //If the timer is running
+  if(getTimerRun()){ //If the timer is running
     //Check if we've hit a wall
-    if(!((timerState>>1)&1)){ //If we are counting down,
+    if(!(getTimerDir())){ //If we are counting down,
       if((unsigned long)(ms()-timerTime)<1000){ //see if now is past timerTime (diff has rolled over)
         //timer has run out
         //runout action and display
-        if((timerState>>3)&1){ //runout chrono - keep target, change direction, kill sleep, change display
+        if(getTimerRunoutChrono()){ //runout chrono - keep target, change direction, kill sleep, change display
           bitWrite(timerState,1,1); //set timer direction (bit 1) to up (1)
           timerSleepSwitch(0);
           fnSetPg = 0; fn = FN_TIMER;
         } else {
-          if((timerState>>2)&1){ //runout repeat - keep direction, change target, keep sleep, don't change display
+          if(getTimerRunoutRepeat()){ //runout repeat - keep direction, change target, keep sleep, don't change display
             timerTime += (timerInitialMins*60000)+(timerInitialSecs*1000); //set timer duration ahead by initial setting
           } else { //runout clear - clear timer, change display
             timerClear();
@@ -946,7 +1009,7 @@ void cycleTimer(){
           }
         }
         //piezo or pulse signal
-        if((timerState>>2)&1){ //short signal (piggybacks on runout repeat flag)
+        if(getTimerRunoutRepeat()){ //short signal (piggybacks on runout repeat flag)
           if(readEEPROM(43,false)!=1) signalStart(FN_TIMER,1);
           //using 1 instead of 0, because in signalStart, FN_TIMER "quick measure" has a custom pitch for runout option setting
         } else { //long signal
@@ -986,6 +1049,11 @@ void timerSleepSwitch(bool on){
 byte getTimerState(){ return timerState; }
 void setTimerState(char pos, bool val){
   if(val) timerState |= (1<<pos); else timerState &= ~(1<<pos);
+}
+
+void startUnoff() {
+  //This is called by most input actions, so continued button presses during an unoff keep the display alive
+  unoffRemain = UNOFF_DUR;
 }
 
 void tempDisplay(int i0, int i1, int i2, int i3){ //TODO can you improve this
@@ -1151,18 +1219,14 @@ void updateDisplay(){
         }
         break;
       case FN_TIMER: //timer - display time
-        unsigned long td; td = (!(timerState&1)? timerTime: //If stopped, use stored duration
-          //If running, use same math timerStop() does to calculate duration
-          ((timerState>>1)&1? ((timerState>>4)&1? timerLapTime: ms()) - timerTime: //count up - use timerLapTime during lap display
-            timerTime - ms() //count down
-          )
-        );
+        unsigned long td; //current timer duration - unless this is lap display, in which case show that
+        td = (getTimerRun() && getTimerLapDispOn()? timerLapTime: getTimerDuration());
         byte tdc; tdc = (td%1000)/10; //capture hundredths (centiseconds)
-        td = td/1000+(!((timerState>>1)&1)&&tdc!=0?1:0); //remove mils, and if countdown, round up
+        td = td/1000+(!(getTimerDir())&&tdc!=0?1:0); //remove mils, and if countdown, round up
         //Countdown shows H:M:S, but on DISPLAY_SIZE<6 and H<1, M:S
         //Countup shows H:M:S, but if H<1, M:S:C, but if DISPLAY_SIZE<6 and M<1, S:C
         bool lz; lz = readEEPROM(19,false)&1;
-        if((timerState>>1)&1){ //count up
+        if(getTimerDir()){ //count up
           if(DISPLAY_SIZE<6 && td<60){ //under 1 min, 4-digit displays: [SS]CC--
             if(td>=1||lz) editDisplay(td,0,1,lz,true); else blankDisplay(0,1,true); //secs, leading per lz, fade
             editDisplay(tdc,2,3,td>=1||lz,false); //cents, leading if >=1sec or lz, no fade

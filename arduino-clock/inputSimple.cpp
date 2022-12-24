@@ -368,10 +368,11 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   //But for sel/alt (always buttons), we can handle different hold states here.
 
   //If the version display is showing, ignore all else until Sel is released (cancel) or long-held (cancel and eeprom reset)
-  if(versionShowing){
+  if(getCurFn()==FN_VERSION){
     if(ctrl==CTRL_SEL && (evt==0 || evt==5)){ //SEL release or superlong hold
       if(evt==5){ initEEPROM(true); commitEEPROM(); } //superlong hold: reset EEPROM
-      versionShowing = false; inputStop(); updateDisplay();
+      setCurFn(FN_TOD); //NEW TODO in place of versionShowing = false;
+      inputStop(); updateDisplay();
       if(networkSupported()) initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
       return;
     } else {
@@ -380,29 +381,30 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   } //end if versionShowing
 
   //If the signal is going, any press should silence it
-  if(signalRemain>0 && evt==1){
+  if(getSignalRemain()>0 && evt==1){
     signalStop();
-    if(signalSource==FN_ALARM) { //If this was the alarm
+    if(getSignalSource()==FN_ALARM) { //If this was the alarm
       //If the alarm is using the switch signal and this is the Alt button; or if alarm is *not* using the switch signal and this is Fibonacci mode; don't set the snooze
       if((readEEPROM(42,false)==1 && CTRL_ALT>0 && ctrl==CTRL_ALT) || (readEEPROM(42,false)!=1 && readEEPROM(50,false))) {
         quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
         displayBlink(); //to indicate this as well
       } else { //start snooze
-        snoozeRemain = readEEPROM(24,false)*60; //snoozeRemain is seconds, but snooze duration is minutes
+        startSnooze();
       }
     }
     inputStop();
     return;
   }
   //If the snooze is going, any press should cancel it, with a signal
-  if(snoozeRemain>0 && evt==1){
-    snoozeRemain = 0;
+  if(getSnoozeRemain()>0 && evt==1){
+    stopSnooze();
     quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
     displayBlink(); //to indicate this as well
     inputStop();
     return;
   }
   // //TODO NIXIE
+  // //TODO will need to replace direct variable updates with get/set fns
   // //If the clean is going, any press should cancel it, with a display update
   // if(cleanRemain>0 && evt==1){
   //   cleanRemain = 0;
@@ -425,8 +427,8 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   // }
   
   //Is it a press for an un-off?
-  unoffRemain = UNOFF_DUR; //always do this so continued button presses during an unoff keep it alive
-  if(displayBrightness==0 && evt==1) {
+  startUnoff(); //always do this, so continued button presses during an unoff keep the display alive
+  if(getDisplayBrightness()==0 && evt==1) {
     updateDisplay();
     inputStop();
     return;
@@ -445,23 +447,23 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
     }
   }
   
-  if(fn < FN_OPTS) { //normal fn running/setting (not in settings menu)
+  if(getCurFn() < FN_OPTS) { //normal fn running/setting (not in settings menu)
 
     if(evt==3 && ctrl==CTRL_SEL) { //CTRL_SEL long hold: enter settings menu
       //inputStop(); commented out to to enable evt==4 and evt==5 per above
-      fn = FN_OPTS;
+      setCurFn(FN_OPTS);
       clearSet(); //don't need updateDisplay() here because this calls updateRTC with force=true
       return;
     }
     
-    if(!fnSetPg) { //fn running
+    if(!getCurFnSetPg()) { //fn running
       if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL hold: enter setting mode
-        switch(fn){
+        switch(getCurFn()){
           case FN_TOD: //set mins
             startSet(rtcGetTOD(),0,1439,1); break;
           case FN_CAL: //depends what page we're on
-            if(fnPg==0){ //regular date display: set year
-              fnSetValDate[1]=rtcGetMonth(), fnSetValDate[2]=rtcGetDate(); startSet(rtcGetYear(),2000,9999,1);
+            if(getCurFnPg()==0){ //regular date display: set year
+              setDate(0,0);
             } else if(fnPg==fnDateCounter){ //month, date, direction
               startSet(readEEPROM(5,false),1,12,1);
             } else if(fnPg==fnDateSunlast || fnPg==fnDateSunnext){ //lat and long
@@ -472,7 +474,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
           case FN_ALARM: //set mins
             startSet(readEEPROM(0,true),0,1439,1); break;
           case FN_TIMER: //set mins
-            if(timerTime!=0 || timerState&1) { timerClear(); } // updateDisplay(); break; } //If the timer is nonzero or running, zero it. But rather than stop there, just go straight into setting – since adjDn (or cycling fns) can reset to zero
+            if(getTimerRun()||getTimerTime()) { timerClear(); } // updateDisplay(); break; } //If the timer is nonzero or running, zero it. But rather than stop there, just go straight into setting – since adjDn (or cycling fns) can reset to zero
             startSet(timerInitialMins,0,5999,1); break; //minutes
           //fnIsDayCount removed in favor of paginated calendar
           case FN_THERM: //could do calibration here if so inclined
@@ -587,25 +589,8 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
               }
               clearSet(); break;
             case FN_CAL: //depends what page we're on
-              if(fnPg==0){ //regular date display: save in RTC
-                switch(fnSetPg){
-                  case 1: //save year, set month
-                    displayBlink(); //to indicate save. Safe b/c we've inputStopped. See below for why
-                    fnSetValDate[0]=fnSetVal;
-                    startSet(fnSetValDate[1],1,12,2); break; 
-                  case 2: //save month, set date
-                    displayBlink(); //to indicate save. Needed if set month == date: without blink, nothing changes.
-                    fnSetValDate[1]=fnSetVal;
-                    startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3); break;
-                  case 3: //write year/month/date to RTC
-                    rtcSetDate(fnSetValDate[0],fnSetValDate[1],fnSetVal,
-                      dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal));
-                    if(networkSupported()) clearNTPSyncLast();
-                    calcSun();
-                    isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,rtcGetHour(),true);
-                    clearSet(); break;
-                  default: break;
-                }
+              if(fnPg==0){ //regular date display: set subsequent units and save in RTC
+                setDate(fnSetPg);
               } else if(fnPg==fnDateCounter){ //set like date, save in eeprom like finishOpt
                 switch(fnSetPg){
                   case 1: //save month, set date
