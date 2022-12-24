@@ -371,20 +371,20 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   if(getCurFn()==FN_VERSION){
     if(ctrl==CTRL_SEL && (evt==0 || evt==5)){ //SEL release or superlong hold
       if(evt==5){ initEEPROM(true); commitEEPROM(); } //superlong hold: reset EEPROM
-      setCurFn(FN_TOD); //NEW TODO in place of versionShowing = false;
+      setCurFn(FN_TOD);
       inputStop(); updateDisplay();
       if(networkSupported()) initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
       return;
     } else {
       return; //ignore other controls
     }
-  } //end if versionShowing
+  }
 
   //If the signal is going, any press should silence it
   if(getSignalRemain()>0 && evt==1){
     signalStop();
-    if(getSignalSource()==FN_ALARM) { //If this was the alarm
-      //If the alarm is using the switch signal and this is the Alt button; or if alarm is *not* using the switch signal and this is Fibonacci mode; don't set the snooze
+    if(getSignalSource()==FN_ALARM || getSignalSource()==FN_ALARM2) { //If this was the alarm
+      //If the alarm is using the switch signal and this is the Alt button; or if alarm is *not* using the switch signal and this is Fibonacci mode; don't set the snooze //TODO add support for ALARM2
       if((readEEPROM(42,false)==1 && CTRL_ALT>0 && ctrl==CTRL_ALT) || (readEEPROM(42,false)!=1 && readEEPROM(50,false))) {
         quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
         displayBlink(); //to indicate this as well

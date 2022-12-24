@@ -13,6 +13,7 @@
 #define ENABLE_DATE_COUNTER false // TODO on ESP32, needs setting metaphor
 #define ENABLE_DATE_RISESET true
 #define ENABLE_ALARM_FN true
+#define ENABLE_ALARM2_FN true
 #define ENABLE_ALARM_AUTOSKIP true
 #define ENABLE_ALARM_FIBONACCI false // irrelevant to ESP32
 #define ENABLE_TIMER_FN true // TODO on ESP32, should only count down (radio sleep mode)
@@ -48,18 +49,18 @@
 //down left side of ESP32:
 //momentary except for AL1/AL2/AL1R/AL2R/SW1/SW2
 //34, 36, 39 are input only
-#define PIN_OFF 36
-#define PIN_ON 39
-#define PIN_AL1 34
-#define PIN_AL2 32
-#define PIN_AL1R 33
-#define PIN_AL2R 25
-#define PIN_SNOOZE 26
-#define PIN_SLEEP 27
-#define PIN_ADJ_UP 14
-#define PIN_ADJ_DN 12
-#define PIN_SW1 13
-#define PIN_SW2 15 //on bottom right. Combo of these two, I think, reflect rear switch position (lock/time/alarm/date)
+#define CTRL_OFF 36
+#define CTRL_ON 39
+#define CTRL_AL1 34
+#define CTRL_AL2 32
+#define CTRL_AL1R 33
+#define CTRL_AL2R 25
+#define CTRL_SNOOZE 26
+#define CTRL_SLEEP 27
+#define CTRL_UP 14
+#define CTRL_DN 12
+#define CTRL_SW0 13
+#define CTRL_SW1 15 //on bottom right. Combo of these two, I think, reflect rear switch position (lock/time/alarm/date)
 
 //TODO some of this may end up being specific to just Simple controls
 //For all input types:

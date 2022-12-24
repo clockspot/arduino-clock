@@ -371,8 +371,13 @@ byte getAlarmState(){
 }
 void switchPower(byte dir){
   //0=down, 1=up, 2=toggle
-  signalRemain = 0; snoozeRemain = 0; //in case alarm is going now - alternatively use signalStop()?
-  //If the timer is running down and is using the switch signal, this instruction conflicts with it, so cancel it
+  if(snoozeRemain && dir==0) { //Canceling active snooze
+    quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
+    displayBlink(); //to indicate this as well 
+  }
+  signalRemain = 0; //in case alarm is going now - alternatively use signalStop()?
+  snoozeRemain = 0;  
+  //If the timer(sleep) is running down and is using the switch signal, this instruction conflicts with it, so cancel it
   if(getTimerRun() && !getTimerDir() && readEEPROM(43,false)==1) {
     timerClear();
     updateDisplay();
@@ -662,7 +667,19 @@ void checkRTC(bool force){
     if((unsigned long)(now-getInputLast())>=SETTING_TIMEOUT*1000) { fnSetPg = 0; fn = FN_TOD; force=true; } //Time out after 2 mins
   }
   //Automatic function change timeout
-  else if((fn==FN_DATE || fn==FN_DAY_COUNTER || fn==FN_SUN_LAST || fn==FN_SUN_NEXT || fn==FN_WEATHER_LAST || fn==FN_WEATHER_NEXT || fn==FN_DATE_AUTO) && (unsigned long)(now-getInputLast())>=FN_PAGE_TIMEOUT*1000) {
+  else if(
+    //If it's one of these functions
+    (
+      //One of the date/calendar ones
+      fn==FN_DATE || fn==FN_DAY_COUNTER || fn==FN_SUN_LAST || fn==FN_SUN_NEXT || fn==FN_WEATHER_LAST || fn==FN_WEATHER_NEXT || fn==FN_DATE_AUTO
+      //Or, if this is inputProton, the alarms or snooze(timer)
+      #ifdef INPUT_PROTON
+      || FN_ALARM || FN_ALARM2 || FN_TIMER
+      #endif
+    )
+    //And if the time to display it has past
+    && (unsigned long)(now-getInputLast())>=FN_PAGE_TIMEOUT*1000
+  ) {
     setInputLast(FN_PAGE_TIMEOUT*1000); //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
     //We'll use switch blocks *without* breaks to cascade to the next enabled function
     //cf. fnScroll()
@@ -1042,19 +1059,30 @@ unsigned long ms(){
   return (unsigned long)(millis()+millisDriftOffset);
 }
 void timerStart(){
-  bitWrite(timerState,0,1); //set timer running (bit 0) to on (1)
-  if(timerTime==0) bitWrite(timerState,1,1); //set timer direction (bit 1) to up (1) if we were idle
-  timerTime = convertTimerTime(true); //convert from duration to origin
-  if(!(getTimerDir())) timerSleepSwitch(1); //possibly toggle the switch signal, but only if counting down
-  quickBeep(69);
+  if(!getTimerRun()) {
+    bitWrite(timerState,0,1); //set timer running (bit 0) to on (1)
+    if(timerTime==0) { //if the timer was idle...
+      if(readEEPROM(43,false)==1) { //sleep mode: count down from 30 min //TODO make configurable
+        bitWrite(timerState,1,0); //set timer direction (bit 1) to down (0)
+        timerTime = 30*60*1000;
+      } else { //chrono/timer: count up from 0
+        bitWrite(timerState,1,1); //set timer direction (bit 1) to up (1)
+      }
+    }
+    timerTime = convertTimerTime(true); //convert from duration to origin
+    if(!(getTimerDir())) timerSleepSwitch(1); //possibly toggle the switch signal, but only if counting down
+    quickBeep(69);
+  }
 } //end timerStart()
 void timerStop(){
-  bitWrite(timerState,0,0); //set timer running (bit 0) to off (0)
-  timerTime = convertTimerTime(false); //convert from origin to duration
-  if(!(getTimerDir())) timerSleepSwitch(0); //possibly toggle the switch signal, but only if counting down
-  quickBeep(64);
-  bitWrite(timerState,4,0); //set timer lap display (bit 4) to off (0)
-  updateDisplay(); //since cycleTimer won't do it
+  if(getTimerRun()) {
+    bitWrite(timerState,0,0); //set timer running (bit 0) to off (0)
+    timerTime = convertTimerTime(false); //convert from origin to duration
+    if(!(getTimerDir())) timerSleepSwitch(0); //possibly toggle the switch signal, but only if counting down
+    quickBeep(64);
+    bitWrite(timerState,4,0); //set timer lap display (bit 4) to off (0)
+    updateDisplay(); //since cycleTimer won't do it
+  }
 }
 void convertTimerTime(bool mode) {
   //timerTime holds either a duration (when stopped) or an origin (when running).
@@ -1070,7 +1098,7 @@ void convertTimerTime(bool mode) {
 }
 void timerClear(){
   bitWrite(timerState,0,0); //set timer running (bit 0) to off (0)
-  bitWrite(timerState,1,1); //set timer direction (bit 1) to up (1) TODO is this necessary
+  //bitWrite(timerState,1,1); //set timer direction (bit 1) to up (1) TODO is this necessary
   timerTime = 0; //set timer duration
   timerSleepSwitch(0);
   bitWrite(timerState,4,0); //set timer lap display (bit 4) to off (0)

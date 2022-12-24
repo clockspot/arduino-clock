@@ -63,7 +63,6 @@ void setOpt(byte opt); //NEW
 void startSnooze(); //NEW
 void stopSnooze(); //NEW
 bool initEEPROM(bool hard);
-void findFnAndPageNumbers();
 void checkRTC(bool force);
 void fibonacci(byte h, byte m, byte s);
 void autoDST();
@@ -108,7 +107,7 @@ byte getSignalPattern();
 void quickBeep(int pitch);
 void quickBeepPattern(int source, int pattern);
 void updateBacklight();
-void cycleBacklight();
+void cycleTweening();
 byte getVersionPart(byte part);
 
 #endif //ARDUINO_CLOCK_H
