@@ -35,8 +35,10 @@ void sendToHT16K33(byte posStart, byte posEnd){ //"private"
   //Called by editDisplay and blankDisplay. Needed in lieu of what cycleDisplay does for nixies.
   for(byte i=posStart; i<=posEnd; i++){
     if(i>=DISPLAY_SIZE) return;
-    if(displayNext[i]>9) matrix.writeDigitRaw((i>=2?i+1:i),0); //blank - skip pos 2 (colon)
-    else matrix.writeDigitNum((i>=2?i+1:i),displayNext[i]);
+    //skip pos 2, as that means colon
+    if(displayNext[i]>15) matrix.writeDigitAscii((i>=2?i+1:i),displayNext[i]); //letters for sevenseg
+    else if(displayNext[i]>9) matrix.writeDigitRaw((i>=2?i+1:i),0); //blank
+    else matrix.writeDigitNum((i>=2?i+1:i),displayNext[i]); //numeral
   }
   matrix.writeDisplay();
 }

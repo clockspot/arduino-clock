@@ -97,6 +97,7 @@
 //and, if desired, in numbertable[], replace 0x7D with 0x7C and 0x6F with 0x67 to remove
 //the serifs from 6 and 9 for legibility (see http://www.harold.thimbleby.net/cv/files/seven-segment.pdf)
 #define DISPLAY_HT16K33
+#define SEVENSEG //enables display of letters in some cases
 //#define NUM_MAX 4 //How many digits?
 #define BRIGHTNESS_FULL 15 //out of 0-15
 #define BRIGHTNESS_DIM 0

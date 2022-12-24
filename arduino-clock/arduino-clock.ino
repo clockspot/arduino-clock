@@ -1251,6 +1251,37 @@ void updateDisplay(){
       //If 4 digits (0-3), display degrees on 0-2 and tenths on 3
       editDisplay(abs(fnSetVal), 0, (DISPLAY_SIZE>4? 4: 3), fnSetVal<0, false);
     } else editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0, false); //some other type of value - leading zeros for negatives
+    #ifdef SEVENSEG
+    //Depending on what's being set, display ascii letters on the seconds digits
+    switch(fn) {
+      case FN_DATE:
+        switch(fnSetPg) {
+          case 1: editDisplay(121,4,4,0,0); blankDisplay(5,5,0); break; //year: y + blank
+          case 2: editDisplay(114,4,4,0,0); editDisplay(110,5,5,0,0); break; //month: r + n (hoping it looks like m)
+          case 3: editDisplay(100,4,4,0,0); blankDisplay(5,5,0); break; //date: d + blank
+          default: break;
+        } break;
+      case FN_DAY_COUNTER:
+        switch(fnSetPg) {
+          case 1: editDisplay(114,4,4,0,0); editDisplay(110,5,5,0,0); break; //month: r + n (hoping it looks like m)
+          case 2: editDisplay(100,4,4,0,0); blankDisplay(5,5,0); break; //date: d + blank
+          case 3: //off / down / up - is this right? off may not be displayed as an option
+            switch(fnSetVal) { //overwrite main display
+              case 0: blankDisplay(0,0,0); editDisplay(79,1,1,0,0); editDisplay(102,2,2,0,0); editDisplay(102,3,3,0,0); break; //Off
+              case 1: editDisplay(67,0,0,0,0); editDisplay(116,1,1,0,0); editDisplay(100,2,2,0,0); editDisplay(110,3,3,0,0); break; //Ctdn
+              case 2: editDisplay(67,0,0,0,0); editDisplay(116,1,1,0,0); editDisplay(85,2,2,0,0); editDisplay(80,3,3,0,0); break; //CtUP
+            }
+            blankDisplay(5,5,0);
+            break;
+          default: break;
+        }
+      case FN_ALARM:
+        editDisplay(65,4,4,0,0); editDisplay(1,5,5,0,0); break; //A1
+      case FN_ALARM2:
+        editDisplay(65,4,4,0,0); editDisplay(2,5,5,0,0); break; //A2
+      default: break;
+    }
+    #endif
   }
   else if(fn >= FN_OPTS){ //settings menu, but not setting a value
     // displayBrightness = 2; //taken over by display code? TODO confirm
@@ -1301,7 +1332,16 @@ void updateDisplay(){
         break;
       case FN_DAY_COUNTER:
         editDisplay(dateComp(rtcGetYear(),rtcGetMonth(),rtcGetDate(),readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)-1),0,3,false,true);
+        #ifdef SEVENSEG
+        //on seconds digits, display alpha letters
+        if(readEEPROM(4,false)-1) { //count up
+          editDisplay(100,4,4,0,0); blankDisplay(5,5,0); //"d"
+        } else { //count down
+          editDisplay(116,4,4,0,0); editDisplay(111,4,4,0,0); //"to" //TODO mod display library to make "til"?
+        }
+        #else
         blankDisplay(4,5,true);
+        #endif
         break;
       //The sun and weather displays are based on a snapshot of the time of day when the function display was triggered, just in case it's triggered a few seconds before a sun event (sunrise/sunset) and the "prev/now" and "next" displays fall on either side of that event, they'll both display data from before it. If triggered just before midnight, the date could change as well – not such an issue for sun, but might be for weather - TODO create date snapshot also
       case FN_SUN_LAST:
@@ -1321,15 +1361,42 @@ void updateDisplay(){
         word almTime; almTime = readEEPROM(0,true);
         editDisplay(almTime/60, 0, 1, readEEPROM(19,false), true); //hours with leading zero
         editDisplay(almTime%60, 2, 3, true, true);
+        #ifdef SEVENSEG
+        //Overwrite alarm display with "Off"
+        if(!readEEPROM(2,false)) {
+          blankDisplay(0,0,0); editDisplay(79,1,1,0,0); editDisplay(102,2,2,0,0); editDisplay(102,3,3,0,0);
+        }
+        #endif
+        #ifdef INPUT_PROTON
+        //Display "A1" on seconds
+        //I'm using INPUT_PROTON here rather than SEVENSEG or ENABLE_ALARM2_FN, since it implies both; and there is little point displaying the status since the button state indicates it, and toggling will clear autoskip.
+        editDisplay(65,4,4,0,0); editDisplay(1,5,5,0,0); break; //A1
+        #else
+        //Display alarm status on seconds
         if(readEEPROM(2,false) && alarmSkip){ //alarm on+skip
           editDisplay(1,4,5,true,true); //01 to indicate off now, on maybe later
         } else { //alarm fully on or off
           editDisplay(readEEPROM(2,false),4,4,false,true);
           blankDisplay(5,5,true);
         }
+        #endif
         break;
       case FN_ALARM2:
         //TODO
+        
+        #ifdef INPUT_PROTON
+        //Display "A2" on seconds
+        //I'm using INPUT_PROTON here rather than SEVENSEG or ENABLE_ALARM2_FN, since it implies both; and there is little point displaying the status since the button state indicates it, and toggling will clear autoskip.
+        editDisplay(65,4,4,0,0); editDisplay(2,5,5,0,0); break; //A2
+        #else
+        //Display alarm status on seconds
+        if(readEEPROM(2,false) && alarmSkip){ //alarm on+skip
+          editDisplay(1,4,5,true,true); //01 to indicate off now, on maybe later
+        } else { //alarm fully on or off
+          editDisplay(readEEPROM(2,false),4,4,false,true);
+          blankDisplay(5,5,true);
+        }
+        #endif
         break;
       case FN_TIMER: //timer - display time
         unsigned long td; //current timer duration - unless this is lap display, in which case show that
@@ -1371,6 +1438,7 @@ void updateDisplay(){
         //TODO another setting to apply offset?
         editDisplay(abs(temp)/100,1,3,(temp<0?true:false),true); //leading zeros if negative
         editDisplay(abs(temp)%100,4,5,true,true);
+        //TODO if sevenseg, could display oF or oC
         break;
       case FN_TUBETEST:
         editDisplay(rtcGetSecond(),0,0,true,false);
@@ -1492,8 +1560,16 @@ void displaySun(byte which, int d, int tod){
     editDisplay(hr, 0, 1, readEEPROM(19,false), true); //leading zero per settings
     editDisplay(evtTime%60, 2, 3, true, true);
   }
+  #ifdef SEVENSEG
+  if(evtIsRise) {
+    editDisplay(85,4,4,0,0); editDisplay(80,5,5,0,0); break; //UP
+  } else {
+    editDisplay(100,4,4,0,0); editDisplay(110,5,5,0,0); break; //dn
+  }
+  #else
   blankDisplay(4, 4, true);
   editDisplay(evtIsRise, 5, 5, false, true);
+  #endif
 }
 #else
 //to give other fns something empty to call, when rise/set isn't enabled
