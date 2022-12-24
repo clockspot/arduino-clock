@@ -830,13 +830,13 @@ void checkClients(){
         } else if(currentLine.startsWith(F("curdatey"))){
           rtcSetDate(currentLine.substring(9).toInt(), rtcGetMonth(), rtcGetDate(), dayOfWeek(currentLine.substring(9).toInt(), rtcGetMonth(), rtcGetDate())); //TODO what about month exceed
           ntpSyncLast = 0;
-          goToFn(FN_CAL,254);
+          goToFn(FN_DATE_AUTO);
         } else if(currentLine.startsWith(F("curdatem"))){
           rtcSetDate(rtcGetYear(), currentLine.substring(9).toInt(), rtcGetDate(), dayOfWeek(rtcGetYear(), currentLine.substring(9).toInt(), rtcGetDate())); //TODO what about month exceed
-          goToFn(FN_CAL,254);
+          goToFn(FN_DATE_AUTO);
         } else if(currentLine.startsWith(F("curdated"))){
           rtcSetDate(rtcGetYear(), rtcGetMonth(), currentLine.substring(9).toInt(), dayOfWeek(rtcGetYear(), rtcGetMonth(), currentLine.substring(9).toInt())); //TODO what about month exceed
-          goToFn(FN_CAL,254);
+          goToFn(FN_DATE_AUTO);
         } else if(currentLine.startsWith(F("almtime"))){
           writeEEPROM(0,currentLine.substring(7).toInt(),true);
           goToFn(FN_ALARM);
@@ -865,14 +865,13 @@ void checkClients(){
           //do special stuff for some of them
           switch(key){
             case 4: case 5: case 6: //day counter
-              //in lieu of actually switching to FN_CAL, so that only this value is seen - compare to ino
+              //in lieu of actually switching to FN_DAY_COUNTER, so that only this value is seen - compare to ino
               if(readEEPROM(4,false)) tempDisplay(dateComp(rtcGetYear(),rtcGetMonth(),rtcGetDate(), readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)-1));
-              findFnAndPageNumbers(); //to include or exclude the day counter from the calendar function
               break;
             case 14: //utc offset
               cueNTP(); break;
             case 17: //date format
-              goToFn(FN_CAL,254); break;
+              goToFn(FN_DATE_AUTO); break;
             case 22: //auto dst
               isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),true); break;
             case 39: case 47: //alarm pitch/pattern

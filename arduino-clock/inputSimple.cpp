@@ -458,30 +458,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
     
     if(!getFnIsSetting()) { //fn running
       if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL hold: enter setting mode
-        switch(getCurFn()){
-          case FN_TOD: //set mins
-            startSet(rtcGetTOD(),0,1439,1); break;
-          case FN_CAL: //depends what page we're on //TODO fnPg to fn, get rid of getCurFnPg()
-            if(getCurFnPg()==0){ //regular date display: set year
-              setDate();
-            } else if(getCurFnPg()==fnDateCounter){ //month, date, direction
-              setDateCounter();
-            } else if(getCurFnPg()==fnDateSunlast || getCurFnPg()==fnDateSunnext){ //lat and long
-              //TODO
-            } else if(getCurFnPg()==fnDateWeathernow || getCurFnPg()==fnDateWeathernext){ //temperature units??
-              //TODO
-            }
-            break;
-          case FN_ALARM: //set mins
-            startSet(readEEPROM(0,true),0,1439,1); break;
-          case FN_TIMER: //set mins
-            if(getTimerRun()||getTimerTime()) { timerClear(); } // updateDisplay(); break; } //If the timer is nonzero or running, zero it. But rather than stop there, just go straight into setting – since adjDn (or cycling fns) can reset to zero
-            startSet(timerInitialMins,0,5999,1); break; //minutes
-          //fnIsDayCount removed in favor of paginated calendar
-          case FN_THERM: //could do calibration here if so inclined
-          case FN_TUBETEST:
-          default: break;
-        }
+        setByFn();
         return;
       }
       else if((ctrl==CTRL_SEL && evt==0) || ((ctrl==CTRL_UP || ctrl==CTRL_DN) && evt==1)) { //sel release or adj press
@@ -575,37 +552,8 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
         //TODO the above can be revisited now that we pass evtLast
         if(ctrl==CTRL_SEL) { //CTRL_SEL push: go to next setting or save and exit setting mode
           inputStop(); //not waiting for CTRL_SELHold, so can stop listening here
-          //We will set rtc time parts directly
-          //con: potential for very rare clock rollover while setting; pro: can set date separate from time
-          switch(getCurFn()){
-            case FN_TOD: //save in RTC
-              setTime();
-              break;
-            case FN_CAL: //depends what page we're on //TODO fnPg to fn, get rid of getCurFnPg()
-              if(getCurFnPg()==0){ //regular date display: set subsequent units and save in RTC
-                setDate();
-              } else if(fnPg==fnDateCounter){ //set like date, save in eeprom like finishOpt
-                setDateCounter();
-              } else if(getCurFnPg()==fnDateSunlast || getCurFnPg()==fnDateSunnext){ //lat and long
-                //TODO
-              } else if(getCurFnPg()==fnDateWeathernow || getCurFnPg()==fnDateWeathernext){ //temperature units??
-                //TODO
-              }
-              break;
-            case FN_ALARM:
-              setAlarm(1);
-              break;
-//             case FN_ALARM2: //TODO
-//               setAlarm(2);
-//               break;
-            case FN_TIMER: //timer - depends what page we're on
-              setTimer();
-              break;
-            //fnIsDayCount removed in favor of paginated calendar
-            case FN_THERM:
-              break;
-            default: break;
-          } //end switch fn
+          setByFn();
+          return;
         } //end CTRL_SEL push
         if(ctrl==CTRL_UP) doSet(velocity ? 10 : 1);
         if(ctrl==CTRL_DN) doSet(velocity ? -10 : -1);

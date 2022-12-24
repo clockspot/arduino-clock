@@ -115,12 +115,11 @@ const  int optsMax[] = { 2, 5, 3, 1,20, 4, 2, 1,  2, 2,88, 5,60, 1,  2,88, 5,  4
 // Functions and pages
 byte fn = 0; //currently displayed fn per above
 byte getCurFn() { return fn; } //NEW
-void setCurFn(byte val) { fn = val; } //NEW
-byte fnPg = 0; //allows a function to have multiple pages
-byte getCurFnPg() { return fnPg; } //NEW
+void setCurFn(byte val) { fn = val; } //NEW - the only setter we let input*.cpp call
+void goToFn(byte val){ fn = val; setInputLast(); } //also sets inputLast as though per human activity
+//TODO can we consolidate the above two, or is there a reason not to always setInputLast()?
+
 byte fnSetPg = 0; //whether this function is currently being set, and which page it's on
-byte getCurFnSetPg() { return fnSetPg; } //NEW
-// void setCurFnSetPg...?
 bool getFnIsSetting() { return fnSetPg>0; }
  int fnSetVal; //the value currently being set, if any
  int fnSetValMin; //min possible
@@ -129,17 +128,9 @@ bool fnSetValVel; //whether it supports velocity setting (if max-min > 30)
  int fnSetValDate[3]; //holder for newly set date, so we can set it in 3 stages but set the RTC only once
 bool fnSetValDid; //false when starting a set; true when value is changed - to detect if value was not changed
 
-//the calendar function page numbers, depending on which ones are enabled. See findFnAndPageNumbers
-//TODO turn these into actual fns as well
-byte fnDatePages = 1;
-byte fnDateCounter = 255;
-byte fnDateSunlast = 255;
-byte fnDateWeathernow = 255;
-byte fnDateSunnext = 255;
-byte fnDateWeathernext = 255;
-
 // Volatile running values used throughout the code. (Others are defined right above the method that uses them)
-bool alarmSkip = 0;
+bool alarmSkip = false;
+bool alarm2Skip = false; //TODO flesh out alarm2
 byte signalSource = 0; //which function triggered the signal - FN_TOD (chime), FN_ALARM, or FN_TIMER
 byte getSignalSource() { return signalSource; } //NEW
 // void setSignalSource(byte val) { signalSource = val; } //TODO need this?
@@ -174,6 +165,7 @@ byte ambientLightLevel = 0; //the tweening mechanism (below) will move this valu
 
 //If we need to temporarily display a value (or values in series), we can put them here. Can't be zero.
 //This is used by network to display IP addresses, and various other bits.
+//TODO make FNs for these as well?
 int tempValDispQueue[4];
 const int tempValDispDur = 2500; //ms
 unsigned int tempValDispLast = 0;
@@ -237,7 +229,7 @@ void setup(){
   }
   
   switch(readEEPROM(7,false)){ //if the preset is set to a function that is no longer enabled, use alarm if enabled, else use time
-    case FN_CAL: if(!ENABLE_DATE_FN) changed += writeEEPROM(7,(ENABLE_ALARM_FN?FN_ALARM:FN_TOD),false,false); break;
+    case FN_DATE: if(!ENABLE_DATE_FN) changed += writeEEPROM(7,(ENABLE_ALARM_FN?FN_ALARM:FN_TOD),false,false); break;
     case FN_ALARM: if(!ENABLE_ALARM_FN) changed += writeEEPROM(7,FN_TOD,false,false); break;
     case FN_TIMER: if(!ENABLE_TIMER_FN) changed += writeEEPROM(7,(ENABLE_ALARM_FN?FN_ALARM:FN_TOD),false,false); break;
     case FN_THERM: if(!ENABLE_TEMP_FN) changed += writeEEPROM(7,(ENABLE_ALARM_FN?FN_ALARM:FN_TOD),false,false); break;
@@ -291,11 +283,14 @@ void fnScroll(byte dir){
   //0=down, 1=up
   //Switch to the next (up) or previous (down) enabled function. This determines the order.
   //We'll use switch blocks *without* breaks to cascade to the next enabled function
+  //TODO this should not be used with inputProton since it has dedicated function controls
   bool alarmOK = (PIEZO_PIN>=0 || SWITCH_PIN>=0 || PULSE_PIN>=0) && ENABLE_ALARM_FN; //skip alarm if no signals available
   if(dir) { // up
     switch(fn) {
-      case FN_TOD: if(ENABLE_DATE_FN) { fn = FN_CAL; break; }
-      case FN_CAL: if(alarmOK) { fn = FN_ALARM; break; }
+      case FN_TOD: if(ENABLE_DATE_FN) { fn = FN_DATE; break; }
+      case FN_DATE: if(alarmOK) { fn = FN_ALARM; break; }
+      //NB: day counter + sun + weather functions follow FN_DATE automatically, NOT manually
+      //see checkRTC() > Automatic function change timeout
       case FN_ALARM: if(ENABLE_TIMER_FN) { fn = FN_TIMER; break; }
       case FN_TIMER: if(ENABLE_TEMP_FN) { fn = FN_THERM; break; }
       case FN_THERM: if(ENABLE_TUBETEST_FN) { fn = FN_TUBETEST; break; }
@@ -307,11 +302,10 @@ void fnScroll(byte dir){
       case FN_TUBETEST: if(ENABLE_TEMP_FN) { fn = FN_THERM; break; }
       case FN_THERM: if(ENABLE_TIMER_FN) { fn = FN_TIMER; break; }
       case FN_TIMER: if(alarmOK) { fn = FN_ALARM; break; }
-      case FN_ALARM: if(ENABLE_DATE_FN) { fn = FN_CAL; break; }
-      case FN_CAL: default: fn = FN_TOD; break;
+      case FN_ALARM: if(ENABLE_DATE_FN) { fn = FN_DATE; break; }
+      case FN_DATE: default: fn = FN_TOD; break;
     }
   }
-  fnPg = 0; //reset page counter in case we were in a paged display
 }
 void fnOptScroll(byte dir){
   //0=down, 1=up
@@ -349,11 +343,6 @@ void fnOptScroll(byte dir){
     )) {
     fnOptScroll(dir);
   }
-}
-void goToFn(byte thefn, byte thefnPg){ //A shortcut that also sets inputLast per human activity
-  fn = thefn;
-  fnPg = thefnPg;
-  setInputLast();
 }
 
 void switchAlarmState(byte dir){
@@ -448,9 +437,29 @@ void clearSet(){ //Exit set state
   checkRTC(true); //force an update to tod and updateDisplay()
 }
 
+void setByFn() { //NEW
+  //Called by input*.cpp when it's time to enter, page, or exit setting
+  //We will set rtc time parts directly
+  //con: potential for very rare clock rollover while setting; pro: can set date separate from time
+  switch(getCurFn()){
+    case FN_TOD: setTime(); break;
+    case FN_DATE: case FN_DATE_AUTO: setDate(); break;
+    case FN_DAY_COUNTER: setDayCounter(); break;
+    case FN_SUN_LAST: break;
+    case FN_SUN_NEXT: break;
+    case FN_WEATHER_LAST: break;
+    case FN_WEATHER_NEXT: break;
+    case FN_ALARM: setAlarm(1); break;
+    case FN_ALARM2: setAlarm(2); break;
+    case FN_TIMER: setTimer(); break;
+    case FN_THERM: break;
+    default: break;
+  }
+}
+
 void setDate() { //NEW
   //TODO: for proton: cycle set at case 3? save after every move?
-  //TODO: sevenseg should display y/m/d instead of blinking
+  //TODO: sevenseg should display y/m/d
   switch(fnSetPg) {
     case 0: //start set year
       //prefill the month and date values with current rtc vals, in case it changes while we're in the middle of setting
@@ -479,8 +488,8 @@ void setDate() { //NEW
   }
 }
 
-void setDateCounter() { //NEW
-  switch(fnSetPg){
+void setDayCounter() { //NEW
+  switch(fnSetPg) {
     case 0: //start set month
       startSet(readEEPROM(5,false),1,12,1);
       break;
@@ -505,24 +514,44 @@ void setDateCounter() { //NEW
 }
 
 void setTime() { //NEW
-  if(fnSetValDid){ //but only if the value was actually changed
-    rtcSetTime(fnSetVal/60,fnSetVal%60,0);
-    if(networkSupported()) clearNTPSyncLast();
-    millisAtLastCheck = 0; //see ms()
-    calcSun();
-    isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),fnSetVal/60,true);
+  switch(fnSetPg) {
+    case 0: //start set mins
+      startSet(rtcGetTOD(),0,1439,1);
+      break;
+    case 1: //save mins
+      if(fnSetValDid){ //but only if the value was actually changed
+        rtcSetTime(fnSetVal/60,fnSetVal%60,0);
+        if(networkSupported()) clearNTPSyncLast();
+        millisAtLastCheck = 0; //see ms()
+        calcSun();
+        isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),fnSetVal/60,true);
+      }
+      clearSet();
+      break;
+    default: break;
   }
-  clearSet();
 }
 
-void setAlarm(byte whichAlarm) {
+void setAlarm(byte whichAlarm) { //NEW
   //TODO support second alarm - maybe kept in DS3231?
-  writeEEPROM(0,fnSetVal,true);
-  clearSet();
+  switch(fnSetPg) {
+    case 0: //start set mins
+      startSet(readEEPROM(0,true),0,1439,1);
+      break;
+    case 1:
+      writeEEPROM(0,fnSetVal,true);
+      clearSet();
+      break;
+    default: break;
+  }
 }
 
 void setTimer() {
-  switch(fnSetPg){
+  switch(fnSetPg) {
+    case 0:
+      if(getTimerRun()||getTimerTime()) { timerClear(); } // updateDisplay(); break; } //If the timer is nonzero or running, zero it. But rather than stop there, just go straight into setting – since adjDn (or cycling fns) can reset to zero
+      startSet(timerInitialMins,0,5999,1);
+      break;
     case 1: //save timer mins, set timer secs
       displayBlink(); //to indicate save.
       timerInitialMins = fnSetVal; //minutes, up to 5999 (99m 59s)
@@ -616,16 +645,6 @@ bool initEEPROM(bool hard){
   return changed>0; //whether EEPROM was changed
 } //end initEEPROM()
 
-void findFnAndPageNumbers(){
-  //Each function, and each page in a paged function, has a number. //TODO should pull from EEPROM 8
-  fnDatePages = 1; //date function always has a page for the date itself
-  if(ENABLE_DATE_COUNTER && readEEPROM(4,false)){ fnDatePages++; fnDateCounter=fnDatePages-1; }
-  if(ENABLE_DATE_RISESET){ fnDatePages++; fnDateSunlast=fnDatePages-1; }
-  if(false){ fnDatePages++; fnDateWeathernow=fnDatePages-1; }
-  if(ENABLE_DATE_RISESET){ fnDatePages++; fnDateSunnext=fnDatePages-1; }
-  if(false){ fnDatePages++; fnDateWeathernext=fnDatePages-1; }
-}
-
 
 ////////// Timing and timed events //////////
 
@@ -642,21 +661,28 @@ void checkRTC(bool force){
   if(fnSetPg || fn>=FN_OPTS){
     if((unsigned long)(now-getInputLast())>=SETTING_TIMEOUT*1000) { fnSetPg = 0; fn = FN_TOD; force=true; } //Time out after 2 mins
   }
-  //Paged-display function timeout //TODO change FN_CAL to consts? //TODO timeoutPageFn var
-  else if(fn==FN_CAL && (unsigned long)(now-getInputLast())>=FN_PAGE_TIMEOUT*1000) { //3sec per date page
-    // //If a scroll in is going, fast-forward to end - see also ctrlEvt
-    // if(scrollRemain>0) {
-    //   scrollRemain = 1;
-    //   checkEffects(true);
-    // }
-    //Here we just have to increment the page and decide when to reset. updateDisplay() will do the rendering
-    fnPg++; setInputLast(FN_PAGE_TIMEOUT*1000); //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
-    while(fnPg<fnDatePages && fnPg<200 && ( //skip inapplicable date pages. The 200 is an extra failsafe
-        (!readEEPROM(10,true) && !readEEPROM(12,true) && //if no lat+long specified, skip weather/rise/set
-          (fnPg==fnDateWeathernow || fnPg==fnDateWeathernext || fnPg==fnDateSunlast || fnPg==fnDateSunnext))
-      )) fnPg++;
-    if(fnPg >= fnDatePages){ fnPg = 0; fn = FN_TOD; } // when we run out of pages, go back to time. When the half-minute date is triggered, fnPg is set to 254, so it will be 255 here and be cancelled after just the one page.
-    force=true;
+  //Automatic function change timeout
+  else if((fn==FN_DATE || fn==FN_DAY_COUNTER || fn==FN_SUN_LAST || fn==FN_SUN_NEXT || fn==FN_WEATHER_LAST || fn==FN_WEATHER_NEXT || fn==FN_DATE_AUTO) && (unsigned long)(now-getInputLast())>=FN_PAGE_TIMEOUT*1000) {
+    setInputLast(FN_PAGE_TIMEOUT*1000); //but leave inputLastTODMins alone so the subsequent page displays will be based on the same TOD
+    //We'll use switch blocks *without* breaks to cascade to the next enabled function
+    //cf. fnScroll()
+    switch(fn) {
+      //Date + day counter + sun + weather cycle
+      case FN_DATE: if(ENABLE_DATE_COUNTER && readEEPROM(4,false)) { fn = FN_DAY_COUNTER; break; }
+      case FN_DAY_COUNTER: if(ENABLE_DATE_RISESET) { fn = FN_SUN_LAST; break; }
+      case FN_SUN_LAST: if(false) { fn = FN_WEATHER_LAST; break; }
+      case FN_WEATHER_LAST: if(ENABLE_DATE_RISESET) { fn = FN_SUN_NEXT; break; }
+      case FN_SUN_NEXT: if(false) { fn = FN_WEATHER_NEXT; break; }
+      case FN_WEATHER_NEXT: fn = FN_TOD; break;
+      
+      //Auto date
+      case FN_DATE_AUTO: fn = FN_TOD; break; //TODO scroll
+      
+      //If you have future additional cycles (e.g. replacing temporary value display queue), place here
+      
+      default: fn = FN_TOD; break;
+    }
+    force = true;
   }
   //Temporary-display function timeout: if we're *not* in a permanent one (time, or running/signaling timer)
   // Stopped/non-signaling timer shouldn't be permanent, but have a much longer timeout, mostly in case someone is waiting to start the chrono in sync with some event, so we'll give that an hour.
@@ -737,7 +763,7 @@ void checkRTC(bool force){
     }
     //At bottom of minute, see if we should show the date
     if(rtcGetSecond()==30 && fn==FN_TOD && fnSetPg==0 && unoffRemain==0) { /*cleanRemain==0 && scrollRemain==0 && */ 
-      if(readEEPROM(18,false)>=2) { goToFn(FN_CAL,254); updateDisplay(); }
+      if(readEEPROM(18,false)>=2) { fn = FN_DATE_AUTO; updateDisplay(); }
       //if(readEEPROM(18,false)==3) { startScroll(); }
     }
     //Anti-poisoning routine triggering: start when applicable, normal brightness, and not during off-hours, setting, or after a button press (unoff)
@@ -802,7 +828,8 @@ void checkRTC(bool force){
       ambientLightLevelActual = getRelativeAmbientLightLevel();
     }
 #endif
-    if(fnSetPg==0 && (true || force) && !(fn==FN_CAL && !force)) updateDisplay(); /*scrollRemain==0 ||*/
+    if(fnSetPg==0 && (true || force) && !((fn==FN_DATE||fn==FN_DATE_AUTO) && !force)) updateDisplay(); /*scrollRemain==0 ||*/
+    //TODO not sure what the above is doing with FN_DATE so I threw in FN_DATE_AUTO as well - is this for the :30 thing?
     
     rtcSecLast = rtcGetSecond();
     
@@ -1259,31 +1286,36 @@ void updateDisplay(){
         if(readEEPROM(18,false)==1) editDisplay(rtcGetDate(), 4, 5, readEEPROM(19,false), true); //date
         else editDisplay(rtcGetSecond(), 4, 5, true, true); //seconds
         break;
-      case FN_CAL: //a paged display
-        if(fnPg==0 || fnPg==254){ //plain ol' date - 0 will continue to other pages, 254 will only display date then return to time (e.g. at half minute)
-          byte df; df = readEEPROM(17,false); //1=m/d/w, 2=d/m/w, 3=m/d/y, 4=d/m/y, 5=y/m/d
-          if(df<=4) {
-            editDisplay((df==1||df==3?rtcGetMonth():rtcGetDate()),0,1,readEEPROM(19,false),true); //month or date first
-            editDisplay((df==1||df==3?rtcGetDate():rtcGetMonth()),2,3,readEEPROM(19,false),true); //date or month second
-            editDisplay((df<=2?rtcGetWeekday():rtcGetYear()),4,5,(df<=2?false:true),true); //dow or year third - dow never leading zero, year always
-          }
-          else { //df==5
-            editDisplay(rtcGetYear(),0,1,true,true); //year always has leading zero
-            editDisplay(rtcGetMonth(),2,3,readEEPROM(19,false),true);
-            editDisplay(rtcGetDate(),4,5,readEEPROM(19,false),true);
-          }
+      case FN_DATE: case FN_DATE_AUTO:
+        byte df; df = readEEPROM(17,false); //1=m/d/w, 2=d/m/w, 3=m/d/y, 4=d/m/y, 5=y/m/d
+        if(df<=4) {
+          editDisplay((df==1||df==3?rtcGetMonth():rtcGetDate()),0,1,readEEPROM(19,false),true); //month or date first
+          editDisplay((df==1||df==3?rtcGetDate():rtcGetMonth()),2,3,readEEPROM(19,false),true); //date or month second
+          editDisplay((df<=2?rtcGetWeekday():rtcGetYear()),4,5,(df<=2?false:true),true); //dow or year third - dow never leading zero, year always
         }
-        else if(fnPg==fnDateCounter){
-          editDisplay(dateComp(rtcGetYear(),rtcGetMonth(),rtcGetDate(),readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)-1),0,3,false,true);
-          blankDisplay(4,5,true);
+        else { //df==5
+          editDisplay(rtcGetYear(),0,1,true,true); //year always has leading zero
+          editDisplay(rtcGetMonth(),2,3,readEEPROM(19,false),true);
+          editDisplay(rtcGetDate(),4,5,readEEPROM(19,false),true);
         }
-        //The sun and weather displays are based on a snapshot of the time of day when the function display was triggered, just in case it's triggered a few seconds before a sun event (sunrise/sunset) and the "prev/now" and "next" displays fall on either side of that event, they'll both display data from before it. If triggered just before midnight, the date could change as well – not such an issue for sun, but might be for weather - TODO create date snapshot also
-        else if(fnPg==fnDateSunlast) displaySun(0,rtcGetDate(),getInputLastTODMins());
-        else if(fnPg==fnDateWeathernow) displayWeather(0);
-        else if(fnPg==fnDateSunnext) displaySun(1,rtcGetDate(),getInputLastTODMins());
-        else if(fnPg==fnDateWeathernext) displayWeather(1);
-        break; //end FN_CAL
-      //fnIsDayCount removed in favor of paginated calendar
+        break;
+      case FN_DAY_COUNTER:
+        editDisplay(dateComp(rtcGetYear(),rtcGetMonth(),rtcGetDate(),readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)-1),0,3,false,true);
+        blankDisplay(4,5,true);
+        break;
+      //The sun and weather displays are based on a snapshot of the time of day when the function display was triggered, just in case it's triggered a few seconds before a sun event (sunrise/sunset) and the "prev/now" and "next" displays fall on either side of that event, they'll both display data from before it. If triggered just before midnight, the date could change as well – not such an issue for sun, but might be for weather - TODO create date snapshot also
+      case FN_SUN_LAST:
+        displaySun(0,rtcGetDate(),getInputLastTODMins());
+        break;
+      case FN_SUN_NEXT:
+        displaySun(1,rtcGetDate(),getInputLastTODMins());
+        break;
+      case FN_WEATHER_LAST:
+        displayWeather(0);
+        break;
+      case FN_WEATHER_NEXT:
+        displayWeather(1);
+        break;
       case FN_ALARM: //alarm
         displayBrightness = (readEEPROM(2,false)?2:1); //status normal/dim
         word almTime; almTime = readEEPROM(0,true);
@@ -1295,6 +1327,9 @@ void updateDisplay(){
           editDisplay(readEEPROM(2,false),4,4,false,true);
           blankDisplay(5,5,true);
         }
+        break;
+      case FN_ALARM2:
+        //TODO
         break;
       case FN_TIMER: //timer - display time
         unsigned long td; //current timer duration - unless this is lap display, in which case show that

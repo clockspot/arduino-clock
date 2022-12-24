@@ -9,11 +9,17 @@
 ////////////////////////////////////////////
 
 
-//Unique IDs for the functions - see also fnScroll
+//Unique IDs for the functions (value is arbitrary) - see fnScroll and checkRTC for how these are manually or automatically scrolled through
 #define FN_TOD 0 //time of day
-#define FN_CAL 1 //date, with optional day counter and sunrise/sunset pages
+#define FN_DATE 1
+#define FN_DAY_COUNTER 8
+#define FN_SUN_LAST 9
+#define FN_SUN_NEXT 10
+#define FN_WEATHER_LAST 11
+#define FN_WEATHER_NEXT 12
+#define FN_DATE_AUTO 13 //same as FN_DATE but not followed by sun/weather functions – for optionally triggering at :30 seconds (and scrolling)
 #define FN_ALARM 2 //alarm time
-//#define FN_ALARM2 7 //second alarm time if enabled //TODO
+#define FN_ALARM2 7 //second alarm time //TODO
 #define FN_TIMER 3 //countdown timer and chronograph
 #define FN_THERM 4 //temperature per rtc – will likely read high
 #define FN_TUBETEST 5 //simply cycles all digits for nixie tube testing
@@ -23,8 +29,8 @@
 //NEW
 byte getCurFn();
 void setCurFn(byte val);
-byte getCurFnPg();
-byte getCurFnSetPg();
+void goToFn(byte val);
+bool getFnIsSetting();
 byte getSignalSource();
 word getSignalRemain();
 byte getSnoozeRemain();
@@ -40,7 +46,6 @@ void setup();
 void loop();
 void fnScroll(byte dir);
 void fnOptScroll(byte dir);
-void goToFn(byte thefn, byte thefnPg=0);
 void switchAlarmState(byte dir);
 void setAlarmState(byte state);
 byte getAlarmState();
@@ -48,8 +53,9 @@ void switchPower(byte dir);
 void startSet(int n, int m, int x, byte p);
 void doSet(int delta);
 void clearSet();
+void setByFn(); //NEW
 void setDate(); //NEW
-void setDateCounter(); //NEW
+void setDayCounter(); //NEW
 void setTime(); //NEW
 void setAlarm(byte whichAlarm); //NEW
 void setTimer(); //NEW
