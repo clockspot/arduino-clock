@@ -21,7 +21,7 @@
 #define FN_ALARM 2 //alarm time
 #define FN_ALARM2 7 //second alarm time //TODO
 #define FN_TIMER 3 //countdown timer and chronograph
-#define FN_THERM 4 //temperature per rtc – will likely read high
+#define FN_THERMOMETER 4 //temperature per rtc – will likely read high
 #define FN_TUBETEST 5 //simply cycles all digits for nixie tube testing
 #define FN_VERSION 6 //displays software version
 #define FN_OPTS 201 //fn values from here to 255 correspond to settings in the settings menu
@@ -46,9 +46,9 @@ void setup();
 void loop();
 void fnScroll(byte dir);
 void fnOptScroll(byte dir);
-void switchAlarmState(byte dir);
-void setAlarmState(byte state);
-byte getAlarmState();
+void switchAlarmState(byte dir, byte whichAlarm);
+void setAlarmState(byte state, byte whichAlarm);
+byte getAlarmState(byte whichAlarm);
 void switchPower(byte dir);
 void startSet(int n, int m, int x, byte p);
 void doSet(int delta);

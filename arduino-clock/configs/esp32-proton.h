@@ -9,19 +9,20 @@
 // Which functionality is enabled in this clock?
 // Related settings will also be enabled in the settings menu.
 // The operating instructions assume all of these are enabled except temp and tubetest.
-#define ENABLE_DATE_FN true
-#define ENABLE_DATE_COUNTER true
-#define ENABLE_DATE_RISESET true
-#define ENABLE_ALARM_FN true
-#define ENABLE_ALARM2_FN true
-#define ENABLE_ALARM_AUTOSKIP true
-#define ENABLE_ALARM_FIBONACCI false // irrelevant to proton
-#define ENABLE_TIMER_FN true //required for proton sleep function
-#define ENABLE_TIME_CHIME false // irrelevant to proton
+#define ENABLE_DATE true //formerly ENABLE_DATE_FN
+#define ENABLE_DAY_COUNTER true //requires date //formerly ENABLE_DATE_COUNTER
+#define ENABLE_SUN true //requires date //formerly ENABLE_DATE_RISESET
+#define ENABLE_WEATHER true //requires date
+#define ENABLE_ALARM true //formerly ENABLE_ALARM_FN
+#define ENABLE_ALARM2 true //requires alarm
+#define ENABLE_ALARM_AUTOSKIP true //requires alarm
+#define ENABLE_ALARM_FIBONACCI false //requires alarm
+#define ENABLE_TIMER true //required for proton (sleep)
+#define ENABLE_CHIME false //formerly ENABLE_TIME_CHIME
 #define ENABLE_DIMMING true
 #define ENABLE_AWAYMODE true
-#define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
-#define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
+#define ENABLE_THERMOMETER false //Temperature per DS3231 - will read high – leave false for production //formerly ENABLE_TEMP_FN
+#define ENABLE_TUBETEST false //Cycles through all tubes – leave false for production //formerly ENABLE_TUBETEST_FN?
 
 
 ///// Real-Time Clock /////
@@ -136,13 +137,9 @@
 #define SWITCH_DUR 7200 //sec - when alarm triggers switch signal, it's switched on for this period (e.g. 7200 = 2hr)
 #define PULSE_LENGTH 200 //ms - length of pulse signal's individual pulses (e.g. to drive a solenoid to ring a bell)
 
-//Soft power switches
+//Soft power switches - required for Proton
 #define ENABLE_SOFT_ALARM_SWITCH 1
-// 1 = yes. Alarm can be switched on and off when clock is displaying the alarm time (FN_ALARM).
-// 0 = no. Alarm will be permanently on. Use with switch signal if the appliance has its own switch on this circuit (and note that, if another signal type(s) is available and selected for the alarm, the user won't be able to switch it off). Also disables skip feature. Note that the instructions do not reflect this option.
-#define ENABLE_SOFT_POWER_SWITCH 1 //switch signal only
-// 1 = yes. Switch signal can be toggled on and off directly with Alt button at any time (except in settings menu). This is useful if connecting an appliance (e.g. radio) that doesn't have its own switch, or if replacing the clock unit in a clock radio where the clock does all the switching (e.g. Telechron).
-// 0 = no. Use if the connected appliance has its own power switch (independent of this circuit, e.g. some Sony Digimatic clock radios) or does not need to be manually switched. In this case (and/or if there is no switch signal option, and if no Wi-Fi support) Alt will act as a function preset. Note that the instructions do not reflect this option.
+#define ENABLE_SOFT_POWER_SWITCH 1
 
 //Backlighting control
 #define BACKLIGHT_PIN -1 // -1 to disable feature; 9 if equipped (UNDB v9)

@@ -19,7 +19,7 @@
   //#include <FlashStorage.h> //regular mode
 #endif
 
-#define STORAGE_SPACE 152 //number of bytes
+#define STORAGE_SPACE 154 //number of bytes
 byte storageBytes[STORAGE_SPACE]; //the volatile array of bytes
 #define COMMIT_TO_EEPROM 1 //1 for production
 

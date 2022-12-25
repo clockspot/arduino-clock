@@ -384,7 +384,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   if(getSignalRemain()>0 && evt==1){
     signalStop();
     if(getSignalSource()==FN_ALARM || getSignalSource()==FN_ALARM2) { //If this was the alarm
-      //If the alarm is using the switch signal and this is the Alt button; or if alarm is *not* using the switch signal and this is Fibonacci mode; don't set the snooze //TODO add support for ALARM2
+      //If the alarm is using the switch signal and this is the Alt button; or if alarm is *not* using the switch signal and this is Fibonacci mode; don't set the snooze
       if((readEEPROM(42,false)==1 && CTRL_ALT>0 && ctrl==CTRL_ALT) || (readEEPROM(42,false)!=1 && readEEPROM(50,false))) {
         quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
         displayBlink(); //to indicate this as well
@@ -470,7 +470,8 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
           checkRTC(true); //updates display
         }
         else if(ctrl==CTRL_UP || ctrl==CTRL_DN) {
-          if(getCurFn()==FN_ALARM) switchAlarmState(ctrl==CTRL_UP?1:0); //switch alarm
+          if(getCurFn()==FN_ALARM) switchAlarmState(ctrl==CTRL_UP?1:0,FN_ALARM); //switch alarm
+          if(getCurFn()==FN_ALARM2) switchAlarmState(ctrl==CTRL_UP?1:0,FN_ALARM2); //switch alarm
           if(getCurFn()==FN_TIMER){
             if(ctrl==CTRL_UP){
               if(!getTimerRun()){ //stopped
@@ -535,7 +536,8 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
             if(getCurFn()!=readEEPROM(7,false)) goToFn(readEEPROM(7,false),0);
             else {
               //Special case: if this is the alarm, toggle the alarm switch
-              if(getCurFn()==FN_ALARM) switchAlarmState(2);
+              if(getCurFn()==FN_ALARM) switchAlarmState(2,FN_ALARM);
+              if(getCurFn()==FN_ALARM2) switchAlarmState(2,FN_ALARM2);
             }
             updateDisplay();
           }
