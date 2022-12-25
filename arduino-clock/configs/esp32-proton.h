@@ -10,14 +10,14 @@
 // Related settings will also be enabled in the settings menu.
 // The operating instructions assume all of these are enabled except temp and tubetest.
 #define ENABLE_DATE_FN true
-#define ENABLE_DATE_COUNTER false // TODO on ESP32, needs setting metaphor
+#define ENABLE_DATE_COUNTER true
 #define ENABLE_DATE_RISESET true
 #define ENABLE_ALARM_FN true
 #define ENABLE_ALARM2_FN true
 #define ENABLE_ALARM_AUTOSKIP true
-#define ENABLE_ALARM_FIBONACCI false // irrelevant to ESP32
-#define ENABLE_TIMER_FN true // TODO on ESP32, should only count down (radio sleep mode)
-#define ENABLE_TIME_CHIME false // irrelevant to ESP32
+#define ENABLE_ALARM_FIBONACCI false // irrelevant to proton
+#define ENABLE_TIMER_FN true //required for proton sleep function
+#define ENABLE_TIME_CHIME false // irrelevant to proton
 #define ENABLE_DIMMING true
 #define ENABLE_AWAYMODE true
 #define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production

@@ -398,8 +398,8 @@ void switchPower(byte dir){
 
 void startSet(int n, int m, int x, byte p){ //Enter set state at page p, and start setting a value
   fnSetVal=n; fnSetValMin=m; fnSetValMax=x; fnSetValVel=(x-m>30?1:0); fnSetPg=p; fnSetValDid=false;
-  if(fnSetValMax==59) blankDisplay(0, 3, false); //setting in seconds area - blank h:m
-  else blankDisplay(4, 5, false); //setting in h:m area - blank seconds
+  if(fnSetValMax==59) blankDisplay(0, 3); //setting in seconds area - blank h:m
+  else blankDisplay(4, 5); //setting in h:m area - blank seconds
   updateDisplay();
 }
 void doSet(int delta){
@@ -1242,79 +1242,79 @@ void updateDisplay(){
   // } //todo move cleanRemain, scrollRemain to dispNixie
   // else
   if(fn==FN_VERSION) {
-    editDisplay(vMajor, 0, 1, false, false);
-    editDisplay(vMinor, 2, 3, false, false);
-    editDisplay(vPatch, 4, 5, false, false);
+    editDisplay(vMajor, 0, 1);
+    editDisplay(vMinor, 2, 3);
+    editDisplay(vPatch, 4, 5);
   }
-  else if(tempValDispQueue[0]>0){
+  else if(tempValDispQueue[0]>0){ //include display fades
     editDisplay(tempValDispQueue[0], 0, 3, false, true);
     blankDisplay(4, 5, true);
   }
-  else if(fnSetPg) { //setting value, for either fn or settings menu
+  else if(fnSetPg) { //setting value, for either fn or settings menu - no display fades
     // displayBrightness = 2; //taken over by display code? TODO confirm
-    // blankDisplay(4, 5, false); //taken over by startSet
+    // blankDisplay(4, 5); //taken over by startSet
     byte fnOptCurLoc = (fn>=FN_OPTS? optsLoc[fn-FN_OPTS]: 0); //current setting index loc, to tell what's being set
     if(fnSetValMax==1439) { //Time of day (0-1439 mins, 0:00–23:59): show hrs/mins
-      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero per settings
-      editDisplay(fnSetVal%60, 2, 3, true, false);
+      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false)); //hours with leading zero per settings
+      editDisplay(fnSetVal%60, 2, 3, true);
     } else if(fnSetValMax==5999) { //Timer duration mins (0-5999 mins, up to 99:59): show hrs/mins w/regular leading
-      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false), false); //hours with leading zero per settings
-      editDisplay(fnSetVal%60, 2, 3, true, false); //minutes with leading zero always
+      editDisplay(fnSetVal/60, 0, 1, readEEPROM(19,false)); //hours with leading zero per settings
+      editDisplay(fnSetVal%60, 2, 3, true); //minutes with leading zero always
     } else if(fnSetValMax==59) { //Timer duration secs: show with leading
       //If 6 digits (0-5), display on 4-5
       //If 4 digits (0-3), dislpay on 2-3
-      // blankDisplay(0, 3, false); //taken over by startSet
-      editDisplay(fnSetVal, (DISPLAY_SIZE>4? 4: 2), (DISPLAY_SIZE>4? 5: 3), true, false);
+      // blankDisplay(0, 3); //taken over by startSet
+      editDisplay(fnSetVal, (DISPLAY_SIZE>4? 4: 2), (DISPLAY_SIZE>4? 5: 3), true);
     } else if(fnSetValMax==88) { //A piezo pitch. Play a short demo beep.
-      editDisplay(fnSetVal, 0, 3, false, false);
+      editDisplay(fnSetVal, 0, 3);
       quickBeep(fnSetVal); //Can't use signalStart since we need to specify pitch directly
     } else if(fnOptCurLoc==47 || fnOptCurLoc==48 || fnOptCurLoc==49) { //Signal pattern. Play a demo measure.
-      editDisplay(fnSetVal, 0, 3, false, false);
+      editDisplay(fnSetVal, 0, 3);
       quickBeepPattern((fnOptCurLoc==49?FN_TOD:(fnOptCurLoc==48?FN_TIMER:FN_ALARM)),fnSetVal);
     } else if(fnSetValMax==156) { //Timezone offset from UTC in quarter hours plus 100 (since we're not set up to support signed bytes)
-      editDisplay((abs(fnSetVal-100)*25)/100, 0, 1, fnSetVal<100, false); //hours, leading zero for negatives
-      editDisplay((abs(fnSetVal-100)%4)*15, 2, 3, true, false); //minutes, leading zero always
+      editDisplay((abs(fnSetVal-100)*25)/100, 0, 1, fnSetVal<100); //hours, leading zero for negatives
+      editDisplay((abs(fnSetVal-100)%4)*15, 2, 3, true); //minutes, leading zero always
     } else if(fnSetValMax==900 || fnSetValMax==1800) { //Lat/long in tenths of a degree
       //If 6 digits (0-5), display degrees on 0-3 and tenths on 4, with 5 blank
       //If 4 digits (0-3), display degrees on 0-2 and tenths on 3
-      editDisplay(abs(fnSetVal), 0, (DISPLAY_SIZE>4? 4: 3), fnSetVal<0, false);
-    } else editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0, false); //some other type of value - leading zeros for negatives
+      editDisplay(abs(fnSetVal), 0, (DISPLAY_SIZE>4? 4: 3), fnSetVal<0);
+    } else editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0); //some other type of value - leading zeros for negatives
     #ifdef SEVENSEG
     //Depending on what's being set, display ascii letters on the seconds digits
     switch(fn) {
       case FN_DATE:
         switch(fnSetPg) {
-          case 1: editDisplay(121,4,4,0,0); blankDisplay(5,5,0); break; //year: y + blank
-          case 2: editDisplay(114,4,4,0,0); editDisplay(110,5,5,0,0); break; //month: r + n (hoping it looks like m)
-          case 3: editDisplay(100,4,4,0,0); blankDisplay(5,5,0); break; //date: d + blank
+          case 1: editDisplay(121,4); blankDisplay(5); break; //year: "y_"
+          case 2: editDisplay(114,4); editDisplay(110,5); break; //month: "rn" (hoping it looks like m)
+          case 3: editDisplay(100,4); blankDisplay(5); break; //date: "d_"
           default: break;
         } break;
       case FN_DAY_COUNTER:
         switch(fnSetPg) {
-          case 1: editDisplay(114,4,4,0,0); editDisplay(110,5,5,0,0); break; //month: r + n (hoping it looks like m)
-          case 2: editDisplay(100,4,4,0,0); blankDisplay(5,5,0); break; //date: d + blank
+          case 1: editDisplay(114,4); editDisplay(110,5); break; //month: "rn" (hoping it looks like m)
+          case 2: editDisplay(100,4); blankDisplay(5); break; //date: "d_"
           case 3: //off / down / up - is this right? off may not be displayed as an option
             switch(fnSetVal) { //overwrite main display
-              case 0: blankDisplay(0,0,0); editDisplay(79,1,1,0,0); editDisplay(102,2,2,0,0); editDisplay(102,3,3,0,0); break; //Off
-              case 1: editDisplay(67,0,0,0,0); editDisplay(116,1,1,0,0); editDisplay(100,2,2,0,0); editDisplay(110,3,3,0,0); break; //Ctdn
-              case 2: editDisplay(67,0,0,0,0); editDisplay(116,1,1,0,0); editDisplay(85,2,2,0,0); editDisplay(80,3,3,0,0); break; //CtUP
+              case 0: blankDisplay(0); editDisplay(79,1); editDisplay(102,2); editDisplay(102,3); break; //"_Off"
+              case 1: editDisplay(67,0); editDisplay(116,1); editDisplay(100,2); editDisplay(110,3); break; //"Ctdn"
+              case 2: editDisplay(67,0); editDisplay(116,1); editDisplay(85,2); editDisplay(80,3); break; //"CtUP"
             }
-            blankDisplay(5,5,0);
+            blankDisplay(4,5); //nothing on seconds display
             break;
           default: break;
         }
       case FN_ALARM:
-        editDisplay(65,4,4,0,0); editDisplay(1,5,5,0,0); break; //A1
+        editDisplay(65,4); editDisplay(1,5); break; //"A1"
       case FN_ALARM2:
-        editDisplay(65,4,4,0,0); editDisplay(2,5,5,0,0); break; //A2
+        editDisplay(65,4); editDisplay(2,5); break; //"A2"
       default: break;
     }
     #endif
   }
   else if(fn >= FN_OPTS){ //settings menu, but not setting a value
     // displayBrightness = 2; //taken over by display code? TODO confirm
-    editDisplay(optsNum[fn-FN_OPTS],0,1,false,false); //display setting number on hour digits
-    blankDisplay(2,5,false);
+    editDisplay(optsNum[fn-FN_OPTS],0,1); //display setting number on hour digits
+    blankDisplay(2,5);
   }
   else { //fn running
     
@@ -1361,11 +1361,11 @@ void updateDisplay(){
       case FN_DAY_COUNTER:
         editDisplay(dateComp(rtcGetYear(),rtcGetMonth(),rtcGetDate(),readEEPROM(5,false),readEEPROM(6,false),readEEPROM(4,false)-1),0,3,false,true);
         #ifdef SEVENSEG
-        //on seconds digits, display alpha letters
+        //on seconds digits, display alpha letters - this time with fades
         if(readEEPROM(4,false)-1) { //count up
-          editDisplay(100,4,4,0,0); blankDisplay(5,5,0); //"d"
+          editDisplay(100,4,4,false,true); blankDisplay(5,5,true); //"d_"
         } else { //count down
-          editDisplay(116,4,4,0,0); editDisplay(111,4,4,0,0); //"to" //TODO mod display library to make "til"?
+          editDisplay(116,4,4,false,true); editDisplay(111,5,false,true); //"to" //TODO mod display library to make "til"?
         }
         #else
         blankDisplay(4,5,true);
@@ -1392,13 +1392,13 @@ void updateDisplay(){
         #ifdef SEVENSEG
         //Overwrite alarm display with "Off"
         if(!readEEPROM(2,false)) {
-          blankDisplay(0,0,0); editDisplay(79,1,1,0,0); editDisplay(102,2,2,0,0); editDisplay(102,3,3,0,0);
+          blankDisplay(0,0,true); editDisplay(79,1,1,0,true); editDisplay(102,2,2,0,true); editDisplay(102,3,3,0,true);
         }
         #endif
         #ifdef INPUT_PROTON
         //Display "A1" on seconds
         //I'm using INPUT_PROTON here rather than SEVENSEG or ENABLE_ALARM2_FN, since it implies both; and there is little point displaying the status since the button state indicates it, and toggling will clear autoskip.
-        editDisplay(65,4,4,0,0); editDisplay(1,5,5,0,0); break; //A1
+        editDisplay(65,4,4,0,true); editDisplay(1,5,5,0,true); break; //A1
         #else
         //Display alarm status on seconds
         if(readEEPROM(2,false) && alarmSkip){ //alarm on+skip
@@ -1415,7 +1415,7 @@ void updateDisplay(){
         #ifdef INPUT_PROTON
         //Display "A2" on seconds
         //I'm using INPUT_PROTON here rather than SEVENSEG or ENABLE_ALARM2_FN, since it implies both; and there is little point displaying the status since the button state indicates it, and toggling will clear autoskip.
-        editDisplay(65,4,4,0,0); editDisplay(2,5,5,0,0); break; //A2
+        editDisplay(65,4,4,0,true); editDisplay(2,5,5,0,true); break; //A2
         #else
         //Display alarm status on seconds
         if(readEEPROM(2,false) && alarmSkip){ //alarm on+skip
@@ -1469,12 +1469,12 @@ void updateDisplay(){
         //TODO if sevenseg, could display oF or oC
         break;
       case FN_TUBETEST:
-        editDisplay(rtcGetSecond(),0,0,true,false);
-        editDisplay(rtcGetSecond(),1,1,true,false);
-        editDisplay(rtcGetSecond(),2,2,true,false);
-        editDisplay(rtcGetSecond(),3,3,true,false);
-        editDisplay(rtcGetSecond(),4,4,true,false);
-        editDisplay(rtcGetSecond(),5,5,true,false);
+        editDisplay(rtcGetSecond(),0);
+        editDisplay(rtcGetSecond(),1);
+        editDisplay(rtcGetSecond(),2);
+        editDisplay(rtcGetSecond(),3);
+        editDisplay(rtcGetSecond(),4);
+        editDisplay(rtcGetSecond(),5);
       default: break;
     }//end switch
   } //end if fn running
@@ -1529,7 +1529,7 @@ void calcSun(){
   int m = rtcGetMonth();
   int d = rtcGetDate();
   //Serial.print(millis(),DEC); Serial.println(F("blank display per calcsun"));
-  //blankDisplay(0,5,false); //immediately blank display so we can fade in from it elegantly
+  //blankDisplay(0,5); //immediately blank display so we can fade in from it elegantly
   //TODO causes nixie blinking during initial startup and after ntp sync
   Dusk2Dawn here(float(readEEPROM(10,true))/10, float(readEEPROM(12,true))/10, (float(readEEPROM(14,false))-100)/4);
   //Today
@@ -1590,9 +1590,9 @@ void displaySun(byte which, int d, int tod){
   }
   #ifdef SEVENSEG
   if(evtIsRise) {
-    editDisplay(85,4,4,0,0); editDisplay(80,5,5,0,0); break; //UP
+    editDisplay(85,4,4,0,true); editDisplay(80,5,5,0,true); break; //UP
   } else {
-    editDisplay(100,4,4,0,0); editDisplay(110,5,5,0,0); break; //dn
+    editDisplay(100,4,4,0,true); editDisplay(110,5,5,0,true); break; //dn
   }
   #else
   blankDisplay(4, 4, true);
