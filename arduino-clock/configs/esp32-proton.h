@@ -8,21 +8,21 @@
 
 // Which functionality is enabled in this clock?
 // Related settings will also be enabled in the settings menu.
-// The operating instructions assume all of these are enabled except temp and tubetest.
-#define ENABLE_DATE true //formerly ENABLE_DATE_FN
-#define ENABLE_DAY_COUNTER true //requires date //formerly ENABLE_DATE_COUNTER
-#define ENABLE_SUN true //requires date //formerly ENABLE_DATE_RISESET
+// The operating instructions assume all of these are enabled except thermometer and tubetest.
+#define ENABLE_DATE true
+#define ENABLE_DAY_COUNTER true //requires date
+#define ENABLE_SUN true //requires date
 #define ENABLE_WEATHER true //requires date
-#define ENABLE_ALARM true //formerly ENABLE_ALARM_FN
+#define ENABLE_ALARM true
 #define ENABLE_ALARM2 true //requires alarm
 #define ENABLE_ALARM_AUTOSKIP true //requires alarm
-#define ENABLE_ALARM_FIBONACCI false //requires alarm
+#define ENABLE_ALARM_FIBONACCI true //requires alarm //TEST is skipped?
 #define ENABLE_TIMER true //required for proton (sleep)
-#define ENABLE_CHIME false //formerly ENABLE_TIME_CHIME
+#define ENABLE_CHIME true //TEST is skipped?
 #define ENABLE_DIMMING true
 #define ENABLE_AWAYMODE true
-#define ENABLE_THERMOMETER false //Temperature per DS3231 - will read high – leave false for production //formerly ENABLE_TEMP_FN
-#define ENABLE_TUBETEST false //Cycles through all tubes – leave false for production //formerly ENABLE_TUBETEST_FN?
+#define ENABLE_THERMOMETER false //Temperature per DS3231 - will read high – leave false for production //formerly ENABLE_TEMP_FN //TODO test by tagging on end
+#define ENABLE_TUBETEST false //Cycles through all tubes – leave false for production //formerly ENABLE_TUBETEST_FN
 
 
 ///// Real-Time Clock /////
