@@ -46,7 +46,7 @@ These ones are set outside the settings menu (defaults defined in initEEPROM() w
   152-153 Alarm2 time, mins //NEW
   2 Alarm on
   3 Alarm2 on //NEW
-  4 Day count direction //NEW accessible as 6 via settings as well, so you can reenable it if disabled in direct setter TODO that
+  4 Day count direction (also settable via settings menu, as below)
   5 Day count month
   6 Day count date
   7 Function preset (done by Alt when not power-switching)
@@ -66,11 +66,12 @@ These ones are set outside the settings menu (defaults defined in initEEPROM() w
 These ones are set inside the settings menu (defaults defined in arrays below).
 Some are skipped when they wouldn't apply to a given clock's hardware config, see fnOptScroll(); these ones will also be set at startup to the start= values, see setup(). Otherwise, make sure these ones' defaults work for all configs.
 TODO consider adding additional settings for Alarm2 – currently both alarms share same output characteristics (snooze, signal, pitch, pattern, fibonacci)
+   4 Day count direction (also settable via direct setter, as above)
   10-11 Latitude
   12-13 Longitude
   14 UTC offset in quarter-hours plus 100 - range is 52 (-12h or -48qh, US Minor Outlying Islands) to 156 (+14h or +56qh, Kiribati)
   16 Time format
-  17 Date format 
+  17 Date format
   18 Display date during time
   19 Leading zeros in time hour, calendar, and chrono/timer
   20 Digit fade duration
@@ -1320,49 +1321,121 @@ void updateDisplay(){
       editDisplay(fnSetVal, 0, 3);
       quickBeepPattern((fnOptCurLoc==49?FN_TOD:(fnOptCurLoc==48?FN_TIMER:FN_ALARM)),fnSetVal);
     } else if(fnSetValMax==156) { //Timezone offset from UTC in quarter hours plus 100 (since we're not set up to support signed bytes)
-      editDisplay((abs(fnSetVal-100)*25)/100, 0, 1, fnSetVal<100); //hours, leading zero for negatives
+      //Display hours on 0-1 and minutes on 2-3. If sevenseg, omit negative LZs and display - at 0 (when hour>-10).
+      #ifdef SEVENSEG
+        editDisplay((abs(fnSetVal-100)*25)/100, 0, 1); //hours
+        if(fnSetVal<100 && fnSetVal>60) editDisplay(45,0); //negative symbol
+        //TODO add support for "-1" in single character for when hour<=-10
+      #else
+        editDisplay((abs(fnSetVal-100)*25)/100, 0, 1, fnSetVal<100); //hours, leading zero for negatives
+      #endif
       editDisplay((abs(fnSetVal-100)%4)*15, 2, 3, true); //minutes, leading zero always
     } else if(fnSetValMax==900 || fnSetValMax==1800) { //Lat/long in tenths of a degree
-      //If 6 digits (0-5), display degrees on 0-3 and tenths on 4, with 5 blank
-      //If 4 digits (0-3), display degrees on 0-2 and tenths on 3
-      editDisplay(abs(fnSetVal), 0, (DISPLAY_SIZE>4? 4: 3), fnSetVal<0);
-    } else editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0); //some other type of value - leading zeros for negatives
-    #ifdef SEVENSEG
-    //Depending on what's being set, display ascii letters on the seconds digits
-    switch(fn) {
-      case FN_DATE:
-        switch(fnSetPg) {
-          case 1: editDisplay(121,4); blankDisplay(5); break; //year: "y_"
-          case 2: editDisplay(114,4); editDisplay(110,5); break; //month: "rn" (hoping it looks like m)
-          case 3: editDisplay(100,4); blankDisplay(5); break; //date: "d_"
-          default: break;
-        } break;
-      case FN_DAY_COUNTER:
-        switch(fnSetPg) {
-          case 1: editDisplay(114,4); editDisplay(110,5); break; //month: "rn" (hoping it looks like m)
-          case 2: editDisplay(100,4); blankDisplay(5); break; //date: "d_"
-          case 3: //off / down / up - is this right? off may not be displayed as an option
-            switch(fnSetVal) { //overwrite main display
-              case 0: blankDisplay(0); editDisplay(79,1); editDisplay(102,2); editDisplay(102,3); break; //"_Off"
-              case 1: editDisplay(67,0); editDisplay(116,1); editDisplay(100,2); editDisplay(110,3); break; //"Ctdn"
-              case 2: editDisplay(67,0); editDisplay(116,1); editDisplay(85,2); editDisplay(80,3); break; //"CtUP"
-            }
-            blankDisplay(4,5); //nothing on seconds display
-            break;
-          default: break;
-        }
-      case FN_ALARM:
-        editDisplay(65,4); editDisplay(1,5); break; //"A1"
-      case FN_ALARM2:
-        editDisplay(65,4); editDisplay(2,5); break; //"A2"
-      default: break;
+      //If 6 digits (0-5), display degrees on 0-3 and tenths on 4, with 5 blank. If sevenseg, omit negative LZs and display - at 0.
+      //If 4 digits (0-3), display degrees on 0-2 and tenths on 3. If sevenseg, omit negative LZs and display - at 0 (when fnSetVal > -1000).
+      #ifdef SEVENSEG
+        editDisplay(abs(fnSetVal), 0, (DISPLAY_SIZE>4? 4: 3));
+        if(fnSetVal<0 && (fnSetVal>-1000 || DISPLAY_SIZE>4)) editDisplay(45,0); //negative symbol
+        //TODO add support for "-1" in single character for when fnSetVal<=-1000
+      #else
+        editDisplay(abs(fnSetVal), 0, (DISPLAY_SIZE>4? 4: 3), fnSetVal<0);
+      #endif
+    } else { //some other type of value. If sevenseg, omit negative LZs and display - at 0 (when fnSetVal > -1000).
+      #ifdef SEVENSEG
+        editDisplay(abs(fnSetVal), 0, 3);
+        if(fnSetVal<0 && fnSetVal>-1000) editDisplay(45,0); //negative symbol
+        //TODO add support for "-1" in single character for when fnSetVal<=-1000
+      #else
+        editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0);
+      #endif
     }
-    #endif
-  }
+    #ifdef SEVENSEG
+    //Depending on what's being set, display ascii letters to be more intuitive
+    if(fn<FN_OPTS) { //just setting a regular fn
+      switch(fn) {
+        case FN_DATE:
+          switch(fnSetPg) {
+            case 1: editDisplay(121,4); editDisplay(114,5); break; //year: "yr"
+            case 2: editDisplay(114,4); editDisplay(110,5); break; //month: "rn" (hoping it looks like m)
+            case 3: editDisplay(100,4); editDisplay(116,5); break; //date: "dt"
+            default: break;
+          } break;
+        case FN_DAY_COUNTER:
+          switch(fnSetPg) {
+            case 1: editDisplay(114,4); editDisplay(110,5); break; //month: "rn" (hoping it looks like m)
+            case 2: editDisplay(100,4); editDisplay(116,5); break; //date: "dt"
+            case 3: //Day count direction - duplicate of below //TODO is this right?
+              switch(fnSetVal) {
+                case 0: blankDisplay(0); editDisplay(79,1); editDisplay(102,2); editDisplay(102,3); break; //"_Off"
+                case 1: editDisplay(67,0); editDisplay(116,1); editDisplay(100,2); editDisplay(110,3); break; //"Ctdn"
+                case 2: editDisplay(67,0); editDisplay(116,1); editDisplay(85,2); editDisplay(80,3); break; //"CtUP"
+              }
+              blankDisplay(4,5); //nothing on seconds display
+              break;
+            default: break;
+          }
+        case FN_ALARM:
+          editDisplay(65,4); editDisplay(1,5); break; //"A1"
+        case FN_ALARM2:
+          editDisplay(65,4); editDisplay(2,5); break; //"A2"
+        default: break;
+      }
+    } else { //in settings menu
+      switch(fnOptCurLoc) {
+        case 4: //Day count direction – duplicate of above
+          switch(fnSetVal) {
+            case 0: blankDisplay(0); editDisplay(79,1); editDisplay(102,2); editDisplay(102,3); break; //"_Off"
+            case 1: editDisplay(67,0); editDisplay(116,1); editDisplay(100,2); editDisplay(110,3); break; //"Ctdn"
+            case 2: editDisplay(67,0); editDisplay(116,1); editDisplay(85,2); editDisplay(80,3); break; //"CtUP"
+          }
+          break;
+        case 16: //Time format
+          switch(fnSetVal) {
+            case 1: editDisplay(12,1,2); editDisplay(104,3); blankDisplay(4); break; //"12h_"
+            case 2: editDisplay(24,1,2); editDisplay(104,3); blankDisplay(4); break; //"24h_"
+          }
+          break;
+        case 17: //Date format
+          switch(fnSetVal) {
+            //1 = month/date/weekday<br/>2 = date/month/weekday<br/>3 = month/date/year<br/>4 = date/month/year<br/>5 = year/month/date
+            case 1: //month/date/weekday
+              editDisplay(114,0); editDisplay(110,1); //"rn" (hoping it looks like m)
+              editDisplay(100,2); editDisplay(116,3); //"dt"
+              editDisplay(100,4); editDisplay(121,5); //"dy"
+              break;
+            case 2: //date/month/weekday
+              editDisplay(100,0); editDisplay(116,1); //"dt"
+              editDisplay(114,2); editDisplay(110,3); //"rn" (hoping it looks like m)
+              editDisplay(100,4); editDisplay(121,5); //"dy"
+              break;
+            case 3: //month/date/year
+              editDisplay(114,0); editDisplay(110,1); //"rn" (hoping it looks like m)
+              editDisplay(100,2); editDisplay(116,3); //"dt"
+              editDisplay(121,4); editDisplay(114,5); //"yr"
+              break;
+            case 4: //date/month/year
+              editDisplay(100,0); editDisplay(116,1); //"dt"
+              editDisplay(114,2); editDisplay(110,3); //"rn" (hoping it looks like m)
+              editDisplay(121,4); editDisplay(114,5); //"yr"
+              break;
+            case 5: //year/month/date
+              editDisplay(121,0); editDisplay(114,1); //"yr"
+              editDisplay(114,2); editDisplay(110,3); //"rn" (hoping it looks like m)
+              editDisplay(100,4); editDisplay(116,5); //"dt"
+              break;
+          }
+          break;
+        //add any future value overwrites here
+        default: break;
+      } //end switch(fnOptCurLoc)
+    } //end in settings menu
+    #endif //sevenseg
+  } //end if setting
   else if(fn >= FN_OPTS){ //settings menu, but not setting a value
     // displayBrightness = 2; //taken over by display code? TODO confirm
     editDisplay(optsNum[fn-FN_OPTS],0,1); //display setting number on hour digits
     blankDisplay(2,5);
+    //If sevenseg, could consider displaying a "key" here, but I tried it and it was still pretty obtuse
   }
   else { //fn running
     
