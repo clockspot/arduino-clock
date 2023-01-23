@@ -12,7 +12,8 @@
 
 #ifdef __AVR__
   #include <EEPROM.h> //Arduino - GNU LPGL
-#else //SAMD - is there a better way to detect EEPROM availability? TODO
+#endif
+#ifdef SAMD_SERIES //TODO does this work
   #define FLASH_AS_EEPROM
   //cmaglie's FlashStorage library - https://github.com/cmaglie/FlashStorage/
   #include <FlashAsEEPROM.h> //EEPROM mode
@@ -21,7 +22,9 @@
 
 #define STORAGE_SPACE 154 //number of bytes
 byte storageBytes[STORAGE_SPACE]; //the volatile array of bytes
-#define COMMIT_TO_EEPROM 1 //1 for production
+#define COMMIT_TO_EEPROM 0 //1 for production
+
+#if defined(__AVR__) || defined(SAMD_SERIES)
 
 void initStorage(){
   //If this is SAMD, write starting values if unused
@@ -82,3 +85,35 @@ void commitEEPROM(){
   }
   #endif
 }
+
+#else //not AVR or SAMD - probably ESP32 - don't store anything, just fake it
+
+void initStorage(){}
+
+int readEEPROM(int loc, bool isInt){
+  //Read from the volatile array, either a byte or a signed int
+  //Must read int as 16-bit, since on SAMD int is 32-bit and negatives aren't read correctly
+  if(isInt) return (int16_t)(storageBytes[loc]<<8)+storageBytes[loc+1];
+  else return storageBytes[loc];
+}
+
+bool writeEEPROM(int loc, int val, bool isInt, bool commit){
+  //Update the volatile array
+  //Eiither a byte or a signed int
+  //Serial.print(F("Set ")); Serial.print(loc); Serial.print(F("=")); Serial.print(val,DEC);
+  if(readEEPROM(loc,isInt)==val){
+    //Serial.println(F(": nothing doing"));
+    return false;
+  }
+  //Serial.println(F(": ok (probably)"));
+  if(isInt){
+    storageBytes[loc] = highByte(val);
+    storageBytes[loc+1] = lowByte(val);
+  } else {
+    storageBytes[loc] = val;
+  }
+  return true; //a value was changed
+}
+void commitEEPROM(){}
+
+#endif //end type of board
