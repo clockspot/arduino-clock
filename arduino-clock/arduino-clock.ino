@@ -21,7 +21,7 @@ const bool vDev = 1;
 #if ENABLE_SUN //this probably doesn't work, per the above, but ¯\_(ツ)_/¯
   #include <Dusk2Dawn.h> //DM Kishi - unlicensed - install in your Arduino IDE if needed - test without
 #endif
-#include "storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash
+#include "storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash (including esp32? TODO find out)
 #include "dispNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
 #include "dispMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
 #include "dispHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
@@ -30,7 +30,12 @@ const bool vDev = 1;
 #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
 #include "inputSimple.h" //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU
 #include "inputProton.h" //for a more diverse set of controls, namely the buttons and switches on a Proton 320 clock radio
-#include "network.h" //if not AVR – enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
+#include "networkNINA.h" //enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
+#include "networkESP32.h" //enables WiFi/web-based config/NTP sync on esp32 //TODO
+
+#ifndef NETWORK_SUPPORTED
+#define NETWORK_SUPPORTED false
+#endif
 
 
 ////////// Variables and storage //////////
@@ -204,7 +209,7 @@ void setup(){
     fn = FN_VERSION;
     //skip network for now, since wifi connect hangs - we'll do it after version display is done
   } else {
-    if(networkSupported()) initNetwork();
+    if(NETWORK_SUPPORTED) initNetwork();
   }
   
   //Some settings need to be set to a fixed value per the configuration.
@@ -272,7 +277,7 @@ void loop(){
   checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
   millisApplyDrift();
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
-  if(networkSupported()) cycleNetwork();
+  if(NETWORK_SUPPORTED) cycleNetwork();
   cycleTimer();
   cycleTweening();
   cycleDisplay( //keeps the display hardware multiplexing cycle going
@@ -506,7 +511,7 @@ void setDate() { //NEW
     case 3: //save date, exit set //TODO: for proton, cycle set?
       rtcSetDate(fnSetValDate[0],fnSetValDate[1],fnSetVal,
         dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal));
-      if(networkSupported()) clearNTPSyncLast();
+      if(NETWORK_SUPPORTED) clearNTPSyncLast();
       calcSun();
       isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,rtcGetHour(),true);
       clearSet();
@@ -548,7 +553,7 @@ void setTime() { //NEW
     case 1: //save mins
       if(fnSetValDid){ //but only if the value was actually changed
         rtcSetTime(fnSetVal/60,fnSetVal%60,0);
-        if(networkSupported()) clearNTPSyncLast();
+        if(NETWORK_SUPPORTED) clearNTPSyncLast();
         millisAtLastCheck = 0; //see ms()
         calcSun();
         isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),fnSetVal/60,true);
@@ -630,7 +635,7 @@ bool initEEPROM(bool hard){
   if(hard) {
     rtcSetDate(2021,1,1,dayOfWeek(2021,1,1));
     rtcSetTime(0,0,0);
-    if(networkSupported()) clearNTPSyncLast();
+    if(NETWORK_SUPPORTED) clearNTPSyncLast();
   }
   //The vars outside the settings menu
   if(hard || readEEPROM(0,true)>1439) changed += writeEEPROM(0,420,true,false); //0-1: alarm at 7am
@@ -644,7 +649,7 @@ bool initEEPROM(bool hard){
   if(hard) changed += writeEEPROM(7,0,false,false); //7: Alt function preset
   //8: TODO functions/pages enabled (bitmask)
   if(hard) changed += writeEEPROM(15,0,false,false); //15: last known DST on flag - clear on hard reset (to match the reset RTC/auto DST/anti-poisoning settings to trigger midnight tubes as a tube test)
-  if(networkSupported()){
+  if(NETWORK_SUPPORTED){
     if(hard){ //everything in here needs no range testing
       //51-54 NTP server IP address (4 bytes) - e.g. from https://tf.nist.gov/tf-cgi/servers.cgi
       //Serial.println(F("setting IP address in eeprom"));
@@ -861,7 +866,7 @@ void checkRTC(bool force){
     }
     
     //NTP cue at :59:00
-    if(rtcGetMinute()==59 && networkSupported()){
+    if(rtcGetMinute()==59 && NETWORK_SUPPORTED){
       if(rtcGetSecond()==0) cueNTP();
       if(rtcGetSecond()==30 && ntpSyncAgo()>=30000) cueNTP(); //if at first you don't succeed...
     }
@@ -1462,7 +1467,7 @@ void updateDisplay(){
         editDisplay(hr, 0, 1, readEEPROM(19,false), true);
         editDisplay(rtcGetMinute(), 2, 3, true, true);
         //Serial.print(millis(),DEC); Serial.println(F("show display per regular (hours/mins at least)"));
-        if(networkSupported() && readEEPROM(9,false) && ntpSyncAgo()>=86400000){ blankDisplay(4,5,true); break; }
+        if(NETWORK_SUPPORTED && readEEPROM(9,false) && ntpSyncAgo()>=86400000){ blankDisplay(4,5,true); break; }
         if(readEEPROM(18,false)==1) editDisplay(rtcGetDate(), 4, 5, readEEPROM(19,false), true); //date
         else editDisplay(rtcGetSecond(), 4, 5, true, true); //seconds
         break;

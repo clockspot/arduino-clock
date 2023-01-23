@@ -1,8 +1,11 @@
 #include <arduino.h>
 #include "arduino-clock.h"
 
+#ifdef NETWORK_NINA
 #ifndef __AVR__ //TODO better sensor
 //do stuff for wifinina
+
+#define NETWORK_SUPPORTED true
 
 #include "network.h"
 #include <WiFiNINA.h>
@@ -37,8 +40,6 @@ WiFiServer server(80);
 #define NTP_TIMEOUT 1000 //how long to wait for a request to finish - the longer it takes, the less reliable the result is
 #define NTP_MINFREQ 5000 //how long to enforce a wait between request starts (NIST requires at least 4sec between requests or will ban the client)
 #define NTPOK_THRESHOLD 3600000 //if no sync within 60 minutes, the time is considered stale
-
-bool networkSupported(){ return true; }
 
 void initNetwork(){
   //Serial.println(F("Hello world from network.cpp"));
@@ -927,3 +928,4 @@ void checkClients(){
 bool networkSupported(){ return false; }
 
 #endif //__AVR__ (network supported)
+#endif //defined NETWORK_NINA
