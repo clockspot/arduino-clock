@@ -4,7 +4,7 @@
 // Inspired by original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
 
 #include <arduino.h>
-#include "arduino-clock.h";
+#include "arduino-clock.h"
 
 ////////// Software version //////////
 const byte vMajor = 2;
@@ -16,22 +16,42 @@ const bool vDev = 1;
 
 // These modules are used per the available hardware and features enabled in the config file.
 // The disp and rtc options are mutually exclusive and define the same functions.
-// Because the Arduino IDE preprocessor seems to #include without regard to #if blocks (see https://forum.arduino.cc/index.php?topic=134226.0), I don't have #ifdef blocks around these header file inclusions. Instead I simply include them all, and have #ifdef blocks around the corresponding cpp code so only the specified code is compiled. It's dumb, but it works.
+// Older (<v2) versions of the Arduino IDE preprocessor seem to #include without regard to #if blocks (see https://forum.arduino.cc/index.php?topic=134226.0), so in addition to these ifdefs (which are needed for IDE v2+), I also have ifdefs around the corresponding cpp code.
 
 #if ENABLE_SUN //this probably doesn't work, per the above, but ¯\_(ツ)_/¯
   #include <Dusk2Dawn.h> //DM Kishi - unlicensed - install in your Arduino IDE if needed - test without
 #endif
 #include "storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash (including esp32? TODO find out)
-#include "dispNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
-#include "dispMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
-#include "dispHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
-#include "lightsensorVEML7700.h" //if LIGHTSENSOR_VEML7700 is defined in config - for I2C VEML7700 lux sensor
-#include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
-#include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
-#include "inputSimple.h" //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU
-#include "inputProton.h" //for a more diverse set of controls, namely the buttons and switches on a Proton 320 clock radio
-#include "networkNINA.h" //enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
-#include "networkESP32.h" //enables WiFi/web-based config/NTP sync on esp32 //TODO
+#ifdef DISPLAY_NIXIE
+  #include "dispNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
+#endif
+#ifdef DISPLAY_MAX7219
+  #include "dispMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
+#endif
+#ifdef DISPLAY_HT16K33
+  #include "dispHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
+#endif
+#ifdef LIGHTSENSOR_VEML7700
+  #include "lightsensorVEML7700.h" //if LIGHTSENSOR_VEML7700 is defined in config - for I2C VEML7700 lux sensor
+#endif
+#ifdef RTC_DS3231
+  #include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
+#endif
+#ifdef RTC_MILLIS
+  #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
+#endif
+#ifdef INPUT_SIMPLE
+  #include "inputSimple.h" //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU
+#endif
+#ifdef INPUT_PROTON
+  #include "inputProton.h" //for a more diverse set of controls, namely the buttons and switches on a Proton 320 clock radio
+#endif
+#ifdef NETWORK_NINA
+  #include "networkNINA.h" //enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
+#endif
+#ifdef NETWORK_ESP32
+  #include "networkESP32.h" //enables WiFi/web-based config/NTP sync on esp32 //TODO
+#endif
 
 #ifndef NETWORK_SUPPORTED
 #define NETWORK_SUPPORTED false
