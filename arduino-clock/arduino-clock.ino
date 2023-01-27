@@ -40,21 +40,17 @@ const bool vDev = 1;
 #ifdef RTC_MILLIS
   #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
 #endif
-#ifdef INPUT_SIMPLE
+
+#if defined(INPUT_SIMPLE)
   #include "inputSimple.h" //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU
-#endif
-#ifdef INPUT_PROTON
+#elif defined(INPUT_PROTON)
   #include "inputProton.h" //for a more diverse set of controls, namely the buttons and switches on a Proton 320 clock radio
 #endif
-#ifdef NETWORK_NINA
-  #include "networkNINA.h" //enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
-#endif
-#ifdef NETWORK_ESP32
-  #include "networkESP32.h" //enables WiFi/web-based config/NTP sync on esp32 //TODO
-#endif
 
-#ifndef NETWORK_SUPPORTED
-#define NETWORK_SUPPORTED false
+#if defined(NETWORK_NINA)
+  #include "networkNINA.h" //enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
+#elif defined(NETWORK_ESP32)
+  #include "networkESP32.h" //enables WiFi/web-based config/NTP sync on esp32 //TODO
 #endif
 
 
@@ -220,7 +216,7 @@ void setup(){
   rtcInit();
   initStorage(); //pulls persistent storage data into volatile vars - see storage.cpp
   byte changed = initEEPROM(false); //do a soft init to make sure vals in range
-  #ifdef LIGHTSENSOR
+  #ifdef LIGHTSENSOR //TODO do it like NETWORK_H below
     initLightSensor();
   #endif
   initDisplay();
@@ -229,7 +225,9 @@ void setup(){
     fn = FN_VERSION;
     //skip network for now, since wifi connect hangs - we'll do it after version display is done
   } else {
-    if(NETWORK_SUPPORTED) initNetwork();
+    #ifdef NETWORK_H
+      initNetwork();
+    #endif
   }
   
   //Some settings need to be set to a fixed value per the configuration.
@@ -297,7 +295,9 @@ void loop(){
   checkRTC(false); //if clock has ticked, decrement timer if running, and updateDisplay
   millisApplyDrift();
   checkInputs(); //if inputs have changed, this will do things + updateDisplay as needed
-  if(NETWORK_SUPPORTED) cycleNetwork();
+  #ifdef NETWORK_H
+    cycleNetwork();
+  #endif
   cycleTimer();
   cycleTweening();
   cycleDisplay( //keeps the display hardware multiplexing cycle going
@@ -531,7 +531,9 @@ void setDate() { //NEW
     case 3: //save date, exit set //TODO: for proton, cycle set?
       rtcSetDate(fnSetValDate[0],fnSetValDate[1],fnSetVal,
         dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal));
-      if(NETWORK_SUPPORTED) clearNTPSyncLast();
+      #ifdef NETWORK_H
+        clearNTPSyncLast();
+      #endif
       calcSun();
       isDSTByHour(fnSetValDate[0],fnSetValDate[1],fnSetVal,rtcGetHour(),true);
       clearSet();
@@ -573,7 +575,9 @@ void setTime() { //NEW
     case 1: //save mins
       if(fnSetValDid){ //but only if the value was actually changed
         rtcSetTime(fnSetVal/60,fnSetVal%60,0);
-        if(NETWORK_SUPPORTED) clearNTPSyncLast();
+        #ifdef NETWORK_H
+          clearNTPSyncLast();
+        #endif
         millisAtLastCheck = 0; //see ms()
         calcSun();
         isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),fnSetVal/60,true);
@@ -600,7 +604,7 @@ void setAlarm(byte whichAlarmFn) { //NEW
 void setTimer() {
   switch(fnSetPg) {
     case 0:
-      if(getTimerRun()||getTimerTime()) { timerClear(); } // updateDisplay(); break; } //If the timer is nonzero or running, zero it. But rather than stop there, just go straight into setting – since adjDn (or cycling fns) can reset to zero
+      if(getTimerRun()||timerTime) { timerClear(); } // updateDisplay(); break; } //If the timer is nonzero or running, zero it. But rather than stop there, just go straight into setting – since adjDn (or cycling fns) can reset to zero
       startSet(timerInitialMins,0,5999,1);
       break;
     case 1: //save timer mins, set timer secs
@@ -655,7 +659,9 @@ bool initEEPROM(bool hard){
   if(hard) {
     rtcSetDate(2021,1,1,dayOfWeek(2021,1,1));
     rtcSetTime(0,0,0);
-    if(NETWORK_SUPPORTED) clearNTPSyncLast();
+    #ifdef NETWORK_H
+      clearNTPSyncLast();
+    #endif
   }
   //The vars outside the settings menu
   if(hard || readEEPROM(0,true)>1439) changed += writeEEPROM(0,420,true,false); //0-1: alarm at 7am
@@ -669,7 +675,7 @@ bool initEEPROM(bool hard){
   if(hard) changed += writeEEPROM(7,0,false,false); //7: Alt function preset
   //8: TODO functions/pages enabled (bitmask)
   if(hard) changed += writeEEPROM(15,0,false,false); //15: last known DST on flag - clear on hard reset (to match the reset RTC/auto DST/anti-poisoning settings to trigger midnight tubes as a tube test)
-  if(NETWORK_SUPPORTED){
+  #ifdef NETWORK_H
     if(hard){ //everything in here needs no range testing
       //51-54 NTP server IP address (4 bytes) - e.g. from https://tf.nist.gov/tf-cgi/servers.cgi
       //Serial.println(F("setting IP address in eeprom"));
@@ -687,7 +693,7 @@ bool initEEPROM(bool hard){
     if(hard || readEEPROM(9,false)>1) changed += writeEEPROM(9,0,false,false);
     //151 Wi-Fi WEP key index
     if(hard || readEEPROM(151,false)>3) changed += writeEEPROM(151,0,false,false);
-  } //end network supported
+  #endif //end network supported
   //The vars inside the settings menu
   bool isInt = false;
   for(byte opt=0; opt<sizeof(optsLoc); opt++) {
@@ -695,6 +701,7 @@ bool initEEPROM(bool hard){
     if(hard || readEEPROM(optsLoc[opt],isInt)<optsMin[opt] || readEEPROM(optsLoc[opt],isInt)>optsMax[opt])
       changed += writeEEPROM(optsLoc[opt],optsDef[opt],isInt,false);
   } //end for
+  if(changed) commitEEPROM();
   return changed>0; //whether EEPROM was changed
 } //end initEEPROM()
 
@@ -784,7 +791,7 @@ void checkRTC(bool force){
         //Serial.print("sr "); Serial.println(snoozeRemain,DEC);
         if(snoozeRemain<=0 && readEEPROM(signalSource==FN_ALARM2?3:2,false)) { //alarm on (check ALARM2 in case the source changed to something else (TODO would this ever happen?), fall back to FN_ALARM signaling)
           fnSetPg = 0; fn = FN_TOD;
-          if(readEEPROM(50,false) && readEEPROM(42,false)!=1) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond()); //fibonacci sequence
+          if(readEEPROM(50,false) && readEEPROM(42,false)!=1) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond(),signalSource); //fibonacci sequence
           else signalStart(signalSource==FN_ALARM2?FN_ALARM2:FN_ALARM,1); //regular alarm
         }
       }
@@ -820,7 +827,7 @@ void checkRTC(bool force){
         //Serial.println(rtcGetSecond()==23?F("It's fibonacci time"):F("It's regular alarm time"));
         if(readEEPROM(2,false) && !alarmSkip) { //if the alarm is on and not skipped, sound it!
           fnSetPg = 0; fn = FN_TOD;
-          if(rtcGetSecond()==23) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond()); //fibonacci sequence
+          if(rtcGetSecond()==23) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond(),FN_ALARM); //fibonacci sequence
           else signalStart(FN_ALARM,1); //regular alarm
         }
         //set alarmSkip for the next instance of the alarm
@@ -838,7 +845,7 @@ void checkRTC(bool force){
         //Serial.println(rtcGetSecond()==23?F("It's fibonacci time"):F("It's regular alarm time"));
         if(readEEPROM(3,false) && !alarm2Skip) { //if the alarm is on and not skipped, sound it!
           fnSetPg = 0; fn = FN_TOD;
-          if(rtcGetSecond()==23) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond()); //fibonacci sequence
+          if(rtcGetSecond()==23) fibonacci(rtcGetHour(),rtcGetMinute(),rtcGetSecond(),FN_ALARM2); //fibonacci sequence
           else signalStart(FN_ALARM2,1); //regular alarm
         }
         //set alarmSkip for the next instance of the alarm
@@ -886,10 +893,12 @@ void checkRTC(bool force){
     }
     
     //NTP cue at :59:00
-    if(rtcGetMinute()==59 && NETWORK_SUPPORTED){
-      if(rtcGetSecond()==0) cueNTP();
-      if(rtcGetSecond()==30 && ntpSyncAgo()>=30000) cueNTP(); //if at first you don't succeed...
-    }
+    #ifdef NETWORK_H
+      if(rtcGetMinute()==59){
+        if(rtcGetSecond()==0) cueNTP();
+        if(rtcGetSecond()==30 && ntpSyncAgo()>=30000) cueNTP(); //if at first you don't succeed...
+      }
+    #endif
     
     //Strikes - only if fn=clock, normal brightness, not in off-hours (given ambient lighting is part of normal brightness), not setting, not signaling/snoozing. Setting 21 will be off if signal type is no good
     //The six pips
@@ -1158,7 +1167,7 @@ void timerStop(){
     updateDisplay(); //since cycleTimer won't do it
   }
 }
-void convertTimerTime(bool mode) {
+unsigned long convertTimerTime(bool mode) {
   //timerTime holds either a duration (when stopped) or an origin (when running).
   if(mode) { //timer is starting: convert from duration to origin
     //If chrono (count up), find origin in the past: now minus duration.
@@ -1487,7 +1496,9 @@ void updateDisplay(){
         editDisplay(hr, 0, 1, readEEPROM(19,false), true);
         editDisplay(rtcGetMinute(), 2, 3, true, true);
         //Serial.print(millis(),DEC); Serial.println(F("show display per regular (hours/mins at least)"));
-        if(NETWORK_SUPPORTED && readEEPROM(9,false) && ntpSyncAgo()>=86400000){ blankDisplay(4,5,true); break; }
+        #ifdef NETWORK_H
+          if(readEEPROM(9,false) && ntpSyncAgo()>=86400000){ blankDisplay(4,5,true); break; }
+        #endif
         if(readEEPROM(18,false)==1) editDisplay(rtcGetDate(), 4, 5, readEEPROM(19,false), true); //date
         else editDisplay(rtcGetSecond(), 4, 5, true, true); //seconds
         break;
@@ -1557,7 +1568,7 @@ void updateDisplay(){
         break;
       case FN_TIMER: //timer - display time
         unsigned long td; //current timer duration - unless this is lap display, in which case show that
-        td = (getTimerRun() && getTimerLapDispOn()? timerLapTime: getTimerDuration());
+        td = (getTimerRun() && getTimerLapDisplay()? timerLapTime: getTimerDuration());
         byte tdc; tdc = (td%1000)/10; //capture hundredths (centiseconds)
         td = td/1000+(!(getTimerDir())&&tdc!=0?1:0); //remove mils, and if countdown, round up
         //Countdown shows H:M:S, but on DISPLAY_SIZE<6 and H<1, M:S
@@ -1735,9 +1746,9 @@ void displaySun(byte which, int d, int tod){
   }
   #ifdef SEVENSEG
   if(evtIsRise) {
-    editDisplay(85,4,4,0,true); editDisplay(80,5,5,0,true); break; //UP
+    editDisplay(85,4,4,0,true); editDisplay(80,5,5,0,true); //UP
   } else {
-    editDisplay(100,4,4,0,true); editDisplay(110,5,5,0,true); break; //dn
+    editDisplay(100,4,4,0,true); editDisplay(110,5,5,0,true); //dn
   }
   #else
   blankDisplay(4, 4, true);
@@ -2057,6 +2068,6 @@ byte getVersionPart(byte part){ //used by network.cpp
     case 0: return vMajor; break;
     case 1: return vMinor; break;
     case 2: return vPatch; break;
-    case 3: return vDev; break;
+    case 3: default: return vDev; break;
   }
 }

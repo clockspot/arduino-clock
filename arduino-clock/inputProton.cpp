@@ -1,15 +1,38 @@
 //"Proton" inputs are a more diverse set of controls, namely the buttons and switches on a Proton 320 clock radio
+//todo pull network support stuff from simple
 
 #include <arduino.h>
 #include "arduino-clock.h"
 
 #ifdef INPUT_PROTON //see arduino-clock.ino Includes section
 
-#include "input-proton.h"
+#include "inputProton.h"
 
 //Needs access to RTC timestamps
-#include "rtcDS3231.h"
-#include "rtcMillis.h"
+#ifdef RTC_DS3231
+  #include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
+#endif
+#ifdef RTC_MILLIS
+  #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
+#endif
+//Needs to be able to start network
+#if defined(NETWORK_NINA)
+  #include "networkNINA.h" //enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
+#elif defined(NETWORK_ESP32)
+  #include "networkESP32.h" //enables WiFi/web-based config/NTP sync on esp32 //TODO
+#endif
+//Needs access to storage
+#include "storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash (including esp32? TODO find out)
+//Needs access to display to blink it
+#ifdef DISPLAY_NIXIE
+  #include "dispNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
+#endif
+#ifdef DISPLAY_MAX7219
+  #include "dispMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
+#endif
+#ifdef DISPLAY_HT16K33
+  #include "dispHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
+#endif
 
 #ifndef HOLDSET_SLOW_RATE
 #define HOLDSET_SLOW_RATE 125
@@ -228,7 +251,9 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
       if(evt==5){ initEEPROM(true); commitEEPROM(); } //superlong hold: reset EEPROM
       setCurFn(FN_TOD);
       inputStop(); updateDisplay();
-      if(networkSupported()) initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
+      #ifdef NETWORK_H
+        initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
+      #endif
       return;
     } else {
       return; //ignore other momentary controls
@@ -297,7 +322,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
     return;
   }
   
-  if(networkSupported()){
+  #ifdef NETWORK_H
     //CTRL_SNOOZE very long hold: start admin
     if(evt==4 && ctrl==CTRL_SNOOZE) {
       networkStartAdmin();
@@ -308,7 +333,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
       networkStartAP();
       return;
     }
-  }
+  #endif
   
   if(getCurFn() < FN_OPTS) { //normal fn running/setting (not in settings menu)
 

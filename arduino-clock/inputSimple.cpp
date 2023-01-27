@@ -5,11 +5,34 @@
 
 #ifdef INPUT_SIMPLE //see arduino-clock.ino Includes section
 
-#include "input-simple.h"
+#include "inputSimple.h"
 
 //Needs access to RTC timestamps
-#include "rtcDS3231.h"
-#include "rtcMillis.h"
+#ifdef RTC_DS3231
+  #include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
+#endif
+#ifdef RTC_MILLIS
+  #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
+#endif
+//Needs to be able to start network
+#if defined(NETWORK_NINA)
+  #include "networkNINA.h" //enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
+#elif defined(NETWORK_ESP32)
+  #include "networkESP32.h" //enables WiFi/web-based config/NTP sync on esp32 //TODO
+#endif
+//Needs access to storage
+#include "storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash (including esp32? TODO find out)
+//Needs access to display to blink it
+#ifdef DISPLAY_NIXIE
+  #include "dispNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
+#endif
+#ifdef DISPLAY_MAX7219
+  #include "dispMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
+#endif
+#ifdef DISPLAY_HT16K33
+  #include "dispHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
+#endif
+
 
 #ifndef HOLDSET_SLOW_RATE
 #define HOLDSET_SLOW_RATE 125
@@ -370,10 +393,12 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   //If the version display is showing, ignore all else until Sel is released (cancel) or long-held (cancel and eeprom reset)
   if(getCurFn()==FN_VERSION){
     if(ctrl==CTRL_SEL && (evt==0 || evt==5)){ //SEL release or superlong hold
-      if(evt==5){ initEEPROM(true); commitEEPROM(); } //superlong hold: reset EEPROM
+      if(evt==5){ initEEPROM(true); } //superlong hold: reset EEPROM
       setCurFn(FN_TOD);
       inputStop(); updateDisplay();
-      if(networkSupported()) initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
+      #ifdef NETWORK_H
+        initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
+      #endif
       return;
     } else {
       return; //ignore other controls
@@ -434,7 +459,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
     return;
   }
   
-  if(networkSupported()){
+  #ifdef NETWORK_H
     //Short hold, Alt; or very long hold, Sel if no Alt: start admin
     if((evt==2 && ctrl==CTRL_ALT)||(evt==4 && ctrl==CTRL_SEL && CTRL_ALT<=0)) {
       networkStartAdmin();
@@ -445,7 +470,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
       networkStartAP();
       return;
     }
-  }
+  #endif
   
   if(getCurFn() < FN_OPTS) { //normal fn running/setting (not in settings menu)
 
@@ -507,7 +532,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
               }
             }
           } //end if FN_TIMER
-          //if(fn==FN_TOD) TODO volume in I2C radio
+          //if(getCurFn()==FN_TOD) TODO volume in I2C radio
         }
         //else do nothing
       } //end sel release or adj press
@@ -516,31 +541,38 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
         if(ENABLE_SOFT_POWER_SWITCH && SWITCH_PIN>=0) {
           //If holds are used to activate network stuff, and we've passed those thresholds, do not switch.
           //Otherwise, switch no matter how long held.
-          if(evt==0 && !(networkSupported() && evtLast<2)) switchPower(2);
+          #ifdef NETWORK_H
+            if(evt==0 && evtLast<2) switchPower(2);
+          #else
+            if(evt==0) switchPower(2);
+          #endif
+          //if(evt==0 && !(defined(NETWORK_H) && evtLast<2)) switchPower(2); //formerly. TODO debug
         }
         //If neither soft power switch nor network support, this becomes our function preset
-        else if(!networkSupported()) {
-          //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
-          //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
-          if(evt==2) {
-            if(readEEPROM(7,false)!=fn) {
+        else {
+          #ifndef NETWORK_H
+            //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
+            //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
+            if(evt==2) {
+              if(readEEPROM(7,false)!=getCurFn()) {
+                inputStop();
+                writeEEPROM(7,getCurFn(),false);
+                quickBeep(76);
+                displayBlink();
+              }
+            }
+            //On short release, jump to the preset fn.
+            else if(evt==0) {
               inputStop();
-              writeEEPROM(7,fn,false);
-              quickBeep(76);
-              displayBlink();
+              if(getCurFn()!=readEEPROM(7,false)) goToFn(readEEPROM(7,false));
+              else {
+                //Special case: if this is the alarm, toggle the alarm switch
+                if(getCurFn()==FN_ALARM) switchAlarmState(2,FN_ALARM);
+                if(getCurFn()==FN_ALARM2) switchAlarmState(2,FN_ALARM2);
+              }
+              updateDisplay();
             }
-          }
-          //On short release, jump to the preset fn.
-          else if(evt==0) {
-            inputStop();
-            if(getCurFn()!=readEEPROM(7,false)) goToFn(readEEPROM(7,false),0);
-            else {
-              //Special case: if this is the alarm, toggle the alarm switch
-              if(getCurFn()==FN_ALARM) switchAlarmState(2,FN_ALARM);
-              if(getCurFn()==FN_ALARM2) switchAlarmState(2,FN_ALARM2);
-            }
-            updateDisplay();
-          }
+          #endif
         }
       } //end alt
     } //end fn running
@@ -566,7 +598,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   
   else { //settings menu setting - to/from EEPROM
     
-    byte opt = fn-FN_OPTS; //current setting index
+    byte opt = getCurFn()-FN_OPTS; //current setting index
     
     if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL short hold: exit settings menu
       inputStop();

@@ -33,7 +33,7 @@ void goToFn(byte val);
 bool getFnIsSetting();
 byte getSignalSource();
 word getSignalRemain();
-byte getSnoozeRemain();
+word getSnoozeRemain();
 bool getTimerRun();
 bool getTimerDir();
 bool getTimerRunoutRepeat();
@@ -64,7 +64,7 @@ void startSnooze(); //NEW
 void stopSnooze(); //NEW
 bool initEEPROM(bool hard);
 void checkRTC(bool force);
-void fibonacci(byte h, byte m, byte s);
+void fibonacci(byte h, byte m, byte s, byte whichAlarmFn);
 void autoDST();
 bool isDST(int y, byte m, byte d);
 bool isDSTByHour(int y, byte m, byte d, byte h, bool setFlag);
@@ -82,7 +82,7 @@ void millisReset();
 unsigned long ms();
 void timerStart();
 void timerStop();
-void convertTimerTime(bool mode); //NEW
+unsigned long convertTimerTime(bool mode); //NEW
 void timerClear();
 void timerLap();
 void timerRunoutToggle();

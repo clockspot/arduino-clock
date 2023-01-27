@@ -48,17 +48,23 @@
 
 ///// Inputs /////
 
-//If using buttons for Select and optionally Alt:
-#define INPUT_BUTTONS
-#define CTRL_SEL A1
-#define CTRL_ALT A0
+//If using Simple controls
+#define INPUT_SIMPLE
 
-//Up and Down can be buttons OR a rotary control:
+  //If using buttons for Select and optionally Alt:
+  #define INPUT_BUTTONS
+  #define CTRL_SEL A1
+  #define CTRL_ALT A0
+  
+  //Up and Down can be buttons OR a rotary control:
+  
+  //If using buttons for Up and Down:
+  #define INPUT_UPDN_BUTTONS
+  #define CTRL_UP A2
+  #define CTRL_DN A3
 
-//If using buttons for Up and Down:
-#define INPUT_UPDN_BUTTONS
-#define CTRL_UP A2
-#define CTRL_DN A3
+//If using Proton 320 radio controls
+//#define INPUT_PROTON
 
 //For all input types:
 //How long (in ms) are the hold durations?
