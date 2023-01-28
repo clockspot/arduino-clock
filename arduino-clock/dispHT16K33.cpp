@@ -67,7 +67,7 @@ void cycleDisplay(byte displayBrightness, bool useAmbient, word ambientLightLeve
     if(setBlinkState!=blinkModulus) { //will occur every 500ms
       setBlinkState = blinkModulus;
       //If we were dim at start (curBrightness), invert setBlinkState to "start" at 1
-      matrix.setBrightness(((curBrightness==1?1:0)-setBlinkState)? BRIGHTNESS_FULL: BRIGHTNESS_DIM);
+      matrix.setBrightness(((curBrightness==1?1:0)-setBlinkState)? BRIGHTNESS_FULL: BRIGHTNESS_SETDIM);
     }
   }
   

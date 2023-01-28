@@ -11,23 +11,23 @@
 // The operating instructions assume all of these are enabled except thermometer and tubetest.
 #define ENABLE_DATE true
 #define ENABLE_DAY_COUNTER true //requires date
-#define ENABLE_SUN true //requires date
-#define ENABLE_WEATHER true //requires date
-#define ENABLE_ALARM true
-#define ENABLE_ALARM2 true //requires alarm
-#define ENABLE_ALARM_AUTOSKIP true //requires alarm
-#define ENABLE_ALARM_FIBONACCI true //requires alarm //TEST is skipped?
+#define ENABLE_SUN 0 //false //requires date TODO fix Dusk2Dawn compile issue
+#define ENABLE_WEATHER 0 //true //requires date
+#define ENABLE_ALARM 0 //true
+#define ENABLE_ALARM2 0 //true //requires alarm
+#define ENABLE_ALARM_AUTOSKIP 0 //true //requires alarm
+#define ENABLE_ALARM_FIBONACCI 0 //true //requires alarm //TEST is skipped?
 #define ENABLE_TIMER true //required for proton (sleep)
-#define ENABLE_CHIME true //TEST is skipped?
-#define ENABLE_DIMMING true
-#define ENABLE_AWAYMODE true
-#define ENABLE_THERMOMETER false //Temperature per DS3231 - will read high – leave false for production //formerly ENABLE_TEMP_FN //TODO test by tagging on end
-#define ENABLE_TUBETEST false //Cycles through all tubes – leave false for production //formerly ENABLE_TUBETEST_FN
+#define ENABLE_CHIME 0 //true //TEST is skipped?
+#define ENABLE_DIMMING 0 //true
+#define ENABLE_AWAYMODE 0 //true
+#define ENABLE_THERMOMETER 0 //false //Temperature per DS3231 - will read high – leave false for production //formerly ENABLE_TEMP_FN //TODO test by tagging on end
+#define ENABLE_TUBETEST 0 //false //Cycles through all tubes – leave false for production //formerly ENABLE_TUBETEST_FN
 
 
 ///// Platform considerations /////
-#define Wire Wire1 //If using Adafruit QT Py ESP32, with all the I2C stuff connected to the QT port (Wire1) rather than the pins (Wire) - TODO will this mess up your use of the regular Wire pins for other purposes?
-
+#define Wire Wire1 //If using Adafruit QT Py ESP32, with all the I2C stuff connected to the QT port (Wire1) rather than the pins (Wire) - TODO will this mess up your use of the regular Wire pins for other purposes? TODO try to scrap DS3231 library in favor of only RTClib which supports a custom TwoWire interface
+#define ENABLE_NEOPIXEL
 
 ///// Real-Time Clock /////
 
@@ -104,6 +104,7 @@
 #define SEVENSEG //enables display of letters in some cases
 //#define NUM_MAX 4 //How many digits?
 #define BRIGHTNESS_FULL 15 //out of 0-15
+#define BRIGHTNESS_SETDIM 7 //when setting, flash alternates between full and this
 #define BRIGHTNESS_DIM 0
 #define DISPLAY_ADDR 0x70 //0x70 is the default
 

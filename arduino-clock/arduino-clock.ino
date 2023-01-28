@@ -53,6 +53,12 @@ const bool vDev = 1;
   #include "networkESP32.h" //enables WiFi/web-based config/NTP sync on esp32 //TODO
 #endif
 
+#ifdef ENABLE_NEOPIXEL
+  #include <Adafruit_NeoPixel.h>
+  #define NUMPIXELS 1
+  Adafruit_NeoPixel pixels(NUMPIXELS, PIN_NEOPIXEL, NEO_GRB + NEO_KHZ800);
+#endif
+
 
 ////////// Variables and storage //////////
 
@@ -204,12 +210,28 @@ unsigned int tempValDispLast = 0;
 ////////// Main code control //////////
 
 void setup(){
+#ifdef ENABLE_NEOPIXEL
+  #if defined(NEOPIXEL_POWER)
+    // If this board has a power control pin, we must set it to output and high
+    // in order to enable the NeoPixels. We put this in an #if defined so it can
+    // be reused for other boards without compilation errors
+    pinMode(NEOPIXEL_POWER, OUTPUT);
+    digitalWrite(NEOPIXEL_POWER, HIGH);
+  #endif
+  
+  pixels.begin(); // INITIALIZE NeoPixel strip object (REQUIRED)
+  pixels.setBrightness(20); // not so bright
+
+  pixels.fill(0xFFFF00);
+  pixels.show();
+#endif
+  delay(5000); //for development, just in case it boot loops
   if(SHOW_SERIAL) {
     Serial.begin(115200);
-    #ifndef __AVR__ //SAMD only
-    while(!Serial);
+    #ifdef SAMD_SERIES
+      while(!Serial);
     #else
-    delay(1);
+      delay(1);
     #endif
     Serial.println(F("Hello world"));
   }
@@ -529,6 +551,15 @@ void setDate() { //NEW
       startSet(fnSetValDate[2],1,daysInMonth(fnSetValDate[0],fnSetValDate[1]),3);
       break;
     case 3: //save date, exit set //TODO: for proton, cycle set?
+      Serial.print("Calling rtcSetDate with yr=");
+      Serial.print(fnSetValDate[0],DEC);
+      Serial.print(", mo=");
+      Serial.print(fnSetValDate[1],DEC);
+      Serial.print(", dt=");
+      Serial.print(fnSetVal,DEC);
+      Serial.print(", wd=");
+      Serial.print(dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal),DEC);
+      Serial.println();
       rtcSetDate(fnSetValDate[0],fnSetValDate[1],fnSetVal,
         dayOfWeek(fnSetValDate[0],fnSetValDate[1],fnSetVal));
       #ifdef NETWORK_H
@@ -574,6 +605,11 @@ void setTime() { //NEW
       break;
     case 1: //save mins
       if(fnSetValDid){ //but only if the value was actually changed
+        Serial.print("Calling rtcSetTime with h=");
+        Serial.print(fnSetVal/60,DEC);
+        Serial.print(", m=");
+        Serial.print(fnSetVal%60,DEC);
+        Serial.println();
         rtcSetTime(fnSetVal/60,fnSetVal%60,0);
         #ifdef NETWORK_H
           clearNTPSyncLast();
@@ -932,6 +968,15 @@ void checkRTC(bool force){
     //TODO not sure what the above is doing with FN_DATE so I threw in FN_DATE_AUTO as well - is this for the :30 thing?
     
     rtcSecLast = rtcGetSecond();
+    
+#ifdef ENABLE_NEOPIXEL
+    switch(rtcSecLast%3) {
+      case 0: pixels.fill(0xFF0000); pixels.show(); break;
+      case 1: pixels.fill(0x00FF00); pixels.show(); break;
+      case 2: pixels.fill(0x0000FF); pixels.show(); break;
+      default: break;
+    }
+#endif
     
   } //end if force or new second
 } //end checkRTC()
