@@ -1,5 +1,5 @@
-#ifndef RTC_DS3231_H
-#define RTC_DS3231_H
+#ifndef RTC_IS_DS3231_H
+#define RTC_IS_DS3231_H
 
 //Mutually exclusive with other rtc options
 

@@ -55,7 +55,7 @@ I use the Arduino IDE to compile and upload, due to the use of various Arduino a
 * Arduino_LSM6DS3 (Arduino) if using Nano 33 IoT’s IMU for inputs
 * WiFiNINA and WiFiUdp (Arduino) for Wi-Fi and NTP sync support on Nano 33 IoT
 * [FlashStorage](https://github.com/cmaglie/FlashStorage/) for persistent storage on Nano 33 IoT
-* Wire (Arduino) and [DS3231](https://github.com/NorthernWidget/DS3231) if using DS3231 RTC (via I2C)
+* Wire (Arduino) and RTClib (Adafruit) if using DS3231 RTC (via I2C)
 * [Dusk2Dawn](https://github.com/dmkishi/Dusk2Dawn) if sunrise/sunset display is enabled
   * Note: At this writing, for Nano 33 IoT, it’s necessary to download this library as .ZIP and [add manually](https://www.arduino.cc/en/guide/libraries#toc4), as the version in the Library Manager [is old](https://forum.arduino.cc/index.php?topic=479550.msg3852574#msg3852574) and, in my experience, will not compile for SAMD.
 

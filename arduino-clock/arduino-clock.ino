@@ -34,11 +34,11 @@ const bool vDev = 1;
 #ifdef LIGHTSENSOR_VEML7700
   #include "lightsensorVEML7700.h" //if LIGHTSENSOR_VEML7700 is defined in config - for I2C VEML7700 lux sensor
 #endif
-#ifdef RTC_DS3231
-  #include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
+#ifdef RTC_IS_DS3231
+  #include "rtcDS3231.h" //if RTC_IS_DS3231 is defined in config – for an I2C DS3231 RTC module
 #endif
-#ifdef RTC_MILLIS
-  #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
+#ifdef RTC_IS_MILLIS
+  #include "rtcMillis.h" //if RTC_IS_MILLIS is defined in config – for a fake RTC based on millis
 #endif
 
 #if defined(INPUT_SIMPLE)
@@ -690,8 +690,7 @@ bool initEEPROM(bool hard){
   //If hard, set EEPROM and clock to defaults
   //Otherwise, just make sure stuff is in range
   byte changed = 0;
-  hard = (hard || readEEPROM(16,false)==0); //if EEPROM is uninitiated, do defaults
-  //If a hard init, set the clock
+  //if an actual hard init, set the clock
   if(hard) {
     rtcSetDate(2021,1,1,dayOfWeek(2021,1,1));
     rtcSetTime(0,0,0);
@@ -699,6 +698,8 @@ bool initEEPROM(bool hard){
       clearNTPSyncLast();
     #endif
   }
+  //after that, should also be considered a hard init if EEPROM is uninitiated
+  hard = (hard || readEEPROM(16,false)==0);
   //The vars outside the settings menu
   if(hard || readEEPROM(0,true)>1439) changed += writeEEPROM(0,420,true,false); //0-1: alarm at 7am
   if(hard || readEEPROM(0,true)>1439) changed += writeEEPROM(152,420,true,false); //152-153: alarm2 at 7am

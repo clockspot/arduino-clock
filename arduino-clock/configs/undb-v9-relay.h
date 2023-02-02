@@ -27,12 +27,8 @@
 
 
 ///// Real-Time Clock /////
-//These are mutually exclusive
 
-//If using DS3231 (via I2C):
-//Requires Wire library (standard Arduino)
-//Requires DS3231 library by NorthernWidget to be installed in your IDE.
-#define RTC_DS3231
+#define RTC_IS_DS3231
 
 
 ///// Inputs /////

@@ -30,14 +30,14 @@
 
 //If using DS3231 (via I2C):
 //Requires Wire library (standard Arduino)
-//Requires DS3231 library by NorthernWidget to be installed in your IDE.
-// #define RTC_DS3231
+//Requires RTClib library (Adafruit)
+// #define RTC_IS_DS3231
 
 //If using RTCZero on Nano 33 IoT: //TODO
 // #define RTC_ZERO
 
 //If using no RTC (a fake RTC based on millis()):
-#define RTC_MILLIS
+#define RTC_IS_MILLIS
 #define ANTI_DRIFT 0 //msec to add/remove per second - or seconds to add/remove per day divided by 86.4 - to compensate for natural drift. If using wifinina, it really only needs to be good enough for a decent timekeeping display until the next ntp sync. TIP: setting to a superhigh value is helpful for testing! e.g. 9000 will make it run 10x speed
 
 

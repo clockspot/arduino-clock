@@ -8,11 +8,11 @@
 #include "inputSimple.h"
 
 //Needs access to RTC timestamps
-#ifdef RTC_DS3231
-  #include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
+#ifdef RTC_IS_DS3231
+  #include "rtcDS3231.h" //if RTC_IS_DS3231 is defined in config – for an I2C DS3231 RTC module
 #endif
-#ifdef RTC_MILLIS
-  #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
+#ifdef RTC_IS_MILLIS
+  #include "rtcMillis.h" //if RTC_IS_MILLIS is defined in config – for a fake RTC based on millis
 #endif
 //Needs to be able to start network
 #if defined(NETWORK_NINA)
