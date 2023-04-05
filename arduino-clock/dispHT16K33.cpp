@@ -36,7 +36,31 @@ void sendToHT16K33(byte posStart, byte posEnd){ //"private"
   for(byte i=posStart; i<=posEnd; i++){
     if(i>=DISPLAY_SIZE) return;
     //skip pos 2, as that means colon
-    if(displayNext[i]>15) matrix.writeDigitAscii((i>=2?i+1:i),displayNext[i]); //letters for sevenseg
+    if(displayNext[i]>15) { //letters for sevenseg TODO more memory-efficient storage of bitmasks?
+      byte bitmask = 0;
+      switch(displayNext[i]) {
+        // segments: B.GFEDCBA
+        /* - */ case  45: bitmask = B01000000; break;
+        /* A */ case  65: bitmask = B01110111; break;
+        /* C */ case  67: bitmask = B00111001; break;
+        /* O */ case  79: bitmask = B00111111; break;
+        /* P */ case  80: bitmask = B01110011; break;
+        /* S */ case  83: bitmask = B01101101; break;
+        /* U */ case  85: bitmask = B00111110; break;
+        /* d */ case 100: bitmask = B01011110; break;
+        /* f */ case 102: bitmask = B01110001; break;
+        /* h */ case 104: bitmask = B01110100; break;
+        /* n */ case 110: bitmask = B01010100; break;
+        /* o */ case 111: bitmask = B01010100; break;
+        /* r */ case 114: bitmask = B11010000; break; //adds decimal for test
+        /* t */ case 116: bitmask = B01111000; break;
+        /* y */ case 121: bitmask = B01101110; break;
+        /* il*/ case 200: bitmask = B10010110; break; //adds decimal for test
+        /* -1*/ case 201: bitmask = B01000110; break;
+        /*   */ default: bitmask = 0; break;
+      }
+      matrix.writeDigitRaw((i>=2?i+1:i),bitmask);
+    }
     else if(displayNext[i]>9) matrix.writeDigitRaw((i>=2?i+1:i),0); //blank
     else matrix.writeDigitNum((i>=2?i+1:i),displayNext[i]); //numeral
   }
@@ -102,22 +126,27 @@ void cycleDisplay(byte displayBrightness, bool useAmbient, word ambientLightLeve
 
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
   if(curBrightness==-1) return;
-  //Splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
+  //Handles input n as either a single ascii character or a decimal number of 1-4 places
+  //If the latter, splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
   //If there are blank places (on the left of a non-leading-zero number), uses value 15 to blank the digit
   //If number has more places than posEnd-posStart, the higher places are truncated off (e.g. 10015 on 4-digit displays --> 0015)
   if(posEnd==255) posEnd=posStart; //single digit change
-  word place;
-  for(byte i=0; i<=posEnd-posStart; i++){
-    switch(i){ //because int(pow(10,1))==10 but int(pow(10,2))==99...
-      case 0: place=1; break;
-      case 1: place=10; break;
-      case 2: place=100; break;
-      case 3: place=1000; break;
-      case 4: place=10000; break;
-      case 5: place=100000; break;
-      default: break;
+  if(posEnd==posStart && n>15) { //this is an ascii code for a single character
+    displayNext[posStart] = n;
+  } else { //regular number processing
+    word place;
+    for(byte i=0; i<=posEnd-posStart; i++){
+      switch(i){ //because int(pow(10,1))==10 but int(pow(10,2))==99...
+        case 0: place=1; break;
+        case 1: place=10; break;
+        case 2: place=100; break;
+        case 3: place=1000; break;
+        case 4: place=10000; break;
+        case 5: place=100000; break;
+        default: break;
+      }
+      displayNext[posEnd-i] = (i==0&&n==0 ? 0 : (n>=place ? (n/place)%10 : (leadingZeros?0:15)));
     }
-    displayNext[posEnd-i] = (i==0&&n==0 ? 0 : (n>=place ? (n/place)%10 : (leadingZeros?0:15)));
   }
   sendToHT16K33(posStart,posEnd); //TODO consider moving this to cycleDisplay if the value has changed - better sync with brightness change?
   

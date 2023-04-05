@@ -1454,6 +1454,7 @@ void updateDisplay(){
               break;
             default: break;
           }
+          break;
         case FN_ALARM:
           editDisplay(65,4); editDisplay(1,5); break; //"A1"
         case FN_ALARM2:
@@ -1468,12 +1469,14 @@ void updateDisplay(){
             case 1: editDisplay(67,0); editDisplay(116,1); editDisplay(100,2); editDisplay(110,3); break; //"Ctdn"
             case 2: editDisplay(67,0); editDisplay(116,1); editDisplay(85,2); editDisplay(80,3); break; //"CtUP"
           }
+          blankDisplay(4,5); //nothing on seconds display
           break;
         case 16: //Time format
           switch(fnSetVal) {
-            case 1: editDisplay(12,1,2); editDisplay(104,3); blankDisplay(4); break; //"12h_"
-            case 2: editDisplay(24,1,2); editDisplay(104,3); blankDisplay(4); break; //"24h_"
+            case 1: editDisplay(12,0,1); editDisplay(104,2); blankDisplay(3); break; //"12h_"
+            case 2: editDisplay(24,0,1); editDisplay(104,2); blankDisplay(3); break; //"24h_"
           }
+          blankDisplay(4,5); //nothing on seconds display
           break;
         case 17: //Date format
           switch(fnSetVal) {
@@ -1568,7 +1571,7 @@ void updateDisplay(){
         if(readEEPROM(4,false)-1) { //count up
           editDisplay(100,4,4,false,true); blankDisplay(5,5,true); //"d_"
         } else { //count down
-          editDisplay(116,4,4,false,true); editDisplay(111,5,false,true); //"to" //TODO mod display library to make "til"?
+          editDisplay(116,4,4,false,true); editDisplay(200,5,false,true); //"t[il]"
         }
         #else
         blankDisplay(4,5,true);
@@ -1589,27 +1592,41 @@ void updateDisplay(){
         break;
       case FN_ALARM: case FN_ALARM2: //alarm1 and alarm2
         displayBrightness = (readEEPROM(fn==FN_ALARM?2:3,false)?2:1); //status normal/dim
-        word almTime; almTime = readEEPROM(fn==FN_ALARM?0:152,true);
-        editDisplay(almTime/60, 0, 1, readEEPROM(19,false), true); //hours with leading zero
-        editDisplay(almTime%60, 2, 3, true, true);
         #ifdef SEVENSEG
-        //Overwrite alarm display with "Off"
-        if(!readEEPROM(fn==FN_ALARM?2:3,false)) {
-          blankDisplay(0,0,true); editDisplay(79,1,1,0,true); editDisplay(102,2,2,0,true); editDisplay(102,3,3,0,true);
-        }
-        #endif
-        #ifdef INPUT_PROTON
-        //Display "A1" or "A2" on seconds
-        //I'm using INPUT_PROTON here rather than SEVENSEG or ENABLE_ALARM2, since it implies both; and there is little point displaying the status since the button state indicates it, and toggling will clear autoskip.
-        editDisplay(65,4,4,0,true); editDisplay(fn==FN_ALARM?1:2,5,5,0,true); break; //"A1" or "A2"
+          if(!readEEPROM(fn==FN_ALARM?2:3,false)) { //alarm off: display "Off"
+            blankDisplay(0,0,true); editDisplay(79,1,1,0,true); editDisplay(102,2,2,0,true); editDisplay(102,3,3,0,true); blankDisplay(4,5,true);
+          } else {
+            //Alarm is on
+            //Display time (same as below)
+            word almTime; almTime = readEEPROM(fn==FN_ALARM?0:152,true);
+            editDisplay(almTime/60, 0, 1, readEEPROM(19,false), true); //hours with leading zero
+            editDisplay(almTime%60, 2, 3, true, true);
+            #ifdef INPUT_PROTON
+              //Display "A1" or "A2" on seconds
+              //Not much point displaying the status since the button state indicates it, and toggling will clear autoskip
+              editDisplay(65,4,4,0,true); editDisplay(fn==FN_ALARM?1:2,5,5,0,true); break; //"A1" or "A2"
+            #else
+              //Display "On" or "SP" (skip)
+              //Probably won't have A1 and A2 in this case, but keeping logic parity with rest of code
+              if(fn==FN_ALARM?alarmSkip:alarm2Skip){ //alarm on+skip
+                editDisplay(83,4,4,0,true); editDisplay(80,4,4,0,true); //"SP"
+              } else { //alarm fully on
+                editDisplay(79,4,4,0,true); editDisplay(110,5,5,0,true); //"On"
+              }
+            #endif
+          }
         #else
-        //Display alarm status on seconds
-        if(readEEPROM(fn==FN_ALARM?2:3,false) && (fn==FN_ALARM?alarmSkip:alarm2Skip)){ //alarm on+skip
-          editDisplay(1,4,5,true,true); //01 to indicate off now, on maybe later
-        } else { //alarm fully on or off
-          editDisplay(readEEPROM(fn==FN_ALARM?2:3,false),4,4,false,true);
-          blankDisplay(5,5,true);
-        }
+          //Display time (same as above)
+          word almTime; almTime = readEEPROM(fn==FN_ALARM?0:152,true);
+          editDisplay(almTime/60, 0, 1, readEEPROM(19,false), true); //hours with leading zero
+          editDisplay(almTime%60, 2, 3, true, true);
+          //Display alarm status on seconds: 1 (on), 01 (skip), 0 (off)
+          if(readEEPROM(fn==FN_ALARM?2:3,false) && (fn==FN_ALARM?alarmSkip:alarm2Skip)){ //alarm on+skip
+            editDisplay(1,4,5,true,true); //01 to indicate off now, on maybe later
+          } else { //alarm fully on or off
+            editDisplay(readEEPROM(fn==FN_ALARM?2:3,false),4,4,false,true);
+            blankDisplay(5,5,true);
+          }
         #endif
         break;
       case FN_TIMER: //timer - display time
