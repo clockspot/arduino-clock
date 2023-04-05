@@ -94,14 +94,15 @@
 //If using 4/6-digit 7-segment LED display with HT16K33 (I2C on SDA/SCL pins)
 //Requires Adafruit libraries LED Backpack, GFX, and BusIO
 //If 6 digits, edit Adafruit_LEDBackpack.cpp to replace "if (d > 4)" with "if (d > 6)"
-//and, if desired, in numbertable[], replace 0x7D with 0x7C and 0x6F with 0x67 to remove
-//the serifs from 6 and 9 for legibility (see http://www.harold.thimbleby.net/cv/files/seven-segment.pdf)
+//and, if desired, in sevensegfonttable[], replace 0b01111101 and 0b01101111 with 0b01111100 and 0b01100111
+//(formerly: in numbertable[], replace 0x7D with 0x7C and 0x6F with 0x67)
+//to remove the serifs from 6 and 9 for legibility (see http://www.harold.thimbleby.net/cv/files/seven-segment.pdf)
 #define DISPLAY_HT16K33
 #define SEVENSEG //enables display of letters in some cases
 //#define NUM_MAX 4 //How many digits?
 #define BRIGHTNESS_FULL 15 //out of 0-15
 #define BRIGHTNESS_SETDIM 5 //when setting, flash alternates between full and this
-#define BRIGHTNESS_DIM 0
+#define BRIGHTNESS_DIM 3
 #define DISPLAY_ADDR 0x70 //0x70 is the default
 
 //For all display types:
