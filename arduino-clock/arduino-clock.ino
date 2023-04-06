@@ -533,8 +533,8 @@ void setByFn() { //NEW
     case FN_SUN_NEXT: break;
     case FN_WEATHER_LAST: break;
     case FN_WEATHER_NEXT: break;
-    case FN_ALARM: setAlarm(1); break;
-    case FN_ALARM2: setAlarm(2); break;
+    case FN_ALARM: setAlarm(FN_ALARM); break;
+    case FN_ALARM2: setAlarm(FN_ALARM2); break;
     case FN_TIMER: setTimer(); break;
     case FN_THERMOMETER: break;
     default: break;
