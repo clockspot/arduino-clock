@@ -35,34 +35,15 @@ void sendToHT16K33(byte posStart, byte posEnd){ //"private"
   //Called by editDisplay and blankDisplay. Needed in lieu of what cycleDisplay does for nixies.
   for(byte i=posStart; i<=posEnd; i++){
     if(i>=DISPLAY_SIZE) return;
-    //skip pos 2, as that means colon
-    if(displayNext[i]>15) { //letters for sevenseg TODO more memory-efficient storage of bitmasks?
-      byte bitmask = 0;
-      switch(displayNext[i]) {
-        // segments: B.GFEDCBA
-        /* - */ case  45: bitmask = B01000000; break;
-        /* A */ case  65: bitmask = B01110111; break;
-        /* C */ case  67: bitmask = B00111001; break;
-        /* O */ case  79: bitmask = B00111111; break;
-        /* P */ case  80: bitmask = B01110011; break;
-        /* S */ case  83: bitmask = B01101101; break;
-        /* U */ case  85: bitmask = B00111110; break;
-        /* d */ case 100: bitmask = B01011110; break;
-        /* f */ case 102: bitmask = B01110001; break;
-        /* h */ case 104: bitmask = B01110100; break;
-        /* n */ case 110: bitmask = B01010100; break;
-        /* o */ case 111: bitmask = B01010100; break;
-        /* r */ case 114: bitmask = B11010000; break; //adds decimal for test
-        /* t */ case 116: bitmask = B01111000; break;
-        /* y */ case 121: bitmask = B01101110; break;
-        /* il*/ case 200: bitmask = B10010110; break; //adds decimal for test
-        /* -1*/ case 201: bitmask = B01000110; break;
-        /*   */ default: bitmask = 0; break;
-      }
-      matrix.writeDigitRaw((i>=2?i+1:i),bitmask);
-    }
-    else if(displayNext[i]>9) matrix.writeDigitRaw((i>=2?i+1:i),0); //blank
-    else matrix.writeDigitNum((i>=2?i+1:i),displayNext[i]); //numeral
+    byte pos = (i>=2?i+1:i); //skip pos 2, as that means colon (not supported currently TODO)
+    bool dot = false;
+    //TODO turn dot true to indicate some things
+    if(pos==5) dot = true;
+    
+    if(displayNext[i]>=200) matrix.writeDigitRaw(pos,B01000110); //special case: "-1" in single place, no decimal
+    else if(displayNext[i]>15) matrix.writeDigitAscii(pos,displayNext[i],dot); //letters for sevenseg, with optional decimal
+    else if(displayNext[i]>9) matrix.writeDigitAscii(pos,32,dot); //blank, with optional decimal
+    else matrix.writeDigitNum(pos,displayNext[i],dot); //numeral, with optional decimal
   }
   matrix.writeDisplay();
 }

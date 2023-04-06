@@ -1421,7 +1421,7 @@ void updateDisplay(){
       #ifdef SEVENSEG
         editDisplay((abs(fnSetVal-100)*25)/100, 0, 1); //hours
         if(fnSetVal<100 && fnSetVal>60) editDisplay(45,0); //negative symbol
-        //TODO add support for "-1" in single character for when hour<=-10
+        //TODO add support for "-1" in single character for when hour<=-10 - use character 200
       #else
         editDisplay((abs(fnSetVal-100)*25)/100, 0, 1, fnSetVal<100); //hours, leading zero for negatives
       #endif
@@ -1432,7 +1432,7 @@ void updateDisplay(){
       #ifdef SEVENSEG
         editDisplay(abs(fnSetVal), 0, (DISPLAY_SIZE>4? 4: 3));
         if(fnSetVal<0 && (fnSetVal>-1000 || DISPLAY_SIZE>4)) editDisplay(45,0); //negative symbol
-        //TODO add support for "-1" in single character for when fnSetVal<=-1000
+        //TODO add support for "-1" in single character for when fnSetVal<=-1000 - use character 200
       #else
         editDisplay(abs(fnSetVal), 0, (DISPLAY_SIZE>4? 4: 3), fnSetVal<0);
       #endif
@@ -1440,26 +1440,27 @@ void updateDisplay(){
       #ifdef SEVENSEG
         editDisplay(abs(fnSetVal), 0, 3);
         if(fnSetVal<0 && fnSetVal>-1000) editDisplay(45,0); //negative symbol
-        //TODO add support for "-1" in single character for when fnSetVal<=-1000
+        //TODO add support for "-1" in single character for when fnSetVal<=-1000 - use character 200
       #else
         editDisplay(abs(fnSetVal), 0, 3, fnSetVal<0);
       #endif
     }
     #ifdef SEVENSEG
     //Depending on what's being set, display ascii letters to be more intuitive
+    //TODO prevent flash of non-custom value
     if(fn<FN_OPTS) { //just setting a regular fn
       switch(fn) {
         case FN_DATE:
           switch(fnSetPg) {
-            case 1: editDisplay(121,4); editDisplay(114,5); break; //year: "yr"
-            case 2: editDisplay(114,4); editDisplay(110,5); break; //month: "rn" (hoping it looks like m)
-            case 3: editDisplay(100,4); editDisplay(116,5); break; //date: "dt"
+            case 1: editDisplay(121,4); editDisplay(114,5); break; //"yr"
+            case 2: editDisplay(109,4); editDisplay(111,5); break; //"mo"
+            case 3: editDisplay(100,4); editDisplay(116,5); break; //"dt"
             default: break;
           } break;
         case FN_DAY_COUNTER:
           switch(fnSetPg) {
-            case 1: editDisplay(114,4); editDisplay(110,5); break; //month: "rn" (hoping it looks like m)
-            case 2: editDisplay(100,4); editDisplay(116,5); break; //date: "dt"
+            case 1: editDisplay(109,4); editDisplay(111,5); break; //"mo"
+            case 2: editDisplay(100,4); editDisplay(116,5); break; //"dt"
             case 3: //Day count direction - duplicate of below //TODO is this right?
               switch(fnSetVal) {
                 case 0: blankDisplay(0); editDisplay(79,1); editDisplay(102,2); editDisplay(102,3); break; //"_Off"
@@ -1471,10 +1472,15 @@ void updateDisplay(){
             default: break;
           }
           break;
-        case FN_ALARM:
-          editDisplay(65,4); editDisplay(1,5); break; //"A1"
-        case FN_ALARM2:
-          editDisplay(65,4); editDisplay(2,5); break; //"A2"
+        #if defined(ENABLE_ALARM2) && ENABLE_ALARM2
+          case FN_ALARM:
+            editDisplay(65,4); editDisplay(1,5); break; //"A1"
+          case FN_ALARM2:
+            editDisplay(65,4); editDisplay(2,5); break; //"A2"
+        #else
+          case FN_ALARM: case FN_ALARM2:
+            blankDisplay(4,5); break;
+        #endif
         default: break;
       }
     } else { //in settings menu
@@ -1498,28 +1504,28 @@ void updateDisplay(){
           switch(fnSetVal) {
             //1 = month/date/weekday<br/>2 = date/month/weekday<br/>3 = month/date/year<br/>4 = date/month/year<br/>5 = year/month/date
             case 1: //month/date/weekday
-              editDisplay(114,0); editDisplay(110,1); //"rn" (hoping it looks like m)
+              editDisplay(109,0); editDisplay(111,1); //"mo"
               editDisplay(100,2); editDisplay(116,3); //"dt"
               editDisplay(100,4); editDisplay(121,5); //"dy"
               break;
             case 2: //date/month/weekday
               editDisplay(100,0); editDisplay(116,1); //"dt"
-              editDisplay(114,2); editDisplay(110,3); //"rn" (hoping it looks like m)
+              editDisplay(109,2); editDisplay(111,3); //"mo"
               editDisplay(100,4); editDisplay(121,5); //"dy"
               break;
             case 3: //month/date/year
-              editDisplay(114,0); editDisplay(110,1); //"rn" (hoping it looks like m)
+              editDisplay(109,0); editDisplay(111,1); //"mo"
               editDisplay(100,2); editDisplay(116,3); //"dt"
               editDisplay(121,4); editDisplay(114,5); //"yr"
               break;
             case 4: //date/month/year
               editDisplay(100,0); editDisplay(116,1); //"dt"
-              editDisplay(114,2); editDisplay(110,3); //"rn" (hoping it looks like m)
+              editDisplay(109,2); editDisplay(111,3); //"mo"
               editDisplay(121,4); editDisplay(114,5); //"yr"
               break;
             case 5: //year/month/date
               editDisplay(121,0); editDisplay(114,1); //"yr"
-              editDisplay(114,2); editDisplay(110,3); //"rn" (hoping it looks like m)
+              editDisplay(109,2); editDisplay(111,3); //"mo"
               editDisplay(100,4); editDisplay(116,5); //"dt"
               break;
           }
@@ -1587,7 +1593,7 @@ void updateDisplay(){
         if(readEEPROM(4,false)-1) { //count up
           editDisplay(100,4,4,false,true); blankDisplay(5,5,true); //"d_"
         } else { //count down
-          editDisplay(116,4,4,false,true); editDisplay(200,5,false,true); //"t[il]"
+          editDisplay(116,4,4,false,true); editDisplay(111,5,false,true); //"to"
         }
         #else
         blankDisplay(4,5,true);
@@ -1625,7 +1631,7 @@ void updateDisplay(){
               //Display "On" or "SP" (skip)
               //Probably won't have A1 and A2 in this case, but keeping logic parity with rest of code
               if(fn==FN_ALARM?alarmSkip:alarm2Skip){ //alarm on+skip
-                editDisplay(83,4,4,0,true); editDisplay(80,4,4,0,true); //"SP"
+                editDisplay(83,4,4,0,true); editDisplay(80,5,5,0,true); //"SP"
               } else { //alarm fully on
                 editDisplay(79,4,4,0,true); editDisplay(110,5,5,0,true); //"On"
               }
