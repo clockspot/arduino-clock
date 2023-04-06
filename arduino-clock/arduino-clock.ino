@@ -312,6 +312,17 @@ void setup(){
   if(!ENABLE_AWAYMODE) changed += writeEEPROM(32,0,false,false); //display always on
   //if backlight circuit is not switched (v5.0 board), the backlight menu setting (eeprom 26) doesn't matter
   if(changed) commitEEPROM(); //for SAMD
+  
+  #if defined(ENABLE_TESTY) && ENABLE_TESTY
+    Serial.println(F("Testy is enabled"));
+  #endif
+  #if defined(ENABLE_TESTY) && !ENABLE_TESTY
+  Serial.println(F("Testy is defined but not enabled"));
+  #endif
+  #if !defined(ENABLE_TESTY)
+  Serial.println(F("Testy is not defined"));
+  #endif
+  
 } //end setup()
 
 void loop(){
