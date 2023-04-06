@@ -460,13 +460,14 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   }
   
   #ifdef NETWORK_H
-    //Short hold, Alt; or very long hold, Sel if no Alt: start admin
-    if((evt==2 && ctrl==CTRL_ALT)||(evt==4 && ctrl==CTRL_SEL && CTRL_ALT<=0)) {
+    //Formerly Alt did these things too, at shorter hold durations - but this was removed as I didn't want to double up functionality on this optional button too much. Last seen in commit e8b617f 2023-04-05
+    //Very long hold, Sel: start admin
+    if(evt==4 && ctrl==CTRL_SEL) {
       networkStartAdmin();
       return;
     }
-    //Super long hold, Alt, or Sel if no Alt: start AP (TODO would we rather it forget wifi?)
-    if(evt==5 && (ctrl==CTRL_ALT || (ctrl==CTRL_SEL && CTRL_ALT<=0))) {
+    //Super long hold, Sel: start AP (TODO would we rather it forget wifi?)
+    if(evt==5 && ctrl==CTRL_SEL) {
       networkStartAP();
       return;
     }
@@ -537,42 +538,42 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
         //else do nothing
       } //end sel release or adj press
       else if(CTRL_ALT>0 && ctrl==CTRL_ALT) {
-        //if soft power switch, we'll switch on release - but only if not held past activating settings page/AP
+        //if soft power switch, we'll switch on release
+        //Formerly there was network-related stuff here which has been removed - explained above - last seen in commit e8b617f 2023-04-05
         if(ENABLE_SOFT_POWER_SWITCH && SWITCH_PIN>=0) {
-          //If holds are used to activate network stuff, and we've passed those thresholds, do not switch.
-          //Otherwise, switch no matter how long held.
-          #ifdef NETWORK_H
-            if(evt==0 && evtLast<2) switchPower(2);
-          #else
-            if(evt==0) switchPower(2);
-          #endif
-          //if(evt==0 && !(defined(NETWORK_H) && evtLast<2)) switchPower(2); //formerly. TODO debug
+          if(evt==0) switchPower(2);
         }
-        //If neither soft power switch nor network support, this becomes our function preset
+        //otherwise this becomes our function preset
         else {
-          #ifndef NETWORK_H
-            //On long hold, if this is not currently the preset, we'll set it, double beep, and inputStop.
-            //(Decided not to let this button set things, because then it steps on the toes of Sel's functionality.)
-            if(evt==2) {
-              if(readEEPROM(7,false)!=getCurFn()) {
+          //On long hold, if this is not currently the preset (and if the preset isn't forced),
+          //we'll set it, double beep, and inputStop.
+          //If this is the preset, and it is forced, we'll allow the value to be set.
+          if(evt==2) {
+            if(readEEPROM(7,false)!=getCurFn()) {
+              #ifndef FORCE_ALT_PRESET
                 inputStop();
                 writeEEPROM(7,getCurFn(),false);
                 quickBeep(76);
                 displayBlink();
-              }
+              #endif
+            } else {
+              #ifdef FORCE_ALT_PRESET
+                setByFn();
+              #endif
+              return;
             }
-            //On short release, jump to the preset fn.
-            else if(evt==0) {
-              inputStop();
-              if(getCurFn()!=readEEPROM(7,false)) goToFn(readEEPROM(7,false));
-              else {
-                //Special case: if this is the alarm, toggle the alarm switch
-                if(getCurFn()==FN_ALARM) switchAlarmState(2,FN_ALARM);
-                if(getCurFn()==FN_ALARM2) switchAlarmState(2,FN_ALARM2);
-              }
-              updateDisplay();
+          }
+          //On short release, jump to the preset fn.
+          else if(evt==0) {
+            inputStop();
+            if(getCurFn()!=readEEPROM(7,false)) goToFn(readEEPROM(7,false));
+            else {
+              //Special case: if this is the alarm, toggle the alarm switch
+              if(getCurFn()==FN_ALARM) switchAlarmState(2,FN_ALARM);
+              if(getCurFn()==FN_ALARM2) switchAlarmState(2,FN_ALARM2);
             }
-          #endif
+            updateDisplay();
+          }
         }
       } //end alt
     } //end fn running
@@ -589,6 +590,13 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
           setByFn();
           return;
         } //end CTRL_SEL push
+        #ifdef FORCE_ALT_PRESET
+          if(ctrl==CTRL_ALT && getCurFn()==FORCE_ALT_PRESET) { //if this is the preset, and it is forced, we'll allow the value to be saved.
+            inputStop(); //not waiting for CTRL_SELHold, so can stop listening here
+            setByFn();
+            return;
+          }
+        #endif
         if(ctrl==CTRL_UP) doSet(velocity ? 10 : 1);
         if(ctrl==CTRL_DN) doSet(velocity ? -10 : -1);
       } //end if evt==1

@@ -24,6 +24,9 @@
 #define ENABLE_THERMOMETER 0 //false //Temperature per DS3231 - will read high – leave false for production //formerly ENABLE_TEMP_FN //TODO test by tagging on end
 #define ENABLE_TUBETEST 0 //false //Cycles through all tubes – leave false for production //formerly ENABLE_TUBETEST_FN
 
+// If Alt button is specified...
+#define FORCE_ALT_PRESET FN_ALARM //disables holding Alt to set preset fn (assuming Alt is not used for power-switching). The preset fn is also removed from the fn cycle, so that Alt is the only way to get to it. Use this if Alt is labeled specifically for one fn.
+
 
 ///// Platform considerations /////
 #define Wire Wire1 //If using Adafruit QT Py ESP32, with all the I2C stuff connected to the QT port (Wire1) rather than the pins (Wire) - TODO will this mess up your use of the regular Wire pins for other purposes? TODO try to scrap DS3231 library in favor of only RTClib which supports a custom TwoWire interface

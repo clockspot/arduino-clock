@@ -284,6 +284,9 @@ void setup(){
     changed += writeEEPROM(21,0,false,false); //force chime off
   }
   
+  #ifdef FORCE_ALT_PRESET
+    if(readEEPROM(7,false)!=FORCE_ALT_PRESET) changed += writeEEPROM(7,FORCE_ALT_PRESET,false,false);
+  #endif
   switch(readEEPROM(7,false)){ //if the preset is set to a function that is no longer enabled, use alarm or date if enabled, else use time
     case FN_DATE: if(!ENABLE_DATE) changed += writeEEPROM(7,(ENABLE_ALARM?FN_ALARM:FN_TOD),false,false); break;
     case FN_DAY_COUNTER: if(!ENABLE_DAY_COUNTER) changed += writeEEPROM(7,(ENABLE_DATE?FN_DATE:FN_TOD),false,false); break;
@@ -349,26 +352,33 @@ void fnScroll(byte dir){
   //TODO this should not be used with inputProton since it has dedicated function controls
   bool alarmOK = (PIEZO_PIN>=0 || SWITCH_PIN>=0 || PULSE_PIN>=0) && ENABLE_ALARM; //skip alarm if no signals available
   bool alarm2OK = alarmOK && ENABLE_ALARM2;
+  byte skipFn = 255;
+  #ifdef FORCE_ALT_PRESET
+    skipFn = FORCE_ALT_PRESET; //we will skip this one in the cycle
+    if(fn==skipFn) { //if we are on this one already, go to time
+      fn = FN_TOD; return;
+    }
+  #endif
   if(dir) { // up
     switch(fn) {
-      case FN_TOD: if(ENABLE_DATE) { fn = FN_DATE; break; }
-      case FN_DATE: if(alarmOK) { fn = FN_ALARM; break; }
+      case FN_TOD: if(ENABLE_DATE && skipFn!=FN_DATE) { fn = FN_DATE; break; }
+      case FN_DATE: if(alarmOK && skipFn!=FN_ALARM) { fn = FN_ALARM; break; }
       //NB: day counter + sun + weather functions follow FN_DATE automatically, NOT manually
       //see checkRTC() > Automatic function change timeout
-      case FN_ALARM: if(alarm2OK) { fn = FN_ALARM2; break; }
-      case FN_ALARM2: if(ENABLE_TIMER) { fn = FN_TIMER; break; }
-      case FN_TIMER: if(ENABLE_THERMOMETER) { fn = FN_THERMOMETER; break; }
-      case FN_THERMOMETER: if(ENABLE_TUBETEST) { fn = FN_TUBETEST; break; }
+      case FN_ALARM: if(alarm2OK && skipFn!=FN_ALARM2) { fn = FN_ALARM2; break; }
+      case FN_ALARM2: if(ENABLE_TIMER && skipFn!=FN_TIMER) { fn = FN_TIMER; break; }
+      case FN_TIMER: if(ENABLE_THERMOMETER && skipFn!=FN_THERMOMETER) { fn = FN_THERMOMETER; break; }
+      case FN_THERMOMETER: if(ENABLE_TUBETEST && skipFn!=FN_TUBETEST) { fn = FN_TUBETEST; break; }
       case FN_TUBETEST: default: fn = FN_TOD; break;
     }
   } else { // down
     switch(fn) {
-      case FN_TOD: if(ENABLE_TUBETEST) { fn = FN_TUBETEST; break; } 
-      case FN_TUBETEST: if(ENABLE_THERMOMETER) { fn = FN_THERMOMETER; break; }
-      case FN_THERMOMETER: if(ENABLE_TIMER) { fn = FN_TIMER; break; }
-      case FN_TIMER: if(alarm2OK) { fn = FN_ALARM2; break; }
-      case FN_ALARM2: if(alarmOK) { fn = FN_ALARM; break; }
-      case FN_ALARM: if(ENABLE_DATE) { fn = FN_DATE; break; }
+      case FN_TOD: if(ENABLE_TUBETEST && skipFn!=FN_TUBETEST) { fn = FN_TUBETEST; break; } 
+      case FN_TUBETEST: if(ENABLE_THERMOMETER && skipFn!=FN_THERMOMETER) { fn = FN_THERMOMETER; break; }
+      case FN_THERMOMETER: if(ENABLE_TIMER && skipFn!=FN_TIMER) { fn = FN_TIMER; break; }
+      case FN_TIMER: if(alarm2OK && skipFn!=FN_ALARM2) { fn = FN_ALARM2; break; }
+      case FN_ALARM2: if(alarmOK && skipFn!=FN_ALARM) { fn = FN_ALARM; break; }
+      case FN_ALARM: if(ENABLE_DATE && skipFn!=FN_DATE) { fn = FN_DATE; break; }
       case FN_DATE: default: fn = FN_TOD; break;
     }
   }
@@ -709,7 +719,13 @@ bool initEEPROM(bool hard){
   //if(hard || readEEPROM(4,false)<0 || readEEPROM(4,false)>2) changed += writeEEPROM(4,2,false,false); //4: day counter direction: count up...
   if(hard || readEEPROM(5,false)<1 || readEEPROM(5,false)>12) changed += writeEEPROM(5,12,false,false); //5: ...December...
   if(hard || readEEPROM(6,false)<1 || readEEPROM(6,false)>31) changed += writeEEPROM(6,31,false,false); //6: ...31st. (This gives the day of the year)
-  if(hard) changed += writeEEPROM(7,0,false,false); //7: Alt function preset
+  if(hard) changed += writeEEPROM(7,
+    #ifdef FORCE_ALT_PRESET
+      FORCE_ALT_PRESET
+    #else
+      0
+    #endif
+  ,false,false); //7: Alt function preset
   //8: TODO functions/pages enabled (bitmask)
   if(hard) changed += writeEEPROM(15,0,false,false); //15: last known DST on flag - clear on hard reset (to match the reset RTC/auto DST/anti-poisoning settings to trigger midnight tubes as a tube test)
   #ifdef NETWORK_H
