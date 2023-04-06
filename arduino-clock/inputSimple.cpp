@@ -230,7 +230,7 @@ bool initInputs(){
   #endif
   //Check to see if CTRL_SEL is held at init - facilitates version number display and EEPROM hard init
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
-  if(readBtn(CTRL_SEL)){ inputCur = CTRL_SEL; return true; }
+  if(readBtn(CTRL_SEL)){ inputLast = millis(); inputCur = CTRL_SEL; return true; }
   else return false;
 }
 

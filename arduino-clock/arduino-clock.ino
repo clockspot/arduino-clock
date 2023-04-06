@@ -809,9 +809,9 @@ void checkRTC(bool force){
     }
     force = true;
   }
-  //Temporary-display function timeout: if we're *not* in a permanent one (time, or running/signaling timer)
+  //Temporary-display function timeout: if we're *not* in a permanent one (time, version, or running/signaling timer)
   // Stopped/non-signaling timer shouldn't be permanent, but have a much longer timeout, mostly in case someone is waiting to start the chrono in sync with some event, so we'll give that an hour.
-  else if(fn!=FN_TOD && !(fn==FN_TIMER && (getTimerRun() || signalRemain>0))){
+  else if(fn!=FN_TOD && fn!=FN_VERSION && !(fn==FN_TIMER && (getTimerRun() || signalRemain>0))){
     if((unsigned long)(now-getInputLast())>=(fn==FN_TIMER?3600:FN_TEMP_TIMEOUT)*1000) { fnSetPg = 0; fn = FN_TOD; force=true; }
   }
   
