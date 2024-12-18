@@ -9,15 +9,15 @@
 // Which functionality is enabled in this clock?
 // Related settings will also be enabled in the settings menu.
 // The operating instructions assume all of these are enabled except thermometer and tubetest.
-#define ENABLE_DATE true
-#define ENABLE_DAY_COUNTER true //requires date
+#define ENABLE_DATE 1
+#define ENABLE_DAY_COUNTER 1 //requires date
 #define ENABLE_SUN 0 //false //requires date TODO fix Dusk2Dawn compile issue
 #define ENABLE_WEATHER 0 //true //requires date
 #define ENABLE_ALARM 1 //true
 #define ENABLE_ALARM2 0 //true //requires alarm
 #define ENABLE_ALARM_AUTOSKIP 1 //true //requires alarm
 #define ENABLE_ALARM_FIBONACCI 1 //true //requires alarm //TEST is skipped?
-#define ENABLE_TIMER true //required for proton (sleep)
+#define ENABLE_TIMER 1 //required for proton (sleep)
 #define ENABLE_CHIME 1 //true //TEST is skipped?
 #define ENABLE_DIMMING 1 //true
 #define ENABLE_AWAYMODE 0 //true
@@ -58,8 +58,12 @@
   
   //If using buttons for Up and Down:
   #define INPUT_UPDN_BUTTONS
+  //braun
   #define CTRL_DN GPIO_NUM_8 //A3
   #define CTRL_UP GPIO_NUM_7 //A4
+  //dev proton
+//   #define CTRL_DN GPIO_NUM_37 //MISO
+//   #define CTRL_UP GPIO_NUM_35 //MOSI
 
 //If using Proton 320 radio controls
 //#define INPUT_PROTON
@@ -80,20 +84,6 @@
 
 
 ///// Outputs /////
-
-// //down right side of ESP32:
-// // #define PIN_SPI_MOSI 23
-// #define PIN_I2C_SCL 22
-// // #define PIN_TX 1
-// // #define PIN_RX 3
-// #define PIN_I2C_SDA 21
-// // #define PIN_SPI_MISO 19
-// // #define PIN_SPI_SCK 18
-// #define PIN_I2C_IO  5 //TODO is this ok?
-// // #define PIN_SPI_SS 5 //TODO is this real?
-// //4 is switch pin below
-// //0 is unused
-// //2 is unused
 
 ///// Display /////
 //If using 4/6-digit 7-segment LED display with HT16K33 (I2C on SDA/SCL pins)
@@ -130,7 +120,10 @@
 ///// Other Outputs /////
 
 //What are the pins for each signal type? -1 to disable that signal type //TODO this should simply be defined in main code if omitted
+//braun
 #define PIEZO_PIN GPIO_NUM_6 //Drives a piezo beeper
+//proton dev
+// #define PIEZO_PIN GPIO_NUM_16 //Drives a piezo beeper
 #define SWITCH_PIN -1 //Switched to control an appliance like a radio or light fixture. If used with timer, it will switch on while timer is running (like a "sleep" function). If used with alarm, it will switch on when alarm trips; specify duration of this in SWITCH_DUR. (A3 for UNDB v9)
 #define PULSE_PIN -1 //Simple pulses to control an intermittent signaling device like a solenoid or indicator lamp. Specify pulse duration in RELAY_PULSE. Pulse frequency behaves like the piezo signal.
 //Default signal type for each function:

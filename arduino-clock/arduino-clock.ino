@@ -226,6 +226,10 @@ void setup(){
   pixels.show();
 #endif
   delay(5000); //for development, just in case it boot loops
+#ifdef ENABLE_NEOPIXEL
+  pixels.fill(0x000000);
+  pixels.show();
+#endif
   if(SHOW_SERIAL) {
     Serial.begin(115200);
     #ifdef SAMD_SERIES
@@ -484,6 +488,10 @@ void switchPower(byte dir){
   }
   digitalWrite(SWITCH_PIN,(dir==1?0:1)); updateBacklight(); //LOW = device on
   //Serial.println(F(", switchPower"));
+  #ifdef ENABLE_NEOPIXEL
+    pixels.fill(dir==1?0x00FF00:0x000000); //green to show power is on manually
+    pixels.show();
+  #endif
 }
 
 void startSet(int n, int m, int x, byte p){ //Enter set state at page p, and start setting a value
@@ -997,14 +1005,14 @@ void checkRTC(bool force){
     
     rtcSecLast = rtcGetSecond();
     
-#ifdef ENABLE_NEOPIXEL
-    switch(rtcSecLast%3) {
-      case 0: pixels.fill(0xFF0000); pixels.show(); break;
-      case 1: pixels.fill(0x00FF00); pixels.show(); break;
-      case 2: pixels.fill(0x0000FF); pixels.show(); break;
-      default: break;
-    }
-#endif
+// #ifdef ENABLE_NEOPIXEL
+//     switch(rtcSecLast%3) {
+//       case 0: pixels.fill(0xFF0000); pixels.show(); break;
+//       case 1: pixels.fill(0x00FF00); pixels.show(); break;
+//       case 2: pixels.fill(0x0000FF); pixels.show(); break;
+//       default: break;
+//     }
+// #endif
     
   } //end if force or new second
 } //end checkRTC()
@@ -1333,6 +1341,10 @@ void timerSleepSwitch(bool on){
     // Serial.print(millis(),DEC);
     // if(on) Serial.println(F(" Switch signal on, timerSleepSwitch"));
     // else   Serial.println(F(" Switch signal off, timerSleepSwitch"));
+    #ifdef ENABLE_NEOPIXEL
+      pixels.fill(on?0x0000FF:0x000000); //blue to show power is on via sleep
+      pixels.show();
+    #endif
   }
 }
 byte getTimerState(){ return timerState; }
@@ -1915,6 +1927,10 @@ void signalStart(byte sigFn, byte sigDur){
       signalRemain = (sigFn==FN_ALARM||sigFn==FN_ALARM2? SWITCH_DUR: sigDur); //For alarm signal, use switch signal duration from config (eg 2hr)
       digitalWrite(SWITCH_PIN,LOW); updateBacklight(); //LOW = device on
       //Serial.print(millis(),DEC); Serial.println(F(" Switch signal on, signalStart"));
+      #ifdef ENABLE_NEOPIXEL
+        pixels.fill(0xFFAA00); //orange to show power is on for switch signal (should not see this in proton config)
+        pixels.show();
+      #endif
     } else { //start piezo or pulse signal. If neither is present, this will have no effect since cycleSignal will clear it
       signalRemain = (sigFn==FN_ALARM||sigFn==FN_ALARM2? SIGNAL_DUR: sigDur); //For alarm signal, use signal duration from config (eg 2min)
     }
@@ -1934,6 +1950,10 @@ void signalStop(){ //stop current signal and clear out signal timer if applicabl
     //Serial.print(millis(),DEC); Serial.println(F(" Pulse signal off, signalStop"));
   }
   updateBacklight();
+  #ifdef ENABLE_NEOPIXEL
+    pixels.fill(0x000000);
+    pixels.show();
+  #endif
 } //end signalStop()
 void cycleSignal(){
   //Called on every loop to control the signal.
@@ -2003,12 +2023,20 @@ void cycleSignal(){
       //Upon new measure, start the pulse immediately
       if(signalMeasureStep==1){
         digitalWrite(PULSE_PIN,LOW); updateBacklight(); //LOW = device on
+        #ifdef ENABLE_NEOPIXEL
+          pixels.fill(0xFF0000); //red to show pulse output
+          pixels.show();
+        #endif
         //Serial.print(millis(),DEC); Serial.println(F(" Pulse signal on, cycleSignal"));
         signalMeasureStep = 2; //set it up to stop
       }
       //See if it's time to stop the pulse
       else if(signalMeasureStep==2 && (unsigned long)(ms()-signalMeasureStartTime)>=PULSE_LENGTH) {
         digitalWrite(PULSE_PIN,HIGH); updateBacklight(); //LOW = device on
+        #ifdef ENABLE_NEOPIXEL
+          pixels.fill(0x000000);
+          pixels.show();
+        #endif
         //Serial.print(millis(),DEC); Serial.println(F(" Pulse signal off, cycleSignal"));
         //Set up for the next event
         if(signalRemain) signalRemain--; //this measure is done

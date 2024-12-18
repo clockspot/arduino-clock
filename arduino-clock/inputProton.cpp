@@ -52,10 +52,10 @@ byte inputCurHeld = 0; //Button hold thresholds: 0=none, 1=unused, 2=short, 3=lo
 //We'll have var representations of each, so we can detect changes
 bool inputAl1 = false;
 bool inputAl2 = false;
-bool inputAl1R = false; //TODO we may not need these - not sure if the microcontroller handles
-bool inputAl2R = false;
-bool inputSw0 = false; //rear switch bit 0
-bool inputSw1 = false; //rear switch bit 1
+//bool inputAl1R = false; //TODO we may not need these - not sure if the microcontroller handles
+//bool inputAl2R = false;
+//bool inputSw0 = false; //rear switch bit 0
+//bool inputSw1 = false; //rear switch bit 1
 
 unsigned long inputLast = 0; //When an input last took place, millis()
 int inputLastTODMins = 0; //When an input last took place, time of day. Used in paginated functions so they all reflect the time of day when the input happened.
@@ -67,22 +67,23 @@ bool initInputs(){
   pinMode(CTRL_ON, INPUT_PULLUP); //momentary
   pinMode(CTRL_AL1, INPUT_PULLUP); //switch on/off
   pinMode(CTRL_AL2, INPUT_PULLUP); //switch on/off
-  pinMode(CTRL_AL1R, INPUT_PULLUP); //switch radio/buzzer
-  pinMode(CTRL_AL2R, INPUT_PULLUP); //switch radio/buzzer
+  //pinMode(CTRL_AL1R, INPUT_PULLUP); //switch radio/buzzer
+  //pinMode(CTRL_AL2R, INPUT_PULLUP); //switch radio/buzzer
   pinMode(CTRL_SNOOZE, INPUT_PULLUP); //momentary (akin to SEL, for now)
   pinMode(CTRL_SLEEP, INPUT_PULLUP); //momentary (akin to ALT, for now)
-  pinMode(CTRL_ADJ_UP, INPUT_PULLUP); //momentary
-  pinMode(CTRL_ADJ_DN, INPUT_PULLUP); //momentary
-  pinMode(CTRL_SW0, INPUT_PULLUP); //rear switch bit 0
-  pinMode(CTRL_SW1, INPUT_PULLUP); //rear switch bit 1
+  pinMode(CTRL_UP, INPUT_PULLUP); //momentary
+  pinMode(CTRL_DN, INPUT_PULLUP); //momentary
+  //pinMode(CTRL_SW0, INPUT_PULLUP); //rear switch bit 0
+  //pinMode(CTRL_SW1, INPUT_PULLUP); //rear switch bit 1
   
   //Set switch input bools
-  inputAl1 = readCtrl(CTRL_AL1); setAlarmState(inputAl1? 2: 0); //2 = on without skip. TODO calculate skip here?
+  inputAl1 = readCtrl(CTRL_AL1); setAlarmState((inputAl1? 2: 0),FN_ALARM); //2 = on without skip. TODO calculate skip here?
   inputAl2 = readCtrl(CTRL_AL2); //TODO implement Al2
-  inputAl1R = readCtrl(CTRL_AL1R);
-  inputAl2R = readCtrl(CTRL_AL2R);
-  inputSw0 = readCtrl(CTRL_SW0); //TODO adopt SW
-  inputSw1 = readCtrl(CTRL_SW1);
+  //TODO read alarm state as inverted
+  //inputAl1R = readCtrl(CTRL_AL1R);
+  //inputAl2R = readCtrl(CTRL_AL2R);
+  //inputSw0 = readCtrl(CTRL_SW0); //TODO adopt SW
+  //inputSw1 = readCtrl(CTRL_SW1);
   
   //Check to see if CTRL_SNOOZE is held at init - facilitates version number display and EEPROM hard init
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
@@ -160,7 +161,7 @@ void checkSwitch(byte ctrl) {
     case CTRL_AL1:
       if(readCtrl(ctrl) != inputAl1) { inputAl1 = !inputAl1;
         inputStop();
-        setAlarmState(inputAl1? 2: 0);
+        setAlarmState((inputAl1? 2: 0),FN_ALARM);
         goToFn(FN_ALARM); //temporarily display (will clear per checkRTC) - TODO can you still set?
       } break;
     case CTRL_AL2:
@@ -168,26 +169,26 @@ void checkSwitch(byte ctrl) {
         //inputStop();
         //TODO set alarm state and go to FN_ALARM2
       } break;
-    case CTRL_AL1R:
-      if(readCtrl(ctrl) != inputAl1R) { inputAl1R = !inputAl1R;
-        //inputStop();
-        //TODO do we need to handle this in code?
-      } break;
-    case CTRL_AL2R:
-      if(readCtrl(ctrl) != inputAl2R) { inputAl2R = !inputAl2R;
-        //inputStop();
-        //TODO do we need to handle this in code?
-      } break;
-    case CTRL_SW0:
-      if(readCtrl(ctrl) != inputSw0) { inputSw0 = !inputSw0;
-        //inputStop();
-        //TODO are we using this?
-      } break;
-    case CTRL_SW1:
-      if(readCtrl(ctrl) != inputSw1) { inputSw1 = !inputSw1;
-        //inputStop();
-        //TODO are we using this?
-      } break;
+//     case CTRL_AL1R:
+//       if(readCtrl(ctrl) != inputAl1R) { inputAl1R = !inputAl1R;
+//         //inputStop();
+//         //TODO do we need to handle this in code?
+//       } break;
+//     case CTRL_AL2R:
+//       if(readCtrl(ctrl) != inputAl2R) { inputAl2R = !inputAl2R;
+//         //inputStop();
+//         //TODO do we need to handle this in code?
+//       } break;
+//     case CTRL_SW0:
+//       if(readCtrl(ctrl) != inputSw0) { inputSw0 = !inputSw0;
+//         //inputStop();
+//         //TODO are we using this?
+//       } break;
+//     case CTRL_SW1:
+//       if(readCtrl(ctrl) != inputSw1) { inputSw1 = !inputSw1;
+//         //inputStop();
+//         //TODO are we using this?
+//       } break;
     default: break;
   }
 }
@@ -208,16 +209,16 @@ void checkInputs(){
   checkMomentary(CTRL_ON,now);
   checkMomentary(CTRL_SNOOZE,now);
   checkMomentary(CTRL_SLEEP,now);
-  checkMomentary(CTRL_ADJ_UP,now);
-  checkMomentary(CTRL_ADJ_DN,now);
+  checkMomentary(CTRL_UP,now);
+  checkMomentary(CTRL_DN,now);
 
   //These will handle directly
   checkSwitch(CTRL_AL1);
   checkSwitch(CTRL_AL2);
-  checkSwitch(CTRL_AL1R);
-  checkSwitch(CTRL_AL2R);
-  checkSwitch(CTRL_SW0);
-  checkSwitch(CTRL_SW1);
+//   checkSwitch(CTRL_AL1R);
+//   checkSwitch(CTRL_AL2R);
+//   checkSwitch(CTRL_SW0);
+//   checkSwitch(CTRL_SW1);
 }
 
 void setInputLast(unsigned long increment){
@@ -302,7 +303,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   if(getSignalRemain()>0 && evt==1 && ctrl==CTRL_SNOOZE) {
     signalStop();
     if(getSignalSource()==FN_ALARM || getSignalSource()==FN_ALARM2) { //If this was the alarm
-      if((readEEPROM(42,false)==1) {
+      if(readEEPROM(42,false)==1) {
         startSnooze();
       }
     }
@@ -394,7 +395,7 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   
   else { //settings menu setting - to/from EEPROM
     
-    byte opt = fn-FN_OPTS; //current setting index
+    byte opt = getCurFn()-FN_OPTS; //current setting index
     
     if(evt==2 && ctrl==CTRL_SNOOZE) { //CTRL_SNOOZE short hold: exit settings menu
       inputStop();
@@ -430,4 +431,4 @@ void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
   
 } //end ctrlEvt
 
-#endif //INPUT_SIMPLE
+#endif //INPUT_PROTON
