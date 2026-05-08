@@ -1,11 +1,38 @@
+//"Simple" inputs are a set of three (or four) controls: Select, Up, Down, and Alt. Up/Down could be a rotary control. All could be per IMU.
+
 #include <arduino.h>
 #include "arduino-clock.h"
 
-#include "input.h"
+#ifdef INPUT_SIMPLE //see arduino-clock.ino Includes section
+
+#include "inputSimple.h"
 
 //Needs access to RTC timestamps
-#include "rtcDS3231.h"
-#include "rtcMillis.h"
+#ifdef RTC_IS_DS3231
+  #include "rtcDS3231.h" //if RTC_IS_DS3231 is defined in config – for an I2C DS3231 RTC module
+#endif
+#ifdef RTC_IS_MILLIS
+  #include "rtcMillis.h" //if RTC_IS_MILLIS is defined in config – for a fake RTC based on millis
+#endif
+//Needs to be able to start network
+#if defined(NETWORK_NINA)
+  #include "networkNINA.h" //enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
+#elif defined(NETWORK_ESP32)
+  #include "networkESP32.h" //enables WiFi/web-based config/NTP sync on esp32 //TODO
+#endif
+//Needs access to storage
+#include "storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash (including esp32? TODO find out)
+//Needs access to display to blink it
+#ifdef DISPLAY_NIXIE
+  #include "dispNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
+#endif
+#ifdef DISPLAY_MAX7219
+  #include "dispMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
+#endif
+#ifdef DISPLAY_HT16K33
+  #include "dispHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
+#endif
+
 
 #ifndef HOLDSET_SLOW_RATE
 #define HOLDSET_SLOW_RATE 125
@@ -17,7 +44,6 @@
 #define DEBOUNCE_DUR 150 //ms
 #endif
 
-//#include "Arduino.h" //not necessary, since these get compiled as part of the main sketch
 #ifdef INPUT_UPDN_ROTARY
   #include <Encoder.h> //Paul Stoffregen - install in your Arduino IDE
   Encoder rot(CTRL_UP,CTRL_DN);  //TODO may need to reverse
@@ -204,7 +230,7 @@ bool initInputs(){
   #endif
   //Check to see if CTRL_SEL is held at init - facilitates version number display and EEPROM hard init
   delay(100); //prevents the below from firing in the event there's a capacitor stabilizing the input, which can read low falsely
-  if(readBtn(CTRL_SEL)){ inputCur = CTRL_SEL; return true; }
+  if(readBtn(CTRL_SEL)){ inputLast = millis(); inputCur = CTRL_SEL; return true; }
   else return false;
 }
 
@@ -354,3 +380,266 @@ int getInputLastTODMins(){
   //Used to ensure paged displays (e.g. calendar) use the same TOD for all pages
   return inputLastTODMins;
 }
+
+void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity){
+  //Handle control events from inputs, based on current fn and set state.
+  //Moved here from main code, since the functionality here reflects the available controls (cf. inputProton).
+  
+  //evt: 1=press, 2=short hold, 3=long hold, 4=verylong, 5=superlong, 0=release.
+  //We only handle press evts for up/down ctrls, as that's the only evt encoders generate,
+  //and input.cpp sends repeated presses if up/down buttons are held.
+  //But for sel/alt (always buttons), we can handle different hold states here.
+
+  //If the version display is showing, ignore all else until Sel is released (cancel) or long-held (cancel and eeprom reset)
+  if(getCurFn()==FN_VERSION){
+    if(ctrl==CTRL_SEL && (evt==0 || evt==5)){ //SEL release or superlong hold
+      if(evt==5){ initEEPROM(true); } //superlong hold: reset EEPROM
+      setCurFn(FN_TOD);
+      inputStop(); updateDisplay();
+      #ifdef NETWORK_H
+        initNetwork(); //we didn't do this earlier since the wifi connect makes the clock hang
+      #endif
+      return;
+    } else {
+      return; //ignore other controls
+    }
+  }
+
+  //If the signal is going, any press should silence it
+  if(getSignalRemain()>0 && evt==1){
+    signalStop();
+    if(getSignalSource()==FN_ALARM || getSignalSource()==FN_ALARM2) { //If this was the alarm
+      //If the alarm is using the switch signal and this is the Alt button; or if alarm is *not* using the switch signal and this is Fibonacci mode; don't set the snooze
+      if((readEEPROM(42,false)==1 && CTRL_ALT>0 && ctrl==CTRL_ALT) || (readEEPROM(42,false)!=1 && readEEPROM(50,false))) {
+        quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
+        displayBlink(); //to indicate this as well
+      } else { //start snooze
+        startSnooze();
+      }
+    }
+    inputStop();
+    return;
+  }
+  //If the snooze is going, any press should cancel it, with a signal
+  if(getSnoozeRemain()>0 && evt==1){
+    stopSnooze();
+    quickBeep(64); //Short signal to indicate the alarm has been silenced until tomorrow
+    displayBlink(); //to indicate this as well
+    inputStop();
+    return;
+  }
+  // //TODO NIXIE
+  // //TODO will need to replace direct variable updates with get/set fns
+  // //If the clean is going, any press should cancel it, with a display update
+  // if(cleanRemain>0 && evt==1){
+  //   cleanRemain = 0;
+  //   inputStop();
+  //   updateDisplay();
+  //   return;
+  // }
+  // //TODO NIXIE??
+  // //If a scroll is waiting to scroll out, cancel it, and let the button event do what it will
+  // if(scrollRemain==-128 && evt==1){
+  //   scrollRemain = 0;
+  // }
+  // //If a scroll is going, fast-forward to end of scroll in/out - see also checkRTC
+  // else if(scrollRemain!=0 && evt==1){
+  //   inputStop();
+  //   if(scrollRemain>0) scrollRemain = 1;
+  //   else scrollRemain = -1;
+  //   checkEffects(true);
+  //   return;
+  // }
+  
+  //Is it a press for an un-off?
+  startUnoff(); //always do this, so continued button presses during an unoff keep the display alive
+  if(getDisplayBrightness()==0 && evt==1) {
+    updateDisplay();
+    inputStop();
+    return;
+  }
+  
+  #ifdef NETWORK_H
+    //Formerly Alt did these things too, at shorter hold durations - but this was removed as I didn't want to double up functionality on this optional button too much. Last seen in commit e8b617f 2023-04-05
+    //Very long hold, Sel: start admin
+    if(evt==4 && ctrl==CTRL_SEL) {
+      networkStartAdmin();
+      return;
+    }
+    //Super long hold, Sel: start AP (TODO would we rather it forget wifi?)
+    if(evt==5 && ctrl==CTRL_SEL) {
+      networkStartAP();
+      return;
+    }
+  #endif
+  
+  if(getCurFn() < FN_OPTS) { //normal fn running/setting (not in settings menu)
+
+    if(evt==3 && ctrl==CTRL_SEL) { //CTRL_SEL long hold: enter settings menu
+      //inputStop(); commented out to to enable evt==4 and evt==5 per above
+      setCurFn(FN_OPTS);
+      clearSet(); //don't need updateDisplay() here because this calls updateRTC with force=true
+      return;
+    }
+    
+    if(!getFnIsSetting()) { //fn running
+      if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL hold: enter setting mode
+        setByFn();
+        return;
+      }
+      else if((ctrl==CTRL_SEL && evt==0) || ((ctrl==CTRL_UP || ctrl==CTRL_DN) && evt==1)) { //sel release or adj press
+        //we can't handle sel press here because, if attempting to enter setting mode, it would switch the fn first
+        if(ctrl==CTRL_SEL){ //sel release
+          //Serial.println(F("sel release"));
+          if(getCurFn()==FN_TIMER && !getTimerRun()) timerClear(); //if timer is stopped, clear it
+          fnScroll(1); //Go to next fn in the cycle
+          checkRTC(true); //updates display
+        }
+        else if(ctrl==CTRL_UP || ctrl==CTRL_DN) {
+          if(getCurFn()==FN_ALARM) switchAlarmState(ctrl==CTRL_UP?1:0,FN_ALARM); //switch alarm
+          if(getCurFn()==FN_ALARM2) switchAlarmState(ctrl==CTRL_UP?1:0,FN_ALARM2); //switch alarm
+          if(getCurFn()==FN_TIMER){
+            if(ctrl==CTRL_UP){
+              if(!getTimerRun()){ //stopped
+                timerStart();
+              } else { //running
+                #ifdef INPUT_UPDN_ROTARY
+                  if(getTimerDir()) timerLap(); //chrono: lap
+                  else timerRunoutToggle(); //timer: runout option
+                #else //button
+                  timerStop();
+                #endif
+              }
+            } else { //CTRL_DN
+              if(!getTimerRun()){ //stopped
+                #ifdef INPUT_UPDN_BUTTONS
+                  timerClear();
+                  //if we wanted to reset to the previous time, we could use this; but sel hold is easy enough to get there
+                  // //same as //save timer secs
+                  // timerTime = (timerInitialMins*60000)+(timerInitialSecs*1000); //set timer duration
+                  // if(timerTime!=0){
+                  //   bitWrite(timerState,1,0); //set timer direction (bit 1) to down (0)
+                  //   //timerStart(); //we won't automatically start, we'll let the user do that
+                  // }
+                  updateDisplay();
+                #endif
+              } else { //running
+                #ifdef INPUT_UPDN_ROTARY
+                  timerStop();
+                #else
+                  if(getTimerDir()) timerLap(); //chrono: lap
+                  else timerRunoutToggle(); //timer: runout option
+                #endif
+              }
+            }
+          } //end if FN_TIMER
+          //if(getCurFn()==FN_TOD) TODO volume in I2C radio
+        }
+        //else do nothing
+      } //end sel release or adj press
+      else if(CTRL_ALT>0 && ctrl==CTRL_ALT) {
+        //if soft power switch, we'll switch on release
+        //Formerly there was network-related stuff here which has been removed - explained above - last seen in commit e8b617f 2023-04-05
+        if(ENABLE_SOFT_POWER_SWITCH && SWITCH_PIN>=0) {
+          if(evt==0) switchPower(2);
+        }
+        //otherwise this becomes our function preset
+        else {
+          //On long hold, if this is not currently the preset (and if the preset isn't forced),
+          //we'll set it, double beep, and inputStop.
+          //If this is the preset, and it is forced, we'll allow the value to be set.
+          if(evt==2) {
+            if(readEEPROM(7,false)!=getCurFn()) {
+              #ifndef FORCE_ALT_PRESET
+                inputStop();
+                writeEEPROM(7,getCurFn(),false);
+                quickBeep(76);
+                displayBlink();
+              #endif
+            } else {
+              #ifdef FORCE_ALT_PRESET
+                setByFn();
+              #endif
+              return;
+            }
+          }
+          //On short release, jump to the preset fn.
+          else if(evt==0) {
+            inputStop();
+            if(getCurFn()!=readEEPROM(7,false)) goToFn(readEEPROM(7,false));
+            else {
+              //Special case: if this is the alarm, toggle the alarm switch
+              if(getCurFn()==FN_ALARM) switchAlarmState(2,FN_ALARM);
+              if(getCurFn()==FN_ALARM2) switchAlarmState(2,FN_ALARM2);
+            }
+            updateDisplay();
+          }
+        }
+      } //end alt
+    } //end fn running
+
+    else { //fn setting
+      if(evt==1) { //press
+        //TODO could we do release/shorthold on CTRL_SEL so we can exit without making changes?
+        //currently no, because we don't inputStop() when short hold goes into fn setting, in case long hold may go to settings menu
+        //so we can't handle a release because it would immediately save if releasing from the short hold.
+        //Consider recording the input start time when going into fn setting so we can distinguish its release from a future one
+        //TODO the above can be revisited now that we pass evtLast
+        if(ctrl==CTRL_SEL) { //CTRL_SEL push: go to next setting or save and exit setting mode
+          inputStop(); //not waiting for CTRL_SELHold, so can stop listening here
+          setByFn();
+          return;
+        } //end CTRL_SEL push
+        #ifdef FORCE_ALT_PRESET
+          if(ctrl==CTRL_ALT && getCurFn()==FORCE_ALT_PRESET) { //if this is the preset, and it is forced, we'll allow the value to be saved.
+            inputStop(); //not waiting for CTRL_SELHold, so can stop listening here
+            setByFn();
+            return;
+          }
+        #endif
+        if(ctrl==CTRL_UP) doSet(velocity ? 10 : 1);
+        if(ctrl==CTRL_DN) doSet(velocity ? -10 : -1);
+      } //end if evt==1
+    } //end fn setting
+    
+  } //end normal fn running/setting
+  
+  else { //settings menu setting - to/from EEPROM
+    
+    byte opt = getCurFn()-FN_OPTS; //current setting index
+    
+    if(evt==2 && ctrl==CTRL_SEL) { //CTRL_SEL short hold: exit settings menu
+      inputStop();
+      setOpt(opt); clearSet(); //if we were setting, writes setting val to EEPROM
+      //TODO test this - if we were not setting, it should start but then immediately cancel via
+      setCurFn(FN_TOD);
+      //we may have changed lat/long/GMT/DST settings so recalc those
+      calcSun(); //TODO pull from clock
+      isDSTByHour(rtcGetYear(),rtcGetMonth(),rtcGetDate(),rtcGetHour(),true);
+      return;
+    }
+    
+    if(!getFnIsSetting()){ //setting number
+      if(ctrl==CTRL_SEL && evt==0 && evtLast<3) { //CTRL_SEL release (but not after holding to get into the menu): enter setting value
+        setOpt(opt);
+      }
+      if(ctrl==CTRL_UP && evt==1) fnOptScroll(1); //next one up or cycle to beginning
+      if(ctrl==CTRL_DN && evt==1) fnOptScroll(0); //next one down or cycle to end?
+      updateDisplay();
+    } //end setting number
+
+    else { //setting value
+      if(ctrl==CTRL_SEL && evt==0) { //CTRL_SEL release: save value and exit
+        setOpt(opt);
+      }
+      if(evt==1 && (ctrl==CTRL_UP || ctrl==CTRL_DN)){
+        if(ctrl==CTRL_UP) doSet(velocity ? 10 : 1);
+        if(ctrl==CTRL_DN) doSet(velocity ? -10 : -1);
+        updateDisplay(); //may also make sounds for sampling
+      }
+    }  //end setting value
+  } //end settings menu setting
+  
+} //end ctrlEvt
+
+#endif //INPUT_SIMPLE

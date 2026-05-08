@@ -1,7 +1,7 @@
 #include <arduino.h>
 #include "arduino-clock.h"
 
-#ifdef RTC_MILLIS //see arduino-clock.ino Includes section
+#ifdef RTC_IS_MILLIS //see arduino-clock.ino Includes section
 
 #include "rtcMillis.h"
 
@@ -64,4 +64,4 @@ byte rtcGetSecond(){ return (todMils/1000)%60; }
 
 byte rtcGetTemp(){ return 1000; } //a fake response - ten degrees (1000 hundredths) forever
 
-#endif //RTC_MILLIS
+#endif //RTC_IS_MILLIS

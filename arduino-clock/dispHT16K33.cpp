@@ -35,8 +35,15 @@ void sendToHT16K33(byte posStart, byte posEnd){ //"private"
   //Called by editDisplay and blankDisplay. Needed in lieu of what cycleDisplay does for nixies.
   for(byte i=posStart; i<=posEnd; i++){
     if(i>=DISPLAY_SIZE) return;
-    if(displayNext[i]>9) matrix.writeDigitRaw((i>=2?i+1:i),0); //blank - skip pos 2 (colon)
-    else matrix.writeDigitNum((i>=2?i+1:i),displayNext[i]);
+    byte pos = (i>=2?i+1:i); //skip pos 2, as that means colon (not supported currently TODO)
+    bool dot = false;
+    //TODO turn dot true to indicate some things
+    if(pos==5) dot = true;
+    
+    if(displayNext[i]>=200) matrix.writeDigitRaw(pos,B01000110); //special case: "-1" in single place, no decimal
+    else if(displayNext[i]>15) matrix.writeDigitAscii(pos,displayNext[i],dot); //letters for sevenseg, with optional decimal
+    else if(displayNext[i]>9) matrix.writeDigitAscii(pos,32,dot); //blank, with optional decimal
+    else matrix.writeDigitNum(pos,displayNext[i],dot); //numeral, with optional decimal
   }
   matrix.writeDisplay();
 }
@@ -65,7 +72,7 @@ void cycleDisplay(byte displayBrightness, bool useAmbient, word ambientLightLeve
     if(setBlinkState!=blinkModulus) { //will occur every 500ms
       setBlinkState = blinkModulus;
       //If we were dim at start (curBrightness), invert setBlinkState to "start" at 1
-      matrix.setBrightness(((curBrightness==1?1:0)-setBlinkState)? BRIGHTNESS_FULL: BRIGHTNESS_DIM);
+      matrix.setBrightness(((curBrightness==1?1:0)-setBlinkState)? BRIGHTNESS_FULL: BRIGHTNESS_SETDIM);
     }
   }
   
@@ -100,21 +107,27 @@ void cycleDisplay(byte displayBrightness, bool useAmbient, word ambientLightLeve
 
 void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fade){
   if(curBrightness==-1) return;
-  //Splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
+  //Handles input n as either a single ascii character or a decimal number of 1-4 places
+  //If the latter, splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
   //If there are blank places (on the left of a non-leading-zero number), uses value 15 to blank the digit
   //If number has more places than posEnd-posStart, the higher places are truncated off (e.g. 10015 on 4-digit displays --> 0015)
-  word place;
-  for(byte i=0; i<=posEnd-posStart; i++){
-    switch(i){ //because int(pow(10,1))==10 but int(pow(10,2))==99...
-      case 0: place=1; break;
-      case 1: place=10; break;
-      case 2: place=100; break;
-      case 3: place=1000; break;
-      case 4: place=10000; break;
-      case 5: place=100000; break;
-      default: break;
+  if(posEnd==255) posEnd=posStart; //single digit change
+  if(posEnd==posStart && n>15) { //this is an ascii code for a single character
+    displayNext[posStart] = n;
+  } else { //regular number processing
+    word place;
+    for(byte i=0; i<=posEnd-posStart; i++){
+      switch(i){ //because int(pow(10,1))==10 but int(pow(10,2))==99...
+        case 0: place=1; break;
+        case 1: place=10; break;
+        case 2: place=100; break;
+        case 3: place=1000; break;
+        case 4: place=10000; break;
+        case 5: place=100000; break;
+        default: break;
+      }
+      displayNext[posEnd-i] = (i==0&&n==0 ? 0 : (n>=place ? (n/place)%10 : (leadingZeros?0:15)));
     }
-    displayNext[posEnd-i] = (i==0&&n==0 ? 0 : (n>=place ? (n/place)%10 : (leadingZeros?0:15)));
   }
   sendToHT16K33(posStart,posEnd); //TODO consider moving this to cycleDisplay if the value has changed - better sync with brightness change?
   
@@ -125,6 +138,7 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fad
   // Serial.println();
 }
 void blankDisplay(byte posStart, byte posEnd, byte fade){
+  if(posEnd==255) posEnd=posStart; //single digit change
   for(byte i=posStart; i<=posEnd; i++) { displayNext[i]=15; }
   sendToHT16K33(posStart,posEnd);
   //cycleDisplay(); //fixes brightness - can we skip this?

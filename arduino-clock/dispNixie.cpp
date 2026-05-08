@@ -253,6 +253,7 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fad
   //Splits n into digits, sets them into displayNext in places posSt-posEnd (inclusive), with or without leading zeros
   //If there are blank places (on the left of a non-leading-zero number), uses value 15 to blank digit
   //If number has more places than posEnd-posStart, the higher places are truncated off (e.g. 10015 on 4-tube display --> 0015)
+  if(posEnd==255) posEnd=posStart; //single digit change
   word place;
   for(byte i=0; i<=posEnd-posStart; i++){
     switch(i){ //because int(pow(10,1))==10 but int(pow(10,2))==99...
@@ -270,6 +271,7 @@ void editDisplay(word n, byte posStart, byte posEnd, bool leadingZeros, bool fad
 } //end editDisplay()
 
 void blankDisplay(byte posStart, byte posEnd, byte fade){
+  if(posEnd==255) posEnd=posStart; //single digit change
   for(byte i=posStart; i<=posEnd; i++) { displayNext[i]=15; if(!fade) displayLast[i]=15; }
 } //end blankDisplay();
 

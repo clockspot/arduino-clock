@@ -1,5 +1,5 @@
-#ifndef RTC_MILLIS_H
-#define RTC_MILLIS_H
+#ifndef RTC_IS_MILLIS_H
+#define RTC_IS_MILLIS_H
 
 //Mutually exclusive with other rtc options
 

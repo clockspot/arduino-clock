@@ -1,5 +1,5 @@
-#ifndef INPUT_H
-#define INPUT_H
+#ifndef INPUT_SIMPLE_H
+#define INPUT_SIMPLE_H
 
 #ifdef INPUT_IMU
   //If we don't already have inputs defined for Sel/Alt/Up/Dn, use some bogus ones
@@ -31,5 +31,6 @@ void checkInputs();
 void setInputLast(unsigned long increment=0);
 unsigned long getInputLast();
 int getInputLastTODMins();
+void ctrlEvt(byte ctrl, byte evt, byte evtLast, bool velocity=0);
 
-#endif //INPUT_H
+#endif //INPUT_SIMPLE_H

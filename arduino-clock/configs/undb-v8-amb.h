@@ -8,32 +8,26 @@
 
 // Which functionality is enabled in this clock?
 // Related settings will also be enabled in the settings menu.
-// The operating instructions assume all of these are enabled except temp and tubetest.
-#define ENABLE_DATE_FN true // Date function, optionally including pages below
-#define ENABLE_DATE_COUNTER false // Adds date page with an anniversary counter
-#define ENABLE_DATE_RISESET false // Adds date pages with sunrise/sunset times. Requires Dusk2Dawn library by DM Kichi to be installed in IDE.
-#define ENABLE_ALARM_FN false
-#define ENABLE_ALARM_AUTOSKIP false
-#define ENABLE_ALARM_FIBONACCI false
-#define ENABLE_TIMER_FN false
-#define ENABLE_TIME_CHIME false
+// The operating instructions assume all of these are enabled except thermometer and tubetest.
+#define ENABLE_DATE true
+#define ENABLE_DAY_COUNTER false //requires date
+#define ENABLE_SUN false //requires date and Dusk2Dawn library
+#define ENABLE_WEATHER false //requires date and network //WIP
+#define ENABLE_ALARM false
+#define ENABLE_ALARM2 false //requires alarm
+#define ENABLE_ALARM_AUTOSKIP false //requires alarm
+#define ENABLE_ALARM_FIBONACCI false //requires alarm
+#define ENABLE_TIMER false
+#define ENABLE_CHIME false
 #define ENABLE_DIMMING true
 #define ENABLE_AWAYMODE true
-#define ENABLE_TEMP_FN false //Temperature per DS3231 - will read high – leave false for production
-#define ENABLE_TUBETEST_FN false //Cycles through all tubes – leave false for production
+#define ENABLE_THERMOMETER false //Temperature per DS3231 - will read high – leave false for production
+#define ENABLE_TUBETEST false //Cycles through all tubes – leave false for production
 
 
 ///// Real-Time Clock /////
-//These are mutually exclusive
 
-//If using DS3231 (via I2C):
-//Requires Wire library (standard Arduino)
-//Requires DS3231 library by NorthernWidget to be installed in your IDE.
-#define RTC_DS3231
-
-//If using no RTC (a fake RTC based on millis()):
-// #define RTC_MILLIS
-// #define ANTI_DRIFT -700 //msec to add/remove per second - or seconds to add/remove per day divided by 86.4 - to compensate for natural drift. Ifusing wifinina, it really only needs to be good enough for a decent timekeeping display until the next ntp sync. TIP: setting to a superhigh value is helpful for testing! e.g. 9000 will make it run 10x speed
+#define RTC_IS_DS3231
 
 
 ///// Inputs /////

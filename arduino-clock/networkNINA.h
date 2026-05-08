@@ -1,7 +1,6 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
-bool networkSupported();
 void checkForWiFiStatusChange();
 void networkStartWiFi();
 void networkStartAP();
