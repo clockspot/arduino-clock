@@ -1,11 +1,10 @@
 #ifndef ARDUINO_CLOCK_H
 #define ARDUINO_CLOCK_H
 
-////////// Hardware configuration //////////
-//Include the config file that matches your hardware setup. If needed, duplicate an existing one.
-
-// #include "configs/esp32-proton.h"
-#include "configs/undb-v8.h"
+#include "config.h"
+#ifndef CONFIG_SWITCHER
+  #error "Copy config.example.h to config.h and select your hardware configuration."
+#endif
 
 ////////////////////////////////////////////
 

@@ -1,4 +1,5 @@
-localclocks/
+custom/
+config.h
 .DS_Store
 .vscode/
 debug.cfg
