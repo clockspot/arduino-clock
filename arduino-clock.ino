@@ -1095,68 +1095,10 @@ bool isDSTByHour(int y, byte m, byte d, byte h, bool setFlag){
   }
   return dstNow;
 }
-byte nthSunday(int y, byte m, byte nth){
-  if(nth>0) return (((7-dayOfWeek(y,m,1))%7)+1+((nth-1)*7));
-  if(nth<0) return (dayOfWeek(y,m,1)==0 && daysInMonth(y,m)>28? 29: nthSunday(y,m,1)+21+((nth+1)*7));
-  return 0;
-}
-byte daysInMonth(word y, byte m){
-  if(m==2) return (y%4==0 && (y%100!=0 || y%400==0) ? 29 : 28);
-  //https://cmcenroe.me/2014/12/05/days-in-month-formula.html
-  else return (28 + ((m + (m/8)) % 2) + (2 % m) + (2 * (1/m)));
-}
-int daysInYear(word y){
-  return 337 + daysInMonth(y,2);
-}
-int dateToDayCount(word y, byte m, byte d){
-  int dc = 0;
-  for(byte i=1; i<m; i++) dc += daysInMonth(y,i); //add every full month since start of this year
-  dc += d-1; //every full day since start of this month
-  return dc;
-}
-byte dayOfWeek(word y, byte m, byte d){
-  //Used by nthSunday and in calls to rtcSetDate
-  //Calculated per https://en.wikipedia.org/wiki/Zeller%27s_congruence
-  byte yb = y%100; //2-digit year
-  byte ya = y/100; //century
-  //For this formula, Jan and Feb are considered months 11 and 12 of the previous year.
-  //So if it's Jan or Feb, add 10 to the month, and set back the year and century if applicable
-  if(m<3) { m+=10; if(yb==0) { yb=99; ya-=1; } else yb-=1; }
-  else m -= 2; //otherwise subtract 2 from the month
-  return (d + ((13*m-1)/5) + yb + (yb/4) + (ya/4) + 5*ya) %7;
-}
-int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp){
-  //If m+d is later   { if count up from, use last year, else use this year }: in Feb, count up from last Mar or down to this Mar
-  //If m+d is earlier { if count down to, use next year, else use this year }: in Feb, count down to next Jan or up from this Jan
-  bool targetDir = mt*100+dt>=m*100+d+(countUp&&!(mt==12&&dt==31)?1:0); //if count up from 12/31 (day of year), show 365/366 instead of 0
-  int targetYear = (countUp && targetDir? y-1: (!countUp && !targetDir? y+1: y));
-  int targetDayCount; targetDayCount = dateToDayCount(targetYear, mt, dt);
-  if(targetYear<y) targetDayCount -= daysInYear(targetYear);
-  if(targetYear>y) targetDayCount += daysInYear(y);
-  long currentDayCount; currentDayCount = dateToDayCount(y,m,d);
-  return abs(targetDir? currentDayCount-targetDayCount: targetDayCount-currentDayCount);
-  //For now, this does not indicate negative (eg with leading zeros bc I don't like how it looks here)
-  //and since the direction is specified, it's always going to be either negative or positive
-  // Serial.print("Today is ");
-  // serialPrintDate(y,m,d);
-  // Serial.print(" and ");
-  // serialPrintDate(targetYear,mt,dt);
-  // Serial.print(" is ");
-  // Serial.print(abs(targetDir? currentDayCount-targetDayCount: targetDayCount-currentDayCount),DEC);
-  // Serial.print(" day(s) ");
-  // Serial.println(countUp?"ago":"away");
-}
-bool isTimeInRange(word tstart, word tend, word ttest) {
-  //Times are in minutes since midnight, 0-1439
-  //if tstart < tend, ttest is in range if >= tstart AND < tend
-  //if tstart > tend (range passes a midnight), ttest is in range if >= tstart OR < tend
-  //if tstart == tend, no ttest is in range
-  return ( (tstart<tend && ttest>=tstart && ttest<tend) || (tstart>tend && (ttest>=tstart || ttest<tend)) );
-}
-bool isDayInRange(byte dstart, byte dend, byte dtest) {
-  //Similar to isTimeInRange, only the range is inclusive in both ends (always minimum 1 day match)
-  return ( (dstart<=dend && dtest>=dstart && dtest<=dend) || (dstart>dend && (dtest>=dstart || dtest<=dend)) );
-}
+// Pure date/time helpers (daysInMonth, dayOfWeek, nthSunday, dateToDayCount,
+// dateComp, isTimeInRange, isDayInRange) live in datetime.cpp so they can be
+// unit-tested on the host. isDST/isDSTByHour/autoDST stay here because they
+// touch EEPROM.
 
 // Chrono/Timer
 // There are two timing sources in the UNDB – the Arduino itself (eg millis()), which gives subsecond precision but isn't very accurate, so it's only good for short-term timing and taking action in response to user activity (eg button press hold thresholds); and the rtc, which is very accurate but only gives seconds (unless you're monitoring its square wave via a digital pin, in DS3231's case), so it's only good for long-term timing and taking action in response to time of day. The one place we need both short-term precision and long-term accuracy is in the chrono/timer – so I have based it on millis() but with an offset applied to correct for its drift, periodically adjusted per the rtc. I also use it for the signal, so the 1/sec measure cycle stays in sync with real time; but we don't need to use it for stuff like button polling.

@@ -6,6 +6,8 @@
   #error "Copy config.example.h to config.h and select your hardware configuration."
 #endif
 
+#include "datetime.h"
+
 ////////////////////////////////////////////
 
 
@@ -68,14 +70,7 @@ void fibonacci(byte h, byte m, byte s, byte whichAlarmFn);
 void autoDST();
 bool isDST(int y, byte m, byte d);
 bool isDSTByHour(int y, byte m, byte d, byte h, bool setFlag);
-byte nthSunday(int y, byte m, byte nth);
-byte daysInMonth(word y, byte m);
-int daysInYear(word y);
-int dateToDayCount(word y, byte m, byte d);
-byte dayOfWeek(word y, byte m, byte d);
-int dateComp(int y, byte m, byte d, byte mt, byte dt, bool countUp);
-bool isTimeInRange(word tstart, word tend, word ttest);
-bool isDayInRange(byte dstart, byte dend, byte dtest);
+// Pure date helpers (daysInMonth, dayOfWeek, nthSunday, etc.) are declared in datetime.h, included above.
 void millisCheckDrift();
 void millisApplyDrift();
 void millisReset();
