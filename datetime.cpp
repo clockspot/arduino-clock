@@ -26,7 +26,10 @@ byte dayOfWeek(word y, byte m, byte d){
   return (d + ((13*m-1)/5) + yb + (yb/4) + (ya/4) + 5*ya) %7;
 }
 
-byte nthSunday(int y, byte m, byte nth){
+byte nthSunday(int y, byte m, int8_t nth){
+  // nth must be signed: callers pass negative values (e.g. -1) for "last
+  // Sunday of the month". Declaring nth as byte (uint8_t) silently broke all
+  // non-US DST rules.
   if(nth>0) return (((7-dayOfWeek(y,m,1))%7)+1+((nth-1)*7));
   if(nth<0) return (dayOfWeek(y,m,1)==0 && daysInMonth(y,m)>28? 29: nthSunday(y,m,1)+21+((nth+1)*7));
   return 0;
