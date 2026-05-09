@@ -9,11 +9,11 @@
 #include "inputProton.h"
 
 //Needs access to RTC timestamps
-#ifdef RTC_IS_DS3231
-  #include "rtcDS3231.h" //if RTC_IS_DS3231 is defined in config – for an I2C DS3231 RTC module
+#ifdef RTC_DS3231
+  #include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
 #endif
-#ifdef RTC_IS_MILLIS
-  #include "rtcMillis.h" //if RTC_IS_MILLIS is defined in config – for a fake RTC based on millis
+#ifdef RTC_MILLIS
+  #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
 #endif
 //Needs to be able to start network
 #if defined(NETWORK_NINA)
@@ -25,13 +25,13 @@
 #include "storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash (including esp32? TODO find out)
 //Needs access to display to blink it
 #ifdef DISPLAY_NIXIE
-  #include "dispNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
+  #include "displayNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
 #endif
 #ifdef DISPLAY_MAX7219
-  #include "dispMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
+  #include "displayMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
 #endif
 #ifdef DISPLAY_HT16K33
-  #include "dispHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
+  #include "displayHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
 #endif
 
 #ifndef HOLDSET_SLOW_RATE

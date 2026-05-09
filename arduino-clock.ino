@@ -23,22 +23,22 @@ const bool vDev = 1;
 #endif
 #include "src/storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash (including esp32? TODO find out)
 #ifdef DISPLAY_NIXIE
-  #include "src/dispNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
+  #include "src/displayNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
 #endif
 #ifdef DISPLAY_MAX7219
-  #include "src/dispMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
+  #include "src/displayMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
 #endif
 #ifdef DISPLAY_HT16K33
-  #include "src/dispHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
+  #include "src/displayHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
 #endif
 #ifdef LIGHTSENSOR_VEML7700
   #include "src/lightsensorVEML7700.h" //if LIGHTSENSOR_VEML7700 is defined in config - for I2C VEML7700 lux sensor
 #endif
-#ifdef RTC_IS_DS3231
-  #include "src/rtcDS3231.h" //if RTC_IS_DS3231 is defined in config – for an I2C DS3231 RTC module
+#ifdef RTC_DS3231
+  #include "src/rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
 #endif
-#ifdef RTC_IS_MILLIS
-  #include "src/rtcMillis.h" //if RTC_IS_MILLIS is defined in config – for a fake RTC based on millis
+#ifdef RTC_MILLIS
+  #include "src/rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
 #endif
 
 #if defined(INPUT_SIMPLE)
@@ -1349,7 +1349,7 @@ void updateDisplay(){
   //     byte isrc = i+DISPLAY_SIZE+scrollRemain+1;
   //     displayNext[i] = (isrc>=DISPLAY_SIZE? 15: scrollDisplay[isrc]); //allow to fade
   //   }
-  // } //todo move cleanRemain, scrollRemain to dispNixie
+  // } //todo move cleanRemain, scrollRemain to displayNixie
   // else
   if(fn==FN_VERSION) {
     editDisplay(vMajor, 0, 1);

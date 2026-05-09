@@ -3,7 +3,7 @@
 
 #ifdef DISPLAY_HT16K33 //see arduino-clock.ino Includes section
 
-#include "dispHT16K33.h"
+#include "displayHT16K33.h"
 #include <Adafruit_GFX.h>
 #include <Adafruit_LEDBackpack.h>
 

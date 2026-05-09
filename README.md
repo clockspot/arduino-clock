@@ -37,18 +37,42 @@ Written to support [RLB Designs’](http://rlb-designs.com/) Universal Nixie Dri
 * Switch and pulse signals supported on UNDB v9+
 * Nano 33 IoT support coming on future versions
 
+## Installation
+
 [The latest release can be downloaded here.](https://github.com/clockspot/arduino-clock/releases) Please note [known bugs and to-dos.](https://github.com/clockspot/arduino-clock/blob/master/TODO.md)
 
-# Configuration, compilation, and upload
+### Code organization
 
-Various options, such as enabled functionality, RTC, display, I/O pins, timeouts, and control behaviors, are specified in a config file. This allows you to maintain configs for multiple clock hardware profiles, and simply include the relevant config at the top of `arduino-clock.h` before compiling. Several [example configs](https://github.com/clockspot/arduino-clock/tree/master/arduino-clock/configs) are provided, and [`~sample.h`](https://github.com/clockspot/arduino-clock/blob/master/arduino-clock/configs/%7Esample.h) includes all possible options with detailed comments.
+The sketch entry points (`arduino-clock.ino`, `arduino-clock.h`) and configuration files (`config.h`, `config.example.h`, `configs/`) live at the repository root so that the folder doubles as both an Arduino IDE sketch folder and a PlatformIO project root. Module source files live in `src/`, grouped by hardware area:
+
+* `display*` — drivers for nixie tubes, MAX7219 LED matrices, and HT16K33 7-segment displays
+* `rtc*` — DS3231 hardware RTC and software (millis-based) backends
+* `input*` — `inputSimple` for button/rotary/IMU controls; `inputProton` for the Proton 320 clock radio retrofit
+* `network*` — Wi-Fi/NTP for Nano 33 IoT (NINA) and ESP32
+* `lightsensor*` — VEML7700 ambient light sensor
+* `storage` — persistent EEPROM/flash settings
+* `datetime` — pure date/time logic with no Arduino dependencies, covered by host-side unit tests
+
+Each module is conditionally compiled based on flags set in your config, so only the code for the hardware you've actually selected ends up in the binary.
+
+### Configuration
+
+Various options, such as enabled functionality, RTC, display, I/O pins, timeouts, and control behaviors, are specified in config files, which allow you to define configuration(s) to suit your particular clock's hardware.
+
+The `configs/` folder includes many sample config files, as well as a `defaults.h` which shows all the possible configuration options with their defaults and full per-option documentation. You can create your own config files in a `custom/` folder that will be git-ignored. 
+
+Config files don't need to specify every desired option — only the ones that differ from `defaults.h` (as this provides a default configuration). Each config must also explicitly pick one RTC type (e.g. `RTC_DS3231`) and one display type (e.g. `DISPLAY_NIXIE`).
+
+To specify which configuration should be used at compile time, duplicate `config.example.h` as `config.h` and `#include` the desired config file. If you work with multiple clocks with different hardware profiles, you can use this file to easily switch between them by specifying multiple `#includes` and commenting out all but the relevant one.
 
 You may also wish to adjust the defaults for the clock’s user-configurable values to best suit its intended use, in case the user performs a hard reset. Some of these are specified in the config; others, for now, are hardcoded in `arduino-clock.ino` (`optsDef[]` for [settings](https://github.com/clockspot/arduino-clock/blob/master/INSTRUCTIONS.md#settings-menu) and `initEEPROM()` for other values).
 
-I use the Arduino IDE to compile and upload, due to the use of various Arduino and Arduino-oriented libraries. Make sure the relevant libraries are installed in the Library Manager, per the config in use.
+### Compilation and upload
+
+The following libraries may be required, depending on the features enabled in the config:
 
 * EEPROM (Arduino) for AVR Arduinos (e.g. classic Nano)
-* SPI (Ardunio) and [LedControl](http://wayoda.github.io/LedControl) for MAX7219-based matrix displays
+* SPI (Arduino) and [LedControl](http://wayoda.github.io/LedControl) for MAX7219-based matrix displays
 * GFX and LEDBackpack (Adafruit) for HT16K33-based 7-segment displays
 * VEML7700 (Adafruit) for VEML7700 ambient light sensor
 * [Encoder](https://github.com/PaulStoffregen/Encoder) if rotary encoder is used for Up/Down inputs
@@ -59,7 +83,13 @@ I use the Arduino IDE to compile and upload, due to the use of various Arduino a
 * [Dusk2Dawn](https://github.com/dmkishi/Dusk2Dawn) if sunrise/sunset display is enabled
   * Note: At this writing, for Nano 33 IoT, it’s necessary to download this library as .ZIP and [add manually](https://www.arduino.cc/en/guide/libraries#toc4), as the version in the Library Manager [is old](https://forum.arduino.cc/index.php?topic=479550.msg3852574#msg3852574) and, in my experience, will not compile for SAMD.
 
-Before compiling and uploading, you will need to select the correct board, port, and (for AVR) processor in the IDE’s Tools menu.
+Before compiling and uploading with the Arduino IDE, you will need to select the correct board, port, and (for AVR) processor in the Tools menu.
 
 * If your Arduino does not appear as a port option, you may have a clone that requires [drivers for the CH340 chipset](https://sparks.gogo.co.nz/ch340.html).
 * If upload fails for an ATMega328P Arduino (e.g. classic Nano), try selecting/unselecting “Old Bootloader” in the processor menu.
+
+For PlatformIO, the `platformio.ini` at the repo root configures a host-side `native` environment for unit tests, plus commented-out stubs for hardware targets (`nano`, `nano_33_iot`, `esp32_s2`) — uncomment and adjust the matching one for your board. The `native` environment runs the [Unity](https://www.throwtheswitch.org/unity) tests under `test/` against the pure-logic modules (currently `datetime`); no hardware needed:
+
+```
+pio test -e native
+```

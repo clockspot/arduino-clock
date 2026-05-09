@@ -6,7 +6,15 @@
 #ifndef CONFIG_SWITCHER
 #define CONFIG_SWITCHER
 
-// #include "esp32-proton.h"
-#include "undb-v8.h"
+// #include "configs/ardavr-7seg.h"
+// #include "configs/ardavr-matrix.h"
+// #include "configs/ardavr-undb5.h"
+// #include "configs/ardavr-undb5-rot.h"
+// #include "configs/ardavr-undb8.h"
+// #include "configs/ardavr-undb9.h"
+// #include "configs/ardiot-7seg.h"
+// #include "configs/ardiot-matrix.h"
+#include "configs/esp32-7seg.h"
+// #include "configs/esp32-7seg-proton.h"
 
 #endif

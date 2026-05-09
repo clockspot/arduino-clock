@@ -3,7 +3,7 @@
 
 #ifdef DISPLAY_NIXIE //see arduino-clock.ino Includes section
 
-#include "dispNixie.h"
+#include "displayNixie.h"
 
 #include "storage.h" //to read refresh rate
 

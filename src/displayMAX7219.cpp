@@ -3,7 +3,7 @@
 
 #ifdef DISPLAY_MAX7219 //see arduino-clock.ino Includes section
 
-#include "dispMAX7219.h"
+#include "displayMAX7219.h"
 #include <SPI.h> //Arduino - for SPI access to MAX7219
 #include <LedControl.h> //Eberhard Farle's LedControl library - http://wayoda.github.io/LedControl
 

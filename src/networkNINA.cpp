@@ -11,8 +11,8 @@
 #include <WiFiNINA.h>
 #include <WiFiUdp.h>
 //Needs to be able to control the display
-#include "dispMAX7219.h"
-#include "dispNixie.h"
+#include "displayMAX7219.h"
+#include "displayNixie.h"
 //Needs to be able to control the RTC
 #include "rtcDS3231.h"
 #include "rtcMillis.h"
