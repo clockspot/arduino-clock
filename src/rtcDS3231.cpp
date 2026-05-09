@@ -1,7 +1,9 @@
-#include <arduino.h>
+#include <Arduino.h>
 #include "main.h"
 
-#ifdef RTC_DS3231 //see arduino-clock.ino Includes section
+#ifdef RTC_IS_DS3231 //see main.cpp Includes section
+// Config flag is RTC_IS_DS3231 (not RTC_DS3231) to avoid colliding with the
+// RTClib class of that exact name — referenced as `RTC_DS3231 rtc` below.
 
 #include "rtcDS3231.h"
 #include <Wire.h> //Arduino - GNU LPGL - for I2C access to DS3231
@@ -48,4 +50,4 @@ byte rtcGetSecond(){ return tod.second(); }
 
 byte rtcGetTemp(){ return rtc.getTemperature()*100; }
 
-#endif //RTC_DS3231
+#endif //RTC_IS_DS3231

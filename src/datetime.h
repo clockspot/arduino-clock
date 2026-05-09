@@ -1,11 +1,13 @@
 #ifndef DATETIME_H
 #define DATETIME_H
 
-#include <stdint.h>
-
-// Allow compilation outside the Arduino framework (e.g. PlatformIO native
-// for unit tests) where byte/word are not predefined.
-#ifndef ARDUINO
+// byte/word come from Arduino.h when building under the Arduino framework;
+// outside it (e.g. PlatformIO native for host-side unit tests) we typedef them
+// from stdint.h so this header is self-contained either way.
+#ifdef ARDUINO
+  #include <Arduino.h>
+#else
+  #include <stdint.h>
   typedef uint8_t byte;
   typedef uint16_t word;
 #endif

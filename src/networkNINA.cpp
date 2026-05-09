@@ -1,4 +1,4 @@
-#include <arduino.h>
+#include <Arduino.h>
 #include "main.h"
 
 #ifdef NETWORK_NINA

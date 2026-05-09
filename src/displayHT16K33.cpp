@@ -1,4 +1,4 @@
-#include <arduino.h>
+#include <Arduino.h>
 #include "main.h"
 
 #ifdef DISPLAY_HT16K33 //see arduino-clock.ino Includes section

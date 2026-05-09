@@ -65,12 +65,12 @@
 
 ///// Real-Time Clock /////
 // Mutually exclusive — hardware config must define exactly one:
-//   RTC_DS3231 - I2C DS3231 (requires Wire + RTClib)
-//   RTC_MILLIS - software clock based on millis() (no hardware required)
-//   RTC_ZERO   - RTCZero on Nano 33 IoT (TODO, not yet implemented)
+//   RTC_IS_DS3231 - I2C DS3231 (requires Wire + RTClib)
+//   RTC_IS_MILLIS - software clock based on millis() (no hardware required)
+//   RTC_IS_ZERO   - RTCZero on Nano 33 IoT (TODO, not yet implemented)
 
-#if (defined(RTC_DS3231) + defined(RTC_MILLIS) + defined(RTC_ZERO)) != 1
-  #error "Pick exactly one RTC: RTC_DS3231, RTC_MILLIS, or RTC_ZERO."
+#if (defined(RTC_IS_DS3231) + defined(RTC_IS_MILLIS) + defined(RTC_IS_ZERO)) != 1
+  #error "Pick exactly one RTC: RTC_IS_DS3231, RTC_IS_MILLIS, or RTC_IS_ZERO."
 #endif
 
 #ifndef ANTI_DRIFT

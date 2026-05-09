@@ -18,7 +18,7 @@
 #define Wire Wire1
 #define ENABLE_NEOPIXEL
 
-#define RTC_DS3231
+#define RTC_IS_DS3231
 
 #define INPUT_PROTON
 //For Adafruit QT Py ESP32:

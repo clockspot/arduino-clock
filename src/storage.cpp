@@ -5,7 +5,7 @@
 // Flash support is via cmaglie's FlashStorage library. It offers an EEPROM emulation mode, which I'm currently using, but I don't like that it writes the entire "EEPROM" data to flash (not just the value being updated) with every commit() – I think it will wear out unnecessarily. TODO address this.
 // Note that flash data is necessarily wiped out when the sketch is (re)uploaded.
 
-#include <arduino.h>
+#include <Arduino.h>
 #include "main.h"
 
 #include "storage.h"

@@ -6,7 +6,7 @@
 
 #define ENABLE_ALARM2 false
 
-#define RTC_MILLIS
+#define RTC_IS_MILLIS
 
 #define INPUT_SIMPLE
 #define INPUT_BUTTONS

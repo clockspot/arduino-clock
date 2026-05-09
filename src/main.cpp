@@ -3,7 +3,7 @@
 // Written to support RLB Designs’ Universal Nixie Driver Board
 // Inspired by original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
 
-#include <arduino.h>
+#include <Arduino.h>
 #include "main.h"
 
 ////////// Software version //////////
@@ -34,11 +34,11 @@ const bool vDev = 1;
 #ifdef LIGHTSENSOR_VEML7700
   #include "lightsensorVEML7700.h" //if LIGHTSENSOR_VEML7700 is defined in config - for I2C VEML7700 lux sensor
 #endif
-#ifdef RTC_DS3231
-  #include "rtcDS3231.h" //if RTC_DS3231 is defined in config – for an I2C DS3231 RTC module
+#ifdef RTC_IS_DS3231
+  #include "rtcDS3231.h" //if RTC_IS_DS3231 is defined in config – for an I2C DS3231 RTC module
 #endif
-#ifdef RTC_MILLIS
-  #include "rtcMillis.h" //if RTC_MILLIS is defined in config – for a fake RTC based on millis
+#ifdef RTC_IS_MILLIS
+  #include "rtcMillis.h" //if RTC_IS_MILLIS is defined in config – for a fake RTC based on millis
 #endif
 
 #if defined(INPUT_SIMPLE)

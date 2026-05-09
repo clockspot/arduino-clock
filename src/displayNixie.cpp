@@ -1,4 +1,4 @@
-#include <arduino.h>
+#include <Arduino.h>
 #include "main.h"
 
 #ifdef DISPLAY_NIXIE //see arduino-clock.ino Includes section
@@ -104,10 +104,12 @@ unsigned long setStart = 0; //**millis** - to control flashing during start
 bool setBlinkState = 0;
 void cycleDisplay(byte displayBrightness, bool useAmbient, word ambientLightLevel, byte fnSetPg){
   
+#ifdef LIGHTSENSOR
   if(useOurOwn) {
     useAmbient = true;
     ambientLightLevel = curAmbientLightLevel;
   }
+#endif
   char command = getCommand();
   switch(command) {
     case 'q': ambientLightLevel = 255; Serial.println(F("bright")); break;
