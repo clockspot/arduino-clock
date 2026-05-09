@@ -6,7 +6,7 @@
   #error "Copy config.example.h to config.h and select your hardware configuration."
 #endif
 
-#include "datetime.h"
+#include "src/datetime.h"
 
 ////////////////////////////////////////////
 

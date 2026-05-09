@@ -21,36 +21,36 @@ const bool vDev = 1;
 #if ENABLE_SUN //this probably doesn't work, per the above, but ¯\_(ツ)_/¯
   #include <Dusk2Dawn.h> //DM Kishi - unlicensed - install in your Arduino IDE if needed - test without
 #endif
-#include "storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash (including esp32? TODO find out)
+#include "src/storage.h" //for persistent storage - supports both AVR EEPROM and SAMD flash (including esp32? TODO find out)
 #ifdef DISPLAY_NIXIE
-  #include "dispNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
+  #include "src/dispNixie.h" //if DISPLAY_NIXIE is defined in config - for a SN74141-multiplexed nixie array
 #endif
 #ifdef DISPLAY_MAX7219
-  #include "dispMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
+  #include "src/dispMAX7219.h" //if DISPLAY_MAX7219 is defined in config - for a SPI MAX7219 8x8 LED array
 #endif
 #ifdef DISPLAY_HT16K33
-  #include "dispHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
+  #include "src/dispHT16K33.h" //if DISPLAY_HT16K33 is defined in config - for an I2C 7-segment LED display
 #endif
 #ifdef LIGHTSENSOR_VEML7700
-  #include "lightsensorVEML7700.h" //if LIGHTSENSOR_VEML7700 is defined in config - for I2C VEML7700 lux sensor
+  #include "src/lightsensorVEML7700.h" //if LIGHTSENSOR_VEML7700 is defined in config - for I2C VEML7700 lux sensor
 #endif
 #ifdef RTC_IS_DS3231
-  #include "rtcDS3231.h" //if RTC_IS_DS3231 is defined in config – for an I2C DS3231 RTC module
+  #include "src/rtcDS3231.h" //if RTC_IS_DS3231 is defined in config – for an I2C DS3231 RTC module
 #endif
 #ifdef RTC_IS_MILLIS
-  #include "rtcMillis.h" //if RTC_IS_MILLIS is defined in config – for a fake RTC based on millis
+  #include "src/rtcMillis.h" //if RTC_IS_MILLIS is defined in config – for a fake RTC based on millis
 #endif
 
 #if defined(INPUT_SIMPLE)
-  #include "inputSimple.h" //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU
+  #include "src/inputSimple.h" //for Sel/Alt/Up/Dn - supports buttons, rotary control, and Nano 33 IoT IMU
 #elif defined(INPUT_PROTON)
-  #include "inputProton.h" //for a more diverse set of controls, namely the buttons and switches on a Proton 320 clock radio
+  #include "src/inputProton.h" //for a more diverse set of controls, namely the buttons and switches on a Proton 320 clock radio
 #endif
 
 #if defined(NETWORK_NINA)
-  #include "networkNINA.h" //enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
+  #include "src/networkNINA.h" //enables WiFi/web-based config/NTP sync on Nano 33 IoT WiFiNINA
 #elif defined(NETWORK_ESP32)
-  #include "networkESP32.h" //enables WiFi/web-based config/NTP sync on esp32 //TODO
+  #include "src/networkESP32.h" //enables WiFi/web-based config/NTP sync on esp32 //TODO
 #endif
 
 #ifdef ENABLE_NEOPIXEL
