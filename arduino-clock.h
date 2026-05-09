@@ -1,11 +1,11 @@
 #ifndef ARDUINO_CLOCK_H
 #define ARDUINO_CLOCK_H
 
-#include "config.h"
+#include "include/config.h"
 #ifndef CONFIG_SWITCHER
-  #error "Copy config.example.h to config.h and select your hardware configuration."
+  #error "Copy include/config.example.h to include/config.h and select your hardware configuration."
 #endif
-#include "configs/defaults.h" //fills in any options the hardware config didn't set; enforces mutual-exclusion guards
+#include "include/configs/defaults.h" //fills in any options the hardware config didn't set; enforces mutual-exclusion guards
 
 #include "src/datetime.h"
 

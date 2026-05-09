@@ -43,15 +43,21 @@ Written to support [RLB Designs’](http://rlb-designs.com/) Universal Nixie Dri
 
 ### Code organization
 
-The sketch entry points (`arduino-clock.ino`, `arduino-clock.h`) and configuration files (`config.h`, `config.example.h`, `configs/`) live at the repository root so that the folder doubles as both an Arduino IDE sketch folder and a PlatformIO project root. Module source files live in `src/`, grouped by hardware area:
+The repository root doubles as both an Arduino IDE sketch folder and a PlatformIO project root:
 
-* `display*` — drivers for nixie tubes, MAX7219 LED matrices, and HT16K33 7-segment displays
-* `rtc*` — DS3231 hardware RTC and software (millis-based) backends
-* `input*` — `inputSimple` for button/rotary/IMU controls; `inputProton` for the Proton 320 clock radio retrofit
-* `network*` — Wi-Fi/NTP for Nano 33 IoT (NINA) and ESP32
-* `lightsensor*` — VEML7700 ambient light sensor
-* `storage` — persistent EEPROM/flash settings
-* `datetime` — pure date/time logic with no Arduino dependencies, covered by host-side unit tests
+* `arduino-clock.ino` is an empty marker — Arduino IDE only requires its presence (with a name matching the folder).
+* `arduino-clock.h` is the central project header.
+* `src/main.cpp` contains the actual sketch code (`setup()`, `loop()`, and most clock logic).
+* `src/` also holds the module source files, grouped by hardware area:
+  * `display*` — drivers for nixie tubes, MAX7219 LED matrices, and HT16K33 7-segment displays
+  * `rtc*` — DS3231 hardware RTC and software (millis-based) backends
+  * `input*` — `inputSimple` for button/rotary/IMU controls; `inputProton` for the Proton 320 clock radio retrofit
+  * `network*` — Wi-Fi/NTP for Nano 33 IoT (NINA) and ESP32
+  * `lightsensor*` — VEML7700 ambient light sensor
+  * `storage` — persistent EEPROM/flash settings
+  * `datetime` — pure date/time logic with no Arduino dependencies, covered by host-side unit tests
+* `include/` holds the configuration files: `config.h`, `config.example.h`, and the `configs/` directory of hardware-specific configs and the `defaults.h` reference file.
+* `test/` holds Unity tests for the host-side `native` PlatformIO environment.
 
 Each module is conditionally compiled based on flags set in your config, so only the code for the hardware you've actually selected ends up in the binary.
 
@@ -59,13 +65,13 @@ Each module is conditionally compiled based on flags set in your config, so only
 
 Various options, such as enabled functionality, RTC, display, I/O pins, timeouts, and control behaviors, are specified in config files, which allow you to define configuration(s) to suit your particular clock's hardware.
 
-The `configs/` folder includes many sample config files, as well as a `defaults.h` which shows all the possible configuration options with their defaults and full per-option documentation. You can create your own config files in a `custom/` folder that will be git-ignored. 
+The `include/configs/` folder includes many sample config files, as well as a `defaults.h` which shows all the possible configuration options with their defaults and full per-option documentation. You can create your own config files in a `custom/` folder that will be git-ignored. 
 
 Config files don't need to specify every desired option — only the ones that differ from `defaults.h` (as this provides a default configuration). Each config must also explicitly pick one RTC type (e.g. `RTC_DS3231`) and one display type (e.g. `DISPLAY_NIXIE`).
 
-To specify which configuration should be used at compile time, duplicate `config.example.h` as `config.h` and `#include` the desired config file. If you work with multiple clocks with different hardware profiles, you can use this file to easily switch between them by specifying multiple `#includes` and commenting out all but the relevant one.
+To specify which configuration should be used at compile time, duplicate `include/config.example.h` as `include/config.h` and `#include` the desired config file. If you work with multiple clocks with different hardware profiles, you can use this file to easily switch between them by specifying multiple `#includes` and commenting out all but the relevant one.
 
-You may also wish to adjust the defaults for the clock’s user-configurable values to best suit its intended use, in case the user performs a hard reset. Some of these are specified in the config; others, for now, are hardcoded in `arduino-clock.ino` (`optsDef[]` for [settings](https://github.com/clockspot/arduino-clock/blob/master/INSTRUCTIONS.md#settings-menu) and `initEEPROM()` for other values).
+You may also wish to adjust the defaults for the clock’s user-configurable values to best suit its intended use, in case the user performs a hard reset. Some of these are specified in the config; others, for now, are hardcoded in `src/main.cpp` (`optsDef[]` for [settings](https://github.com/clockspot/arduino-clock/blob/master/INSTRUCTIONS.md#settings-menu) and `initEEPROM()` for other values).
 
 ### Compilation and upload
 
