@@ -6,7 +6,7 @@
 // Note that flash data is necessarily wiped out when the sketch is (re)uploaded.
 
 #include <arduino.h>
-#include "arduino-clock.h"
+#include "main.h"
 
 #include "storage.h"
 

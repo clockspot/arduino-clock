@@ -7,7 +7,7 @@
 #endif
 #include "include/configs/defaults.h" //fills in any options the hardware config didn't set; enforces mutual-exclusion guards
 
-#include "src/datetime.h"
+#include "datetime.h"
 
 ////////////////////////////////////////////
 

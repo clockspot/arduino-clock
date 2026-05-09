@@ -4,7 +4,7 @@
 // Inspired by original sketch by Robin Birtles (rlb-designs.com) and Chris Gerekos
 
 #include <arduino.h>
-#include "arduino-clock.h"
+#include "main.h"
 
 ////////// Software version //////////
 const byte vMajor = 2;

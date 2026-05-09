@@ -2,7 +2,7 @@
 //todo pull network support stuff from simple
 
 #include <arduino.h>
-#include "arduino-clock.h"
+#include "main.h"
 
 #ifdef INPUT_PROTON //see arduino-clock.ino Includes section
 

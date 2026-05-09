@@ -46,8 +46,8 @@ Written to support [RLB Designs’](http://rlb-designs.com/) Universal Nixie Dri
 The repository root doubles as both an Arduino IDE sketch folder and a PlatformIO project root:
 
 * `arduino-clock.ino` is an empty marker — Arduino IDE only requires its presence (with a name matching the folder).
-* `arduino-clock.h` is the central project header.
 * `src/main.cpp` contains the actual sketch code (`setup()`, `loop()`, and most clock logic).
+* `src/main.h` is the central project header (function prototypes, `FN_*` constants, top-level config/`datetime` includes).
 * `src/` also holds the module source files, grouped by hardware area:
   * `display*` — drivers for nixie tubes, MAX7219 LED matrices, and HT16K33 7-segment displays
   * `rtc*` — DS3231 hardware RTC and software (millis-based) backends

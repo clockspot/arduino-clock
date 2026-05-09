@@ -1,7 +1,7 @@
 //https://github.com/adafruit/Adafruit_VEML7700/blob/master/examples/veml7700_test/veml7700_test.ino
 
 #include <arduino.h>
-#include "arduino-clock.h"
+#include "main.h"
 
 #ifdef LIGHTSENSOR_VEML7700 //see arduino-clock.ino Includes section
 

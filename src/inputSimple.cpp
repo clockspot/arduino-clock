@@ -1,7 +1,7 @@
 //"Simple" inputs are a set of three (or four) controls: Select, Up, Down, and Alt. Up/Down could be a rotary control. All could be per IMU.
 
 #include <arduino.h>
-#include "arduino-clock.h"
+#include "main.h"
 
 #ifdef INPUT_SIMPLE //see arduino-clock.ino Includes section
 

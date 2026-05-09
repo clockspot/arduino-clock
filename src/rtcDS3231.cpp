@@ -1,5 +1,5 @@
 #include <arduino.h>
-#include "arduino-clock.h"
+#include "main.h"
 
 #ifdef RTC_DS3231 //see arduino-clock.ino Includes section
 

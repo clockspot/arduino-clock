@@ -1,5 +1,5 @@
 #include <arduino.h>
-#include "arduino-clock.h"
+#include "main.h"
 
 #ifdef NETWORK_NINA
 #ifndef __AVR__ //TODO better sensor
