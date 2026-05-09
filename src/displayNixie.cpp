@@ -66,6 +66,28 @@ void setCathodes(byte decValA, byte decValB){ //"private"
   for(byte i=0; i<4; i++) digitalWrite(binOutB[i],binVal[i]); //set bin inputs of SN74141
 } //end setCathodes()
 
+static void cycleAnode(byte anodeIdx, byte posA, byte posB){ //"private"
+  // Run one multiplex slice for an anode pair. If both paired positions are
+  // blank (15) in BOTH the outgoing (Last) and incoming (Next) frames, skip
+  // firing the anode entirely and just wait — on aged boards a "no decode"
+  // SN74141 state can leak weak current to multiple cathodes when the anode
+  // is hot, producing visible ghosting. Suppressing the anode in that case
+  // eliminates the HV path and the ghost. (Partial-blank pairs still fire
+  // because the lit tube needs the anode; that case requires a hardware fix.)
+  if(displayLast[posA]==15 && displayLast[posB]==15
+     && displayNext[posA]==15 && displayNext[posB]==15) {
+    delayMicroseconds(DIGIT_DUR_FULL);
+    return;
+  }
+  setCathodes(displayLast[posA],displayLast[posB]); //Via d2b decoder chip, set cathodes to old digits
+  digitalWrite(anodes[anodeIdx], HIGH); //Turn on tubes
+  delayMicroseconds(digitDurLast);
+  setCathodes(displayNext[posA],displayNext[posB]); //Switch cathodes to new digits
+  delayMicroseconds(digitDurNext); //we need these two lines even if no DurNext, because otherwise display flickers
+  digitalWrite(anodes[anodeIdx], LOW); //Turn off tubes
+  delayMicroseconds(DIGIT_DUR_FULL-digitDur);
+} //end cycleAnode()
+
 void initDisplay(){
   for(byte i=0; i<4; i++) { pinMode(binOutA[i],OUTPUT); pinMode(binOutB[i],OUTPUT); }
   for(byte i=0; i<3; i++) { pinMode(anodes[i],OUTPUT); }
@@ -215,34 +237,11 @@ void cycleDisplay(byte displayBrightness, bool useAmbient, word ambientLightLeve
     delayMicroseconds(DIGIT_DUR_FULL*3); // The delay is to make cycleDisplay take up the same amount of loop time it usually does, for each of the 3 pairs. Not sure if necessary.
   } else {
     //Anode channel 0: tubes #2 (min x10) and #5 (sec x1)
-    setCathodes(displayLast[2],displayLast[5]); //Via d2b decoder chip, set cathodes to old digits
-    digitalWrite(anodes[0], HIGH); //Turn on tubes
-    delayMicroseconds(digitDurLast);
-    setCathodes(displayNext[2],displayNext[5]); //Switch cathodes to new digits
-    delayMicroseconds(digitDurNext); //we need these two lines even if no DurNext, because otherwise display flickers
-    digitalWrite(anodes[0], LOW); //Turn off tubes
-    
-    delayMicroseconds(DIGIT_DUR_FULL-digitDur);
-    
+    cycleAnode(0, 2, 5);
     //Anode channel 1: tubes #4 (sec x10) and #1 (hour x1)
-    setCathodes(displayLast[4],displayLast[1]);
-    digitalWrite(anodes[1], HIGH);
-    delayMicroseconds(digitDurLast);
-    setCathodes(displayNext[4],displayNext[1]);
-    delayMicroseconds(digitDurNext);
-    digitalWrite(anodes[1], LOW);
-    
-    delayMicroseconds(DIGIT_DUR_FULL-digitDur);
-    
+    cycleAnode(1, 4, 1);
     //Anode channel 2: tubes #0 (hour x10) and #3 (min x1)
-    setCathodes(displayLast[0],displayLast[3]);
-    digitalWrite(anodes[2], HIGH);
-    delayMicroseconds(digitDurLast);
-    setCathodes(displayNext[0],displayNext[3]);
-    delayMicroseconds(digitDurNext);
-    digitalWrite(anodes[2], LOW);
-    
-    delayMicroseconds(DIGIT_DUR_FULL-digitDur);
+    cycleAnode(2, 0, 3);
   } //end if displayBrightness>0
   //TODO why does it sometimes flicker while in the setting mode
   
